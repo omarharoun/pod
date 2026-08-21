@@ -5,6 +5,7 @@ import app.pod.api.generated.GoalCategory
 import app.pod.api.generated.SelfReportReliability
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.content.TextContent
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
@@ -32,19 +33,40 @@ class OnboardingRepositoryTest {
 
     private class Reply(val status: HttpStatusCode, val body: String)
 
+    /** One recorded request, with the body, so tests can assert on what was actually sent. */
+    private class Call(val path: String, val method: String, val body: String)
+
+    /** The path-only view most tests want. */
     private fun repository(vararg replies: Reply): Pair<OnboardingRepository, MutableList<String>> {
-        val recorded = mutableListOf<String>()
-        val queue = replies.toMutableList()
+        val paths = mutableListOf<String>()
+        return build(paths, mutableListOf(), replies.toMutableList()) to paths
+    }
+
+    /** For the tests that need to assert on what was actually sent, not just where. */
+    private fun repositoryRecordingBodies(vararg replies: Reply): Pair<OnboardingRepository, MutableList<Call>> {
+        val calls = mutableListOf<Call>()
+        return build(mutableListOf(), calls, replies.toMutableList()) to calls
+    }
+
+    private fun build(
+        paths: MutableList<String>,
+        calls: MutableList<Call>,
+        queue: MutableList<Reply>,
+    ): OnboardingRepository {
         val engine = MockEngine { request ->
-            recorded += request.url.encodedPath
+            paths += request.url.encodedPath
+            calls += Call(
+                path = request.url.encodedPath,
+                method = request.method.value,
+                body = (request.body as? TextContent)?.text.orEmpty(),
+            )
             val reply = queue.removeFirstOrNull() ?: error("no scripted reply for ${request.url}")
             respond(reply.body, reply.status, jsonHeaders)
         }
         val tokens = InMemoryTokenStore(
             StoredSession("access-1", "refresh-1", nowMillis + 900_000, "user-1"),
         )
-        val client = PodApiClient("https://api.test.invalid", tokens, engine) { nowMillis }
-        return OnboardingRepository(client) to recorded
+        return OnboardingRepository(PodApiClient("https://api.test.invalid", tokens, engine) { nowMillis })
     }
 
     private fun completeDraft() = IntentDraft(
@@ -217,5 +239,107 @@ class OnboardingRepositoryTest {
         val failure = repository.failure.value
         assertNotNull(failure)
         assertEquals(CopyKey.ERROR_GOAL_TOO_SHORT_BODY, failure!!.bodyKey)
+    }
+
+    // ---- Recovery (M5) ---------------------------------------------------------
+
+    private val intentJson = """
+        {"goal_text":"sort out the spare room","goal_category":"home","intensity":3,
+         "timezone":"Europe/Lisbon",
+         "availability_windows":[{"day_of_week":5,"start_minute":600,"end_minute":720}],
+         "updated_at":"2026-08-21T09:00:00Z"}
+    """.trimIndent()
+
+    private val ticketJson =
+        """{"queued_at":"2026-08-21T09:00:00Z","next_window_at":"2026-08-21T10:00:00Z"}"""
+
+    @Test
+    fun `a pod that ended shows the offer before anything else`() = runTest {
+        val (repository, _) = repository(
+            Reply(
+                HttpStatusCode.OK,
+                """
+                {"step":"intent","intent_complete":true,"in_pool":false,
+                 "recovery":{"offer_lower_intensity":true,"current_intensity":3,
+                             "suggested_intensity":2,"offer_alternate_path":false}}
+                """.trimIndent(),
+            ),
+        )
+
+        repository.load()
+
+        val phase = repository.phase.value
+        assertTrue("phase was $phase", phase is OnboardingPhase.Recovering)
+        val recovery = (phase as OnboardingPhase.Recovering).recovery
+        assertEquals(3, recovery.currentIntensity)
+        assertEquals(2, recovery.suggestedIntensity)
+        assertFalse(recovery.offerAlternatePath)
+    }
+
+    /**
+     * Taking the offer re-sends the intent on file with one field changed. It must not
+     * re-send the self-report: the server keeps the stored answer, and that question is
+     * asked once (ADR-018).
+     */
+    @Test
+    fun `taking the offer resends the stored intent with a smaller intensity`() = runTest {
+        val (repository, calls) = repositoryRecordingBodies(
+            Reply(HttpStatusCode.OK, intentJson),
+            Reply(HttpStatusCode.OK, intentJson),
+            Reply(HttpStatusCode.OK, ticketJson),
+        )
+
+        repository.acceptLowerIntensity(2)
+
+        assertNull(repository.failure.value)
+        assertTrue(repository.phase.value is OnboardingPhase.Waiting)
+        val put = calls.first { it.method == "PUT" }
+        assertTrue("sent ${put.body}", put.body.contains("\"intensity\":2"))
+        assertTrue("sent ${put.body}", put.body.contains("sort out the spare room"))
+        assertFalse(
+            "the self-report is asked once, not again: ${put.body}",
+            put.body.contains("self_report_reliability"),
+        )
+    }
+
+    /**
+     * Declining sends the same intent unchanged. "Keep it as it is" is a real answer, not
+     * a way of dismissing the screen.
+     */
+    @Test
+    fun `keeping the intensity goes back into the pool unchanged`() = runTest {
+        val (repository, calls) = repositoryRecordingBodies(
+            Reply(HttpStatusCode.OK, intentJson),
+            Reply(HttpStatusCode.OK, intentJson),
+            Reply(HttpStatusCode.OK, ticketJson),
+        )
+
+        repository.keepIntensity()
+
+        assertTrue(repository.phase.value is OnboardingPhase.Waiting)
+        val put = calls.first { it.method == "PUT" }
+        assertTrue("sent ${put.body}", put.body.contains("\"intensity\":3"))
+    }
+
+    /**
+     * Nothing on file — a rare state, but re-sending a half-formed intent would be worse
+     * than asking the questions again.
+     */
+    @Test
+    fun `no intent on file falls back to the questions`() = runTest {
+        val (repository, _) = repository(
+            Reply(
+                HttpStatusCode.NotFound,
+                """{"code":"not_found","copy_key":"error.server.body","request_id":"r1"}""",
+            ),
+        )
+
+        repository.keepIntensity()
+
+        assertEquals(
+            OnboardingPhase.Questions(OnboardingQuestion.GOAL),
+            repository.phase.value,
+        )
+        assertNull("no intent yet is a state, not a failure", repository.failure.value)
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,6 +50,32 @@ fun PodPrimaryButton(
         } else {
             Text(title, style = MaterialTheme.typography.labelLarge)
         }
+    }
+}
+
+/**
+ * An action that carries the same weight as the primary one.
+ *
+ * Not "the lesser button": the recovery screen offers two ways forward and neither is a
+ * fallback, so this is a filled tonal button — a peer of [PodPrimaryButton] in Material 3
+ * terms — rather than a text link (docs/DESIGN.md, M5).
+ */
+@Composable
+fun PodSecondaryButton(
+    title: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(PodTokens.Radius.MD.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = PodTokens.Size.PRIMARY_BUTTON_HEIGHT.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.labelLarge)
     }
 }
 

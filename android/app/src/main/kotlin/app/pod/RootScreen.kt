@@ -28,6 +28,7 @@ import app.pod.feature.auth.VerifyCodeScreen
 import app.pod.api.OnboardingPhase
 import app.pod.feature.onboarding.OnboardingScreen
 import app.pod.feature.onboarding.OnboardingViewModel
+import app.pod.feature.onboarding.RecoveryScreen
 import app.pod.feature.onboarding.WaitingScreen
 import app.pod.feature.week.WeekScreen
 import app.pod.ui.theme.LocalCopywriter
@@ -109,6 +110,15 @@ private fun SignedInScreen(
                     modifier = Modifier.semantics { contentDescription = copy(CopyKey.A11Y_LOADING) },
                 )
             }
+
+        is OnboardingPhase.Recovering ->
+            RecoveryScreen(
+                recovery = phase.recovery,
+                working = state.working,
+                failure = state.failure,
+                onAcceptLowerIntensity = viewModel::acceptLowerIntensity,
+                onKeepIntensity = viewModel::keepIntensity,
+            )
 
         is OnboardingPhase.Questions ->
             OnboardingScreen(

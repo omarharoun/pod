@@ -118,6 +118,18 @@ public class PodApiClient(
     public suspend fun onboardingState(): OnboardingState =
         send("/v1/onboarding/state", HttpMethod.Get)
 
+    /**
+     * The intent on file, or null when nothing has been answered yet.
+     *
+     * Recovery re-offers a smaller intensity without re-asking the goal, the timezone or
+     * the availability windows, so it has to read them back (ADR-021).
+     */
+    public suspend fun intent(): Intent? = try {
+        send("/v1/onboarding/intent", HttpMethod.Get)
+    } catch (failure: ApiException.Problem) {
+        if (failure.error.code == ErrorCode.NOT_FOUND) null else throw failure
+    }
+
     public suspend fun saveIntent(intent: IntentRequest): Intent =
         send("/v1/onboarding/intent", HttpMethod.Put, intent)
 

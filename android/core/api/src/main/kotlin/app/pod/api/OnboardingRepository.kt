@@ -4,6 +4,7 @@ import app.pod.api.generated.GoalCategory
 import app.pod.api.generated.IntentRequest
 import app.pod.api.generated.Pod
 import app.pod.api.generated.PoolTicket
+import app.pod.api.generated.Recovery
 import app.pod.api.generated.SelfReportReliability
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +66,14 @@ public data class IntentDraft(
 /** Where a signed-in person is: still answering, waiting for a window, or in a pod. */
 public sealed interface OnboardingPhase {
     public data object Loading : OnboardingPhase
+
+    /**
+     * A pod has ended and there is an offer to make before anything else. Its own beat
+     * rather than a banner: the person who needs it is the likeliest to stop opening the
+     * app, and a banner over a pre-lowered answer implies a correction rather than a
+     * question (docs/DESIGN.md).
+     */
+    public data class Recovering(val recovery: Recovery) : OnboardingPhase
     public data class Questions(val question: OnboardingQuestion) : OnboardingPhase
     public data class Waiting(val ticket: PoolTicket) : OnboardingPhase
     public data class Matched(val pod: Pod) : OnboardingPhase
@@ -109,9 +118,58 @@ public class OnboardingRepository(private val client: PodApiClient) {
                     ?.let { OnboardingPhase.Waiting(it) }
                     ?: OnboardingPhase.Questions(OnboardingQuestion.GOAL)
 
-                else -> OnboardingPhase.Questions(OnboardingQuestion.GOAL)
+                else -> state.recovery
+                    ?.takeIf { it.offerLowerIntensity || it.offerAlternatePath }
+                    ?.let { OnboardingPhase.Recovering(it) }
+                    ?: OnboardingPhase.Questions(OnboardingQuestion.GOAL)
             }
         }
+    }
+
+    /**
+     * Takes the offer: the same intent with a smaller intensity, which is all "lowering
+     * the bar" is. There is no dedicated endpoint because it is not a special kind of
+     * change (ADR-018).
+     */
+    public suspend fun acceptLowerIntensity(suggested: Int) {
+        perform { resubmit(suggested) }
+    }
+
+    /**
+     * Declines the offer and goes back into the pool unchanged. "Keep it as it is" is not
+     * a secondary action — for plenty of people the pod simply did not work out.
+     */
+    public suspend fun keepIntensity() {
+        perform { resubmit(intensity = null) }
+    }
+
+    /**
+     * Re-saves the intent on file and re-enters the pool, changing at most the intensity.
+     *
+     * The answers come from the server, not from [draft]: someone recovering from a pod
+     * that ended answered these weeks ago, on a device that may not be this one. The
+     * self-report is deliberately not sent — the server keeps the stored answer, and "how
+     * often do you keep commitments to yourself" is not a question to ask twice.
+     */
+    private suspend fun resubmit(intensity: Int?) {
+        val existing = client.intent()
+        if (existing == null) {
+            // Nothing on file, so there is nothing to re-offer. Ask the questions.
+            _phase.value = OnboardingPhase.Questions(OnboardingQuestion.GOAL)
+            return
+        }
+        client.saveIntent(
+            IntentRequest(
+                goalText = existing.goalText,
+                goalCategory = existing.goalCategory,
+                intensity = intensity ?: existing.intensity,
+                timezone = TimeZone.currentSystemDefault().id,
+                selfReportReliability = null,
+                availabilityWindows = existing.availabilityWindows,
+                displayName = null,
+            ),
+        )
+        _phase.value = OnboardingPhase.Waiting(client.joinPool())
     }
 
     /**

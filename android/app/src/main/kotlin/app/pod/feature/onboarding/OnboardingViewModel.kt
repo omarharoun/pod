@@ -57,6 +57,16 @@ class OnboardingViewModel @Inject constructor(
 
     fun back() = onboarding.back()
 
+    /** Takes the offer after a pod ended: the same intent, one rung smaller. */
+    fun acceptLowerIntensity(suggested: Int) {
+        viewModelScope.launch { onboarding.acceptLowerIntensity(suggested) }
+    }
+
+    /** Declines it and goes back into the pool unchanged — an equal answer, not a dismiss. */
+    fun keepIntensity() {
+        viewModelScope.launch { onboarding.keepIntensity() }
+    }
+
     fun leaveQueue() {
         viewModelScope.launch { onboarding.leaveQueue() }
     }
