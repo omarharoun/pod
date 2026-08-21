@@ -99,7 +99,7 @@ public actor APIClient {
     // MARK: - Onboarding
 
     public func onboardingState(slot: Int = 0) async throws -> OnboardingState {
-        try await send(Request(method: "GET", path: "/v1/onboarding/state".withSlot(slot)))
+        try await send(Request(method: "GET", path: "/v1/onboarding/state", query: slot.slotQuery))
     }
 
     // MARK: - Lanes
@@ -127,7 +127,7 @@ public actor APIClient {
     /// the availability windows, so it needs to read them back.
     public func intent(slot: Int = 0) async throws -> Intent? {
         do {
-            return try await send(Request(method: "GET", path: "/v1/onboarding/intent".withSlot(slot)))
+            return try await send(Request(method: "GET", path: "/v1/onboarding/intent", query: slot.slotQuery))
         } catch APIError.api(let problem, _) where problem.code == .notFound {
             return nil
         }
@@ -136,17 +136,18 @@ public actor APIClient {
     public func saveIntent(_ intent: IntentRequest, slot: Int = 0) async throws -> Intent {
         try await send(Request(
             method: "PUT",
-            path: "/v1/onboarding/intent".withSlot(slot),
+            path: "/v1/onboarding/intent",
+            query: slot.slotQuery,
             body: try encoder.encode(intent)
         ))
     }
 
     public func joinPool(slot: Int = 0) async throws -> PoolTicket {
-        try await send(Request(method: "POST", path: "/v1/pool".withSlot(slot)))
+        try await send(Request(method: "POST", path: "/v1/pool", query: slot.slotQuery))
     }
 
     public func leavePool(slot: Int = 0) async throws {
-        let _: EmptyResponse = try await send(Request(method: "DELETE", path: "/v1/pool".withSlot(slot)))
+        let _: EmptyResponse = try await send(Request(method: "DELETE", path: "/v1/pool", query: slot.slotQuery))
     }
 
     // MARK: - Pod
@@ -254,7 +255,7 @@ public actor APIClient {
     /// The server answers 204 rather than 404 for "no pod": not being matched yet is a
     /// state, not a failure, and the two should not look the same to the client.
     public func currentPod(slot: Int = 0) async throws -> Pod? {
-        let response: PodOrNothing = try await send(Request(method: "GET", path: "/v1/pods/current".withSlot(slot)))
+        let response: PodOrNothing = try await send(Request(method: "GET", path: "/v1/pods/current", query: slot.slotQuery))
         return response.pod
     }
 
@@ -291,6 +292,7 @@ public actor APIClient {
     private struct Request {
         var method: String
         var path: String
+        var query: [URLQueryItem] = []
         var body: Data?
         var authenticated = true
     }
@@ -328,8 +330,23 @@ public actor APIClient {
         }
     }
 
+    /// Builds the request URL, keeping the path and the query apart.
+    ///
+    /// `appendingPathComponent` percent-escapes whatever it is handed, so a query written
+    /// into the path string arrives as part of the path — which is how `?slot=2` became
+    /// `%3Fslot=2` and sent every request in a bought lane to a route that does not exist.
+    private static func url(base: URL, request: Request) -> URL {
+        let path = base.appendingPathComponent(request.path)
+        guard !request.query.isEmpty,
+              var components = URLComponents(url: path, resolvingAgainstBaseURL: false) else {
+            return path
+        }
+        components.queryItems = request.query
+        return components.url ?? path
+    }
+
     private func perform<Response: Decodable>(_ request: Request, accessToken: String?) async throws -> Response {
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent(request.path))
+        var urlRequest = URLRequest(url: Self.url(base: baseURL, request: request))
         urlRequest.httpMethod = request.method
         urlRequest.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body = request.body {
@@ -449,12 +466,17 @@ enum PodTimestamp {
     }
 }
 
-private extension String {
-    /// Appends the lane, and only when it is not the free one.
+private extension Int {
+    /// The lane, as a query item, and only when it is not the free one.
     ///
     /// Omitting it for lane 0 keeps every existing request byte-identical to what it was
     /// before M7, so the free loop cannot be broken by a parameter (ADR-026).
-    func withSlot(_ slot: Int) -> String {
-        slot == 0 ? self : "\(self)?slot=\(slot)"
+    ///
+    /// This is a query item rather than a suffix on the path string because
+    /// `appendingPathComponent` escapes what it is given: `"/v1/pool?slot=2"` became
+    /// `/v1/pool%3Fslot=2`, a path no route matches, so every request in a bought lane
+    /// went to a 404 while the free lane worked perfectly.
+    var slotQuery: [URLQueryItem] {
+        self == 0 ? [] : [URLQueryItem(name: "slot", value: String(self))]
     }
 }
