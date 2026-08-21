@@ -133,3 +133,14 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Assemble and test
         run: cd android && ./gradlew :app:assembleDebug test
+
+      # The debug APK, downloadable from the run page. It is signed with the standard
+      # debug key, so it installs on a phone with "install unknown apps" allowed — and it
+      # points at whatever POD_API_BASE_URL said at build time, defaulting to the
+      # emulator's alias for the host machine.
+      - name: Keep the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: pod-debug-apk-${{ github.sha }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

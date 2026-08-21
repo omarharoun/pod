@@ -6,6 +6,25 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// apiBaseUrl reads the backend address from -PpodApiBaseUrl or POD_API_BASE_URL, falling
+// back to the build type's default.
+//
+// Validated here rather than at runtime: a typo that reaches the app is a sign-in screen
+// that fails for a reason nobody can see from the outside, and this is a build that can
+// simply refuse. Cleartext is allowed for the debug build only (see the debug manifest) —
+// a release build putting somebody's session token on plain HTTP is not a configuration
+// option.
+fun apiBaseUrl(default: String): String {
+    val configured = (project.findProperty("podApiBaseUrl") as String?)
+        ?: System.getenv("POD_API_BASE_URL")
+        ?: return default
+    val trimmed = configured.trim().trimEnd('/')
+    require(trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        "podApiBaseUrl must start with http:// or https://, got \"$configured\""
+    }
+    return trimmed
+}
+
 android {
     namespace = "app.pod"
     compileSdk = 35
@@ -20,13 +39,16 @@ android {
 
     buildTypes {
         debug {
-            // Points at a backend running on the host machine from the emulator.
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080\"")
+            // 10.0.2.2 is the emulator's alias for the host machine and means nothing on a
+            // real phone, so a debug APK installed on a device needs to be told where the
+            // backend is: `./gradlew :app:assembleDebug -PpodApiBaseUrl=http://192.168.1.5:8080`,
+            // or POD_API_BASE_URL in the environment.
+            buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl("http://10.0.2.2:8080")}\"")
         }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            buildConfigField("String", "API_BASE_URL", "\"https://api.pod.app\"")
+            buildConfigField("String", "API_BASE_URL", "\"${apiBaseUrl("https://api.pod.app")}\"")
         }
     }
 

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds only.
+
+  Android has blocked cleartext HTTP since API 28, and a debug APK is expected to talk to
+  a backend running on somebody's laptop over plain http. Without this the app installs,
+  opens, and fails every request with no visible reason.
+
+  It is deliberately not in the main manifest. The release build sends a session token on
+  every request, and a token on plain HTTP is not a thing to make configurable.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>
