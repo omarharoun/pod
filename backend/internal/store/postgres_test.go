@@ -321,6 +321,101 @@ func TestMemoryAndPostgresAgree(t *testing.T) {
 				t.Errorf("a pod with no weeks listed %d", len(weeks))
 			}
 		}},
+		// The backfill's two methods. `cmd/reembed` walks every intent in the database
+		// and rewrites one column, which is a shape nothing else in this store has: a
+		// keyset that skips a row, or a write that touches more than it was asked to,
+		// would be found by an operator with a half-backfilled table and no way to tell
+		// which half. Both stores are pinned on the same boundary and the same blast
+		// radius.
+		{"walking and rewriting every intent", func(t *testing.T, s store.Store) {
+			ctx := context.Background()
+			saved := time.Now().UTC().Add(-72 * time.Hour).Truncate(time.Millisecond)
+			var keys []store.IntentKey
+			for i := 0; i < 3; i++ {
+				user, err := s.UpsertUserByEmail(ctx, uniqueEmail(t), time.Now().UTC())
+				if err != nil {
+					t.Fatalf("user: %v", err)
+				}
+				for slot := 0; slot < 2; slot++ {
+					if err := s.UpsertIntent(ctx, store.Intent{
+						UserID: user.ID, Slot: slot, GoalText: "run every morning",
+						GoalCategory: "movement", Intensity: 3, Timezone: "UTC",
+						SelfReport: "sometimes", Embedding: []float32{1, 0},
+						UpdatedAt: saved,
+					}); err != nil {
+						t.Fatalf("UpsertIntent: %v", err)
+					}
+					keys = append(keys, store.IntentKey{UserID: user.ID, Slot: slot})
+				}
+			}
+
+			// Paged one at a time, so the boundary is exercised on every row rather than
+			// once at the end. The cursor row is the one already handled: an off-by-one
+			// here either loops forever or silently skips somebody.
+			var walked []store.IntentKey
+			cursor := store.IntentKey{}
+			for {
+				page, err := s.ListIntents(ctx, cursor, 1)
+				if err != nil {
+					t.Fatalf("ListIntents: %v", err)
+				}
+				if len(page) == 0 {
+					break
+				}
+				if len(page) != 1 {
+					t.Fatalf("asked for 1 intent, got %d", len(page))
+				}
+				cursor = store.IntentKey{UserID: page[0].UserID, Slot: page[0].Slot}
+				walked = append(walked, cursor)
+				if len(walked) > 64 {
+					t.Fatalf("the keyset is not advancing")
+				}
+			}
+			if len(walked) < len(keys) {
+				t.Fatalf("walked %d intents, saved %d — the walk skipped somebody", len(walked), len(keys))
+			}
+			for i := 1; i < len(walked); i++ {
+				if walked[i-1].UserID > walked[i].UserID ||
+					(walked[i-1].UserID == walked[i].UserID && walked[i-1].Slot >= walked[i].Slot) {
+					t.Fatalf("out of order at %d: %+v then %+v", i, walked[i-1], walked[i])
+				}
+			}
+			if page, err := s.ListIntents(ctx, store.IntentKey{}, 0); err != nil || len(page) != 0 {
+				t.Errorf("a zero limit returned %d rows, %v", len(page), err)
+			}
+
+			// The write must land, and must land on nothing else.
+			target := keys[0]
+			if err := s.ReplaceEmbedding(ctx, target, []float32{0, 1, 0}); err != nil {
+				t.Fatalf("ReplaceEmbedding: %v", err)
+			}
+			after, err := s.GetIntent(ctx, target.UserID, target.Slot)
+			if err != nil {
+				t.Fatalf("GetIntent: %v", err)
+			}
+			if len(after.Embedding) != 3 || after.Embedding[1] != 1 {
+				t.Errorf("embedding is %v, want [0 1 0]", after.Embedding)
+			}
+			if after.GoalText != "run every morning" || after.Intensity != 3 || after.Timezone != "UTC" {
+				t.Errorf("the backfill changed the intent itself: %+v", after)
+			}
+			if !after.UpdatedAt.Equal(saved) {
+				t.Errorf("updated_at moved to %v — a backfill must not look like an edit (ADR-021)", after.UpdatedAt)
+			}
+			// The sibling lane is untouched: one call, one row.
+			sibling, err := s.GetIntent(ctx, keys[1].UserID, keys[1].Slot)
+			if err != nil {
+				t.Fatalf("GetIntent sibling: %v", err)
+			}
+			if len(sibling.Embedding) != 2 {
+				t.Errorf("the sibling lane's embedding changed to %v", sibling.Embedding)
+			}
+
+			missing := store.IntentKey{UserID: target.UserID, Slot: 4}
+			if err := s.ReplaceEmbedding(ctx, missing, []float32{1}); err != store.ErrNotFound {
+				t.Errorf("replacing a lane with no intent gave %v, want ErrNotFound", err)
+			}
+		}},
 		// The lane-aware methods, all in one case. This is the class of divergence that
 		// already shipped once (ADR-024): Memory checked membership explicitly where
 		// Postgres left it to a JOIN, and every test running against Memory said the

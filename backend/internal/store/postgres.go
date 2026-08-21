@@ -258,6 +258,14 @@ func (p *Postgres) ListIntents(ctx context.Context, after IntentKey, limit int) 
 	if limit <= 0 {
 		return nil, nil
 	}
+	// A zero cursor means "from the start", and an empty string is not a uuid — Postgres
+	// answers 22P02, which `wrap` maps to ErrNotFound, so the first page of every backfill
+	// looked like an empty table. The nil uuid sorts below every real one and says the
+	// same thing in a type the column understands.
+	from := after.UserID
+	if from == "" {
+		from = "00000000-0000-0000-0000-000000000000"
+	}
 	// The row-value comparison is the keyset: it is one index-ordered seek, and it gets
 	// the boundary right without the two-branch OR that is easy to write inside out.
 	rows, err := p.pool.Query(ctx, `
@@ -266,7 +274,7 @@ func (p *Postgres) ListIntents(ctx context.Context, after IntentKey, limit int) 
 		FROM intents
 		WHERE (user_id, slot) > ($1, $2)
 		ORDER BY user_id, slot
-		LIMIT $3`, after.UserID, after.Slot, limit)
+		LIMIT $3`, from, after.Slot, limit)
 	if err != nil {
 		return nil, wrap("list intents", err)
 	}
