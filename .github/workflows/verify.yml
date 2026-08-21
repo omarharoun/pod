@@ -96,12 +96,15 @@ jobs:
       # catches that class of problem.
       # Deliberately not piped through xcpretty: a pipe takes the exit code from the
       # formatter, which returns 0 whatever xcodebuild did, so a failed build would pass.
+      # `-quiet` is xcodebuild's own flag, so it drops the per-file noise without touching
+      # the exit code — and it leaves the errors where somebody reading the log will
+      # actually find them, which turns out to matter (ADR-030).
       - name: Build the app target
         run: |
           brew install xcodegen
           cd ios && xcodegen generate
           xcodebuild -project Pod.xcodeproj -scheme Pod \
-            -destination 'platform=iOS Simulator,name=iPhone 16' build
+            -destination 'platform=iOS Simulator,name=iPhone 16' -quiet build
 
       # The usage descriptions must survive into the built plist, not merely into
       # project.yml. copylint checks the source; this checks the artefact.

@@ -1287,3 +1287,58 @@ silent:
 * Two findings are deliberately **not** fixed: no client can address a lane other than 0,
   so a purchased lane has no screen. That is a real gap and it is recorded in
   `docs/VERIFYING.md` rather than papered over — see ADR-030.
+
+---
+
+## ADR-030 — The Mac was in CI the whole time
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M7
+
+**Context.** `docs/VERIFYING.md` said nothing in `ios/` had ever been compiled, and laid out
+what to do on a rented Mac. The user pointed out that GitHub Actions has `macos-15` runners.
+
+They were right, and it was worse than a missed opportunity: the `ios` and `android-app`
+jobs went into `.github/workflows/verify.yml` back at M3, so **twenty-eight pushes had each
+compiled both clients and reported the result**, and the answer was sitting in a job log
+every time. I had gone on describing the clients as unverifiable while a machine verified
+them, and failed, on every commit.
+
+**Decision.** CI is the client compiler. `make verify` remains the local gate — it is what
+can run without Xcode and the Android SDK — but a client change is not done until the run
+for that commit is green. Read the job log rather than reasoning about what Swift will say.
+
+**What the log said, once read.** Four rounds, each one error class:
+
+* **PodKit did not compile.** A `static let` array of `ISO8601DateFormatter` is not
+  concurrency-safe under Swift 6. Now `Date.ISO8601FormatStyle`, which is a Sendable value
+  type — the safe fix rather than `nonisolated(unsafe)`, which would have asserted a
+  thread-safety guarantee Foundation does not make.
+* **`:app` did not compile.** `androidx.compose.foundation.layout.weight`, imported in
+  three files, is an internal extension on layout parent data, not the modifier;
+  `Modifier.weight` is a `ColumnScope` / `RowScope` member needing no import. Plus a
+  missing `Text` import.
+* **Every request in a bought lane 404'd.** `URL.appendingPathComponent` escapes what it is
+  handed, so `"/v1/pool?slot=2"` went out as `/v1/pool%3Fslot=2`. Path and query are built
+  through `URLComponents` now.
+* **Two main-actor properties.** `UIDevice.current` is isolated in the iOS 18 SDK.
+
+**The one worth keeping.** The lane 404 had a test — written the same day, asserting exactly
+the right thing — that had never run once, because the package it lives in did not compile.
+Android had the identical test, in a module that *does* build here, and it was green from
+the start.
+
+That is the ADR-024 pattern with the roles swapped. There, a rule was enforced in the test
+double and not in production, and the suite reported that it held. Here a rule was checked
+on the platform that could run its tests and merely *written down* on the platform that
+could not — and the write-up read exactly like the check. **A test that cannot run is
+documentation, and the repository has no way to tell the two apart.** The countermeasure is
+not another test; it is that every test must be somewhere that runs it.
+
+**Consequences.**
+* `docs/VERIFYING.md` is rewritten. Its "not verified" table was true when written and
+  false by the next commit, which is its own lesson: a status file that is not derived from
+  something is a claim, and it goes stale silently.
+* The remaining unverified surface is genuinely device-only: proof capture against real
+  camera and microphone permissions, and a notification refusal on Android 13+.
+* ADR-029 closes by pointing at this ADR for the two findings it deferred. Both are fixed:
+  the lane switcher landed before this, and the lane's requests work as of this.

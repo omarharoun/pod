@@ -31,9 +31,16 @@ public final class PushRegistrar {
         hasAsked = true
 
         let centre = UNUserNotificationCenter.current()
-        let settings = await centre.notificationSettings()
-        guard settings.authorizationStatus == .notDetermined else {
-            if settings.authorizationStatus == .authorized {
+        // Only the status crosses back, not the settings object. `UNNotificationSettings`
+        // is a non-Sendable class, so `await centre.notificationSettings()` would hand a
+        // reference across an actor boundary; the status is an enum and travels safely.
+        let status: UNAuthorizationStatus = await withCheckedContinuation { continuation in
+            centre.getNotificationSettings { settings in
+                continuation.resume(returning: settings.authorizationStatus)
+            }
+        }
+        guard status == .notDetermined else {
+            if status == .authorized {
                 UIApplication.shared.registerForRemoteNotifications()
             }
             return
