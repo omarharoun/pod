@@ -68,15 +68,20 @@ func (s *Service) CycleOf(ctx context.Context, pod store.Pod) (Cycle, error) {
 	if length <= 0 {
 		length = cycle.DefaultLengthWeeks
 	}
-	everyoneIn, err := s.store.CountWeeksEveryoneWasIn(ctx, pod.ID)
+	// From the opening of the cycle's FIRST week, not from the instant the cycle began.
+	// A pod formed on a Thursday joins the week already in progress, so its first week
+	// opens before it exists — filtering on the raw instant silently dropped that week
+	// from the graduation count.
+	firstWeek := cycle.WeekContaining(cycleStart(pod), location).OpensAt
+	everyoneIn, err := s.store.CountWeeksEveryoneWasIn(ctx, pod.ID, firstWeek)
 	if err != nil {
 		return Cycle{}, fmt.Errorf("week: count completed weeks: %w", err)
 	}
 	return Cycle{
 		LengthWeeks:        length,
-		WeeksElapsed:       cycle.WeeksCompleted(pod.CreatedAt, s.clock.Now(), length, location),
+		WeeksElapsed:       cycle.WeeksCompleted(cycleStart(pod), s.clock.Now(), length, location),
 		WeeksEveryoneWasIn: everyoneIn,
-		EndsAt:             cycle.FinishesAt(pod.CreatedAt, length, location),
+		EndsAt:             cycle.FinishesAt(cycleStart(pod), length, location),
 	}, nil
 }
 
@@ -96,7 +101,7 @@ func (j *Job) completeIfCycleIsOver(ctx context.Context, pod store.Pod, now time
 	if length <= 0 {
 		length = cycle.DefaultLengthWeeks
 	}
-	if now.Before(cycle.FinishesAt(pod.CreatedAt, length, location)) {
+	if now.Before(cycle.FinishesAt(cycleStart(pod), length, location)) {
 		return false, nil
 	}
 	if err := j.store.CompleteCycle(ctx, pod.ID, now, now.Add(cycle.DecideWindow)); err != nil {
@@ -149,4 +154,13 @@ func (j *Job) settleContinuations(ctx context.Context, now time.Time) (restarted
 		closed++
 	}
 	return restarted, closed, nil
+}
+
+// cycleStart is when the pod's current cycle began, falling back to when the pod was
+// created for a record written before the column existed.
+func cycleStart(pod store.Pod) time.Time {
+	if pod.CycleStartedAt.IsZero() {
+		return pod.CreatedAt
+	}
+	return pod.CycleStartedAt
 }

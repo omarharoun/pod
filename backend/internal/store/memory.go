@@ -434,6 +434,9 @@ func (m *Memory) CreatePod(_ context.Context, pod Pod, memberships []Membership,
 	if pod.CycleLengthWeeks <= 0 {
 		pod.CycleLengthWeeks = cycle.DefaultLengthWeeks
 	}
+	if pod.CycleStartedAt.IsZero() {
+		pod.CycleStartedAt = pod.CreatedAt
+	}
 	m.pods[pod.ID] = pod
 	m.podMembers[pod.ID] = members
 	return nil
@@ -469,14 +472,18 @@ func (m *Memory) GetActivePod(_ context.Context, userID string, slot int) (Pod, 
 }
 
 // CountWeeksEveryoneWasIn is how many of a pod's closed weeks the pod completed.
-func (m *Memory) CountWeeksEveryoneWasIn(_ context.Context, podID string) (int, error) {
+func (m *Memory) CountWeeksEveryoneWasIn(_ context.Context, podID string, since time.Time) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	count := 0
 	for _, week := range m.weeks {
-		if week.PodID == podID && week.ClosedAt != nil && week.PodCompleted {
-			count++
+		if week.PodID != podID || week.ClosedAt == nil || !week.PodCompleted {
+			continue
 		}
+		if week.OpensAt.Before(since) {
+			continue
+		}
+		count++
 	}
 	return count, nil
 }
@@ -1049,6 +1056,9 @@ func (m *Memory) StartNextCycle(_ context.Context, podID string, at time.Time) e
 	pod.State = PodStateActive
 	pod.CompletedAt = nil
 	pod.DecideBy = nil
+	// The next cycle starts now. Leaving this at CreatedAt is what made a pod that
+	// carried on re-graduate on the following tick.
+	pod.CycleStartedAt = at
 	pod.Members = staying
 	m.pods[podID] = pod
 	delete(m.continuations, podID)

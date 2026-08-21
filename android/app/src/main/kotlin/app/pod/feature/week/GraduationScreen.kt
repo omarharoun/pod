@@ -3,6 +3,7 @@ package app.pod.feature.week
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -134,10 +135,13 @@ fun GraduationScreen(
         // thought — not on a permanent "+" shown most often to the person who has not
         // managed their first thing yet (docs/DESIGN.md, variant B).
         if (state.canOpenAnotherLane) {
-            SecondThing(working = state.working, onStart = viewModel::openAnotherLane)
+            SecondThing(working = state.buying, onStart = viewModel::openAnotherLane)
         }
 
-        (state.failure ?: state.slotsFailure)?.let { PodNotice(failure = it) }
+        // Only the cycle's own failures. A slots request that fell over is not something
+        // to put an error block on the free lane's screen about — the offer simply does
+        // not appear, which is already what canOpenAnotherLane does.
+        state.failure?.let { PodNotice(failure = it) }
     }
 }
 

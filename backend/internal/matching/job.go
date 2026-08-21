@@ -193,7 +193,10 @@ func podTimezone(pod Pod, waiting []store.PoolCandidate) string {
 	var earliestAt time.Time
 	for _, member := range pod.Members {
 		for _, w := range waiting {
-			if w.UserID != member.UserID {
+			// The lane matters. Since M7 one person can be waiting in two, and matching
+			// on the user id alone let the *other* lane's ticket — a different goal, and
+			// possibly queued at a different moment — set this pod's shared timezone.
+			if w.UserID != member.UserID || w.Slot != member.Slot {
 				continue
 			}
 			if earliest == "" || w.QueuedAt.Before(earliestAt) {

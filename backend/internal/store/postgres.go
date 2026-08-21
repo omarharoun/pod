@@ -378,8 +378,9 @@ func (p *Postgres) CreatePod(ctx context.Context, pod Pod, members []Membership,
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO pods (id, state, goal_category, timezone, streak_weeks, cycle_length_weeks, created_at)
-		VALUES ($1, $2, $3, $4, 0, $5, $6)`,
+		INSERT INTO pods (id, state, goal_category, timezone, streak_weeks, cycle_length_weeks,
+		                  created_at, cycle_started_at)
+		VALUES ($1, $2, $3, $4, 0, $5, $6, $6)`,
 		pod.ID, string(pod.State), pod.GoalCategory, pod.Timezone,
 		podCycleLength(pod.CycleLengthWeeks), pod.CreatedAt); err != nil {
 		return wrap("insert pod", err)
@@ -406,7 +407,7 @@ func (p *Postgres) CreatePod(ctx context.Context, pod Pod, members []Membership,
 
 func (p *Postgres) GetPodForMember(ctx context.Context, podID, userID string) (Pod, error) {
 	return p.loadPod(ctx, `
-		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks, p.created_at, p.completed_at, p.decide_by, p.dissolved_at
+		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks, p.created_at, p.cycle_started_at, p.completed_at, p.decide_by, p.dissolved_at
 		FROM pods p
 		JOIN pod_members m ON m.pod_id = p.id AND m.user_id = $2 AND m.left_at IS NULL
 		WHERE p.id = $1`, podID, userID)
@@ -414,18 +415,19 @@ func (p *Postgres) GetPodForMember(ctx context.Context, podID, userID string) (P
 
 func (p *Postgres) GetActivePod(ctx context.Context, userID string, slot int) (Pod, error) {
 	return p.loadPod(ctx, `
-		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks, p.created_at, p.completed_at, p.decide_by, p.dissolved_at
+		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks, p.created_at, p.cycle_started_at, p.completed_at, p.decide_by, p.dissolved_at
 		FROM pods p
 		JOIN pod_members m ON m.pod_id = p.id
 		WHERE m.user_id = $1 AND m.slot = $2 AND m.left_at IS NULL AND p.state <> 'dissolved'`, userID, slot)
 }
 
 // CountWeeksEveryoneWasIn is how many of a pod's closed weeks the pod completed.
-func (p *Postgres) CountWeeksEveryoneWasIn(ctx context.Context, podID string) (int, error) {
+func (p *Postgres) CountWeeksEveryoneWasIn(ctx context.Context, podID string, since time.Time) (int, error) {
 	var count int
 	err := p.pool.QueryRow(ctx, `
 		SELECT count(*) FROM weeks
-		WHERE pod_id = $1 AND closed_at IS NOT NULL AND pod_completed`, podID).Scan(&count)
+		WHERE pod_id = $1 AND opens_at >= $2 AND closed_at IS NOT NULL AND pod_completed`,
+		podID, since).Scan(&count)
 	if err != nil {
 		return 0, wrap("count weeks everyone was in", err)
 	}
@@ -436,7 +438,7 @@ func (p *Postgres) CountWeeksEveryoneWasIn(ctx context.Context, podID string) (i
 func (p *Postgres) ListActivePodsForUser(ctx context.Context, userID string) ([]Pod, error) {
 	rows, err := p.pool.Query(ctx, `
 		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks,
-		       p.created_at, p.completed_at, p.decide_by, p.dissolved_at
+		       p.created_at, p.cycle_started_at, p.completed_at, p.decide_by, p.dissolved_at
 		FROM pods p
 		JOIN pod_members m ON m.pod_id = p.id
 		WHERE m.user_id = $1 AND m.left_at IS NULL AND p.state <> 'dissolved'
@@ -451,7 +453,7 @@ func (p *Postgres) ListActivePodsForUser(ctx context.Context, userID string) ([]
 		var pod Pod
 		var state string
 		if err := rows.Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks,
-			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt); err != nil {
+			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CycleStartedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt); err != nil {
 			return nil, wrap("scan pod", err)
 		}
 		pod.State = PodState(state)
@@ -520,14 +522,14 @@ func (p *Postgres) loadPod(ctx context.Context, query string, args ...any) (Pod,
 	var state string
 	err := p.pool.QueryRow(ctx, query, args...).
 		Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks,
-			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt)
+			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CycleStartedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt)
 	if err != nil {
 		return Pod{}, wrap("load pod", err)
 	}
 	pod.State = PodState(state)
 
 	rows, err := p.pool.Query(ctx, `
-		SELECT m.user_id, u.display_name, m.joined_at
+		SELECT m.user_id, m.slot, u.display_name, m.joined_at
 		FROM pod_members m
 		JOIN users u ON u.id = m.user_id
 		WHERE m.pod_id = $1 AND m.left_at IS NULL
@@ -538,7 +540,7 @@ func (p *Postgres) loadPod(ctx context.Context, query string, args ...any) (Pod,
 	defer rows.Close()
 	for rows.Next() {
 		var member PodMember
-		if err := rows.Scan(&member.UserID, &member.DisplayName, &member.JoinedAt); err != nil {
+		if err := rows.Scan(&member.UserID, &member.Slot, &member.DisplayName, &member.JoinedAt); err != nil {
 			return Pod{}, wrap("scan pod member", err)
 		}
 		pod.Members = append(pod.Members, member)
@@ -550,7 +552,7 @@ func (p *Postgres) loadPod(ctx context.Context, query string, args ...any) (Pod,
 
 func (p *Postgres) ListActivePods(ctx context.Context) ([]Pod, error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT id, state, goal_category, timezone, streak_weeks, cycle_length_weeks, created_at, completed_at, decide_by, dissolved_at
+		SELECT id, state, goal_category, timezone, streak_weeks, cycle_length_weeks, created_at, cycle_started_at, completed_at, decide_by, dissolved_at
 		FROM pods WHERE state = 'active' ORDER BY created_at, id`)
 	if err != nil {
 		return nil, wrap("list active pods", err)
@@ -562,7 +564,7 @@ func (p *Postgres) ListActivePods(ctx context.Context) ([]Pod, error) {
 		var pod Pod
 		var state string
 		if err := rows.Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks,
-			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt); err != nil {
+			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CycleStartedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt); err != nil {
 			return nil, wrap("scan pod", err)
 		}
 		pod.State = PodState(state)
@@ -584,7 +586,7 @@ func (p *Postgres) ListActivePods(ctx context.Context) ([]Pod, error) {
 
 func (p *Postgres) podMembers(ctx context.Context, podID string) ([]PodMember, error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT m.user_id, u.display_name, m.joined_at
+		SELECT m.user_id, m.slot, u.display_name, m.joined_at
 		FROM pod_members m JOIN users u ON u.id = m.user_id
 		WHERE m.pod_id = $1 AND m.left_at IS NULL
 		ORDER BY m.joined_at, m.user_id`, podID)
@@ -595,7 +597,7 @@ func (p *Postgres) podMembers(ctx context.Context, podID string) ([]PodMember, e
 	var members []PodMember
 	for rows.Next() {
 		var member PodMember
-		if err := rows.Scan(&member.UserID, &member.DisplayName, &member.JoinedAt); err != nil {
+		if err := rows.Scan(&member.UserID, &member.Slot, &member.DisplayName, &member.JoinedAt); err != nil {
 			return nil, wrap("scan pod member", err)
 		}
 		members = append(members, member)
@@ -1196,9 +1198,13 @@ func (p *Postgres) DissolvePod(ctx context.Context, podID, reason string, inacti
 	// Everyone gets the offer to lower the bar, in the lane the pod occupied for them —
 	// which differs per member, because a slot belongs to the membership (ADR-026).
 	// Only inactive members carry the count (CLAUDE.md §6).
+	// Scoped to the memberships this call just ended — the same $2 the UPDATE above
+	// wrote. Without it, a pod that had already lost a member at a previous graduation
+	// would hand that person "that pod has wound down" for a pod they had finished and
+	// deliberately left, which is the thing ADR-023 exists to prevent.
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO recovery_offers (user_id, slot, offered_at)
-		SELECT user_id, slot, $2 FROM pod_members WHERE pod_id = $1
+		SELECT user_id, slot, $2 FROM pod_members WHERE pod_id = $1 AND left_at = $2
 		ON CONFLICT (user_id, slot) DO UPDATE SET offered_at = EXCLUDED.offered_at`,
 		podID, at); err != nil {
 		return wrap("offer recovery", err)
@@ -1286,7 +1292,7 @@ func (p *Postgres) ContinuationFor(ctx context.Context, podID, userID string) (C
 func (p *Postgres) ListPodsAwaitingContinuation(ctx context.Context) ([]Pod, error) {
 	rows, err := p.pool.Query(ctx, `
 		SELECT id, state, goal_category, timezone, streak_weeks, cycle_length_weeks,
-		       created_at, completed_at, decide_by, dissolved_at
+		       created_at, cycle_started_at, completed_at, decide_by, dissolved_at
 		FROM pods WHERE state = 'completed'
 		ORDER BY completed_at`)
 	if err != nil {
@@ -1298,7 +1304,7 @@ func (p *Postgres) ListPodsAwaitingContinuation(ctx context.Context) ([]Pod, err
 	for rows.Next() {
 		var pod Pod
 		if err := rows.Scan(&pod.ID, &pod.State, &pod.GoalCategory, &pod.Timezone,
-			&pod.StreakWeeks, &pod.CycleLengthWeeks, &pod.CreatedAt,
+			&pod.StreakWeeks, &pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CycleStartedAt,
 			&pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt); err != nil {
 			return nil, wrap("scan completed pod", err)
 		}
@@ -1362,8 +1368,9 @@ func (p *Postgres) StartNextCycle(ctx context.Context, podID string, at time.Tim
 		return wrap("end memberships", err)
 	}
 	if _, err := tx.Exec(ctx, `
-		UPDATE pods SET state = 'active', completed_at = NULL, decide_by = NULL WHERE id = $1`,
-		podID); err != nil {
+		UPDATE pods
+		SET state = 'active', completed_at = NULL, decide_by = NULL, cycle_started_at = $2
+		WHERE id = $1`, podID, at); err != nil {
 		return wrap("restart pod", err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM pod_continuations WHERE pod_id = $1`, podID); err != nil {

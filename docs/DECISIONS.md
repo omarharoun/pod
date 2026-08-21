@@ -1218,3 +1218,72 @@ one store implementation belongs in it.**
   business touching proof bytes should not be handed something that quietly can.
 * The journey test clears the database it runs against. It is the only test that does, and
   it must stay that way — it is why it can assert that *no* proof survived the cycle.
+
+---
+
+## ADR-029 — The second audit, and the cycle that lasted an hour
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M7
+
+**Context.** A second workflow audited M7 and the ADR-027 fixes. Twelve findings, verified
+adversarially, none refuted. Most were mine from the same day. They are recorded together
+because they share a cause worth naming, and because one of them uncovered something worse
+than itself.
+
+**What it found, and what was true.**
+
+* **`:app` did not compile.** `GraduationScreen.kt` called `Modifier.fillMaxWidth()` without
+  importing it. `clientlint` cannot catch this — it checks generated symbols, not the
+  standard library — and no compiler here can either.
+* **iOS's graduation screen read a stale pod.** It took `pod` as an argument and never read
+  `controller.pod`, so answering continue-or-close changed nothing on screen. Android read
+  the returned pod from the start. The controller's own test passed: it asserted the
+  controller, and the view was what was broken. That is ADR-027's pattern for the third
+  time in a day.
+* **The paywall's network call disabled the continue-or-close choice** on Android, because
+  `working` merged the cycle's state with the slots request's. An entitlements query
+  decided whether a core-loop control was tappable — §2 rule 6, exactly.
+* **A failed slots request rendered an error on the free lane's screen.** Both clients. The
+  offer already hides itself when slots are unavailable; the notice was pure noise on the
+  one screen that should feel like an ending.
+* **`podTimezone` matched on user id alone**, so one lane's ticket could set another lane's
+  pod's shared timezone.
+* **`PodMember.Slot` was always 0 from Postgres** — neither member query selected it, while
+  Memory returned the real value. The divergence class again.
+* **`DissolvePod` wrote a recovery offer for every membership row**, including ones a
+  previous graduation had already ended. Someone who finished a cycle and chose to stop
+  would be told "that pod has wound down" about the pod they had finished.
+* **`weeks_everyone_was_in` counted the pod's whole life**, not the cycle being graduated.
+
+**And the one underneath.** Fixing that last one meant anchoring the count to the cycle's
+start — at which point it became obvious that *everything* about a cycle was anchored to
+`pods.created_at`: where it ends, how many weeks have closed, whether it is over. That is
+right for a first cycle and wrong for every one after it. **A pod that carried on was
+already past its finish line, so the next tick graduated it again. Its second cycle lasted
+one hour.**
+
+M6 shipped with that. Nothing caught it because no test had ever run a pod past its second
+cycle's first tick — the M6 tests asserted the pod restarted and stopped there.
+
+Migration 0009 adds `pods.cycle_started_at`, set at creation and reset by `StartNextCycle`,
+and every piece of cycle arithmetic now measures from it.
+
+**Two smaller things found while fixing it**, both worth recording because both were
+silent:
+
+* `ListPodsAwaitingContinuation` selected eleven columns and scanned ten. The weekly job
+  logs and continues on a store error, so no graduated pod ever restarted or closed — and
+  nothing said so. That is the second time this session a swallowed error in that job hid
+  a total failure of a feature (ADR-028 was the first). **The job's log-and-continue is
+  right for one pod failing and wrong for a query that cannot succeed for any pod.**
+* Counting from the cycle's start instant dropped the cycle's *first* week, because a pod
+  formed on a Thursday joins the week already in progress and that week opens before the
+  pod exists. The count runs from the first week's opening now.
+
+**Consequences.**
+* Five end-to-end journeys against Postgres now: a whole cycle, a quiet pod dissolving, a
+  pod one person carries, two lanes getting two pods, and a second cycle that is a whole
+  cycle. The last one exists solely because of this ADR.
+* Two findings are deliberately **not** fixed: no client can address a lane other than 0,
+  so a purchased lane has no screen. That is a real gap and it is recorded in
+  `docs/VERIFYING.md` rather than papered over — see ADR-030.

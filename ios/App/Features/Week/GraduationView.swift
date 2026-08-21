@@ -12,12 +12,19 @@ import PodAPI
 /// is still not a ranking. Nothing here is per-member: no best week, no who-posted-most,
 /// no personal figure of any kind (`CLAUDE.md` §2 rule 3).
 struct GraduationView: View {
-    let pod: Pod
     let controller: GraduationController
     let slots: SlotsController
 
     @Environment(\.palette) private var palette
     @Environment(\.copy) private var copy
+
+    /// The controller's pod, never the one the caller passed in.
+    ///
+    /// `RootView` re-renders with the pod the onboarding phase is holding, which is older
+    /// than the one an answer came back with. Reading the argument meant answering the
+    /// continue-or-close question changed nothing on screen at all. Android read the
+    /// returned pod from the start; this is the parity.
+    private var pod: Pod { controller.pod }
 
     private var cycleLength: Int { pod.cycle?.lengthWeeks ?? 0 }
     private var weeksEveryoneWasIn: Int { pod.cycle?.weeksEveryoneWasIn ?? 0 }
@@ -73,7 +80,11 @@ struct GraduationView: View {
                     secondThing
                 }
 
-                if let failure = controller.failure ?? slots.failure {
+                // Only the cycle's own failures. A slots request that fell over is not
+                // something to put an error block on the free lane's screen about — the
+                // offer simply does not appear, which is what `canOpenAnother` already
+                // does.
+                if let failure = controller.failure {
                     PodNotice(error: failure)
                 }
             }
@@ -82,7 +93,12 @@ struct GraduationView: View {
             .padding(.vertical, PodTokens.Spacing.xxxl)
         }
         .background(palette(.surfaceCanvas))
-        .task { await slots.load() }
+        .task {
+            await slots.load()
+            // The others answer when they answer; there is nothing to poll. This reads
+            // once so a screen returned to shows the current count.
+            await controller.refresh()
+        }
     }
 
     private var finished: some View {
@@ -183,7 +199,6 @@ struct GraduationView: View {
 #Preview("Six weeks, everyone in") {
     let pod = Pod.previewGraduated(streakWeeks: 6, youAnswered: nil)
     return GraduationView(
-        pod: pod,
         controller: GraduationController(client: PodEnvironment.preview().client, pod: pod),
         slots: PodEnvironment.preview().slots
     )
@@ -194,7 +209,6 @@ struct GraduationView: View {
 #Preview("Six weeks, some of them landed") {
     let pod = Pod.previewGraduated(streakWeeks: 0, youAnswered: nil)
     return GraduationView(
-        pod: pod,
         controller: GraduationController(client: PodEnvironment.preview().client, pod: pod),
         slots: PodEnvironment.preview().slots
     )
@@ -205,7 +219,6 @@ struct GraduationView: View {
 #Preview("Answered, waiting on the others") {
     let pod = Pod.previewGraduated(streakWeeks: 4, youAnswered: true)
     return GraduationView(
-        pod: pod,
         controller: GraduationController(client: PodEnvironment.preview().client, pod: pod),
         slots: PodEnvironment.preview().slots
     )
@@ -217,7 +230,6 @@ struct GraduationView: View {
 #Preview("Stopping here") {
     let pod = Pod.previewGraduated(streakWeeks: 2, youAnswered: false)
     return GraduationView(
-        pod: pod,
         controller: GraduationController(client: PodEnvironment.preview().client, pod: pod),
         slots: PodEnvironment.preview().slots
     )

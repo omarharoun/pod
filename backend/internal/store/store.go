@@ -148,6 +148,11 @@ type Pod struct {
 	// the finish line under a pod that is already running.
 	CycleLengthWeeks int
 	CreatedAt        time.Time
+	// CycleStartedAt is when the CURRENT cycle began. Equal to CreatedAt for a pod's
+	// first cycle, and reset by StartNextCycle — everything about a cycle is measured
+	// from here, and measuring from CreatedAt made every cycle after the first end
+	// before it began.
+	CycleStartedAt time.Time
 	// CompletedAt is when the cycle finished. Graduation, not an ending.
 	CompletedAt *time.Time
 	// DecideBy is when an unanswered pod closes. Set at completion.
@@ -379,11 +384,15 @@ type Store interface {
 	GetActivePod(ctx context.Context, userID string, slot int) (Pod, error)
 	// ListActivePodsForUser is every lane the caller currently has a pod in.
 	ListActivePodsForUser(ctx context.Context, userID string) ([]Pod, error)
-	// CountWeeksEveryoneWasIn is how many of a pod's closed weeks the pod completed.
+	// CountWeeksEveryoneWasIn is how many of a pod's closed weeks since `since` the pod
+	// completed.
 	//
 	// Distinct from Pod.StreakWeeks, which is the trailing run and is reset by any miss.
 	// The graduation screen needs this one; the ring needs the streak.
-	CountWeeksEveryoneWasIn(ctx context.Context, podID string) (int, error)
+	//
+	// `since` is the current cycle's first opening instant. Counting a pod's whole life
+	// would let a second cycle's graduation report more weeks than a cycle has.
+	CountWeeksEveryoneWasIn(ctx context.Context, podID string, since time.Time) (int, error)
 	// ListActivePods is the weekly job's input.
 	ListActivePods(ctx context.Context) ([]Pod, error)
 

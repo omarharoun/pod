@@ -185,7 +185,7 @@ func (j *Job) turnOver(ctx context.Context, pod store.Pod, now time.Time) (close
 	if length <= 0 {
 		length = cycle.DefaultLengthWeeks
 	}
-	if !current.OpensAt.Before(cycle.FinishesAt(pod.CreatedAt, length, location)) {
+	if !current.OpensAt.Before(cycle.FinishesAt(cycleStart(pod), length, location)) {
 		existing = true
 	}
 	if !existing {

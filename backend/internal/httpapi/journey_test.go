@@ -594,3 +594,75 @@ func replaceDatabaseName(url, name string) string {
 	}
 	return out
 }
+
+// A pod that carries on gets a whole second cycle, not an immediate second graduation.
+//
+// The cycle's arithmetic is anchored to when the cycle started. Anchoring it to when the
+// *pod* was created means a pod that continues is already past its finish line, so the
+// very next tick graduates it again — a second cycle that lasts one hour.
+func TestASecondCycleIsAWholeCycleAgainstPostgres(t *testing.T) {
+	j := newJourney(t)
+
+	sam := j.signIn("sam@example.com")
+	alex := j.signIn("alex@example.com")
+	for _, person := range []session{sam, alex} {
+		j.do(t, http.MethodPut, "/v1/onboarding/intent", person, api.IntentRequest{
+			GoalText: "finally sort out the spare room", GoalCategory: api.GoalCategoryHome,
+			Intensity: 3, Timezone: "Europe/Lisbon",
+			SelfReportReliability: api.SelfReportReliabilitySometimes,
+		}, http.StatusOK, nil)
+		j.do(t, http.MethodPost, "/v1/pool", person, nil, http.StatusAccepted, nil)
+	}
+	if _, err := j.matcher.RunWindow(context.Background()); err != nil {
+		t.Fatalf("matching window: %v", err)
+	}
+	var pod api.Pod
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusOK, &pod)
+
+	for n := 0; n < cycle.DefaultLengthWeeks; n++ {
+		var current api.Week
+		j.do(t, http.MethodGet, fmt.Sprintf("/v1/pods/%s/weeks/current", pod.ID), sam, nil, http.StatusOK, &current)
+		for _, person := range []session{sam, alex} {
+			j.post(t, pod.ID, current.ID, person)
+		}
+		j.clock.Advance(current.ClosesAt.Sub(j.clock.Now()) + time.Hour)
+		if _, err := j.weekly.Tick(context.Background()); err != nil {
+			t.Fatalf("tick: %v", err)
+		}
+		sam, alex = j.signIn("sam@example.com"), j.signIn("alex@example.com")
+	}
+
+	var graduated api.Pod
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusOK, &graduated)
+	for _, person := range []session{sam, alex} {
+		j.do(t, http.MethodPost, fmt.Sprintf("/v1/pods/%s/continue", graduated.ID), person,
+			api.ContinueRequest{Continuing: true}, http.StatusOK, nil)
+	}
+	if _, err := j.weekly.Tick(context.Background()); err != nil {
+		t.Fatalf("settling tick: %v", err)
+	}
+
+	// One more tick, an hour later. The second cycle has six weeks to run.
+	j.clock.Advance(time.Hour)
+	if _, err := j.weekly.Tick(context.Background()); err != nil {
+		t.Fatalf("next tick: %v", err)
+	}
+
+	sam = j.signIn("sam@example.com")
+	var second api.Pod
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusOK, &second)
+	if second.State != api.PodStateActive {
+		t.Fatalf("an hour into its second cycle the pod is %q", second.State)
+	}
+	if second.Cycle.WeeksCompleted != 0 {
+		t.Errorf("the second cycle is already %d weeks in", second.Cycle.WeeksCompleted)
+	}
+	if second.Cycle.WeeksEveryoneWasIn != 0 {
+		t.Errorf("the second cycle reports %d weeks everyone was in, before it has had one",
+			second.Cycle.WeeksEveryoneWasIn)
+	}
+	if !second.Cycle.EndsAt.After(graduated.Cycle.EndsAt) {
+		t.Errorf("the second cycle ends at %v, not after the first's %v",
+			second.Cycle.EndsAt, graduated.Cycle.EndsAt)
+	}
+}

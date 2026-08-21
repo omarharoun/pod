@@ -72,7 +72,6 @@ private struct SignedInView: View {
             // would leave the choice somewhere the person has to go looking for it.
             if pod.state == .completed {
                 GraduationView(
-                    pod: pod,
                     controller: environment.graduationController(for: pod),
                     slots: environment.slots
                 )

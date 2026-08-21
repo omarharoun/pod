@@ -25,6 +25,12 @@ data class GraduationUiState(
     val failure: ApiException? = null,
     /** Whether there is room for another lane. Not the same as whether to offer one. */
     val canOpenAnotherLane: Boolean = false,
+    /**
+     * Whether a purchase is in flight. Deliberately separate from [working]: merging them
+     * let the paywall's own network call disable the continue-or-close buttons, so an
+     * optional purchase could block a core-loop decision (CLAUDE.md §2 rule 6).
+     */
+    val buying: Boolean = false,
     val slotsFailure: ApiException? = null,
 )
 
@@ -51,9 +57,10 @@ class GraduationViewModel @Inject constructor(
                 combine(graduation, lanes) { (pod, working, failure), (list, buying, slotsFailure) ->
                     GraduationUiState(
                         pod = pod,
-                        working = working || buying,
+                        working = working,
                         failure = failure,
                         canOpenAnotherLane = list.isNotEmpty() && slots.canOpenAnother(),
+                        buying = buying,
                         slotsFailure = slotsFailure,
                     )
                 }
