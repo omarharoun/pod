@@ -29,14 +29,14 @@ func (m *testMailer) SendLoginCode(_ context.Context, _, code string, _ int) err
 }
 
 type harness struct {
-	t      *testing.T
+	t      testing.TB
 	server *Server
 	store  *store.Memory
 	mailer *testMailer
 	clock  *clock.Fixed
 }
 
-func newHarness(t *testing.T) *harness {
+func newHarness(t testing.TB) *harness {
 	t.Helper()
 	cfg := config.Config{
 		Env:             "test",
@@ -91,7 +91,7 @@ func (h *harness) signIn(email string) api.AuthSession {
 	return session
 }
 
-func decode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, dst any) {
+func decode(t testing.TB, rec *httptest.ResponseRecorder, wantStatus int, dst any) {
 	t.Helper()
 	if rec.Code != wantStatus {
 		t.Fatalf("status: got %d, want %d — body: %s", rec.Code, wantStatus, rec.Body.String())
@@ -104,7 +104,7 @@ func decode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, dst an
 	}
 }
 
-func decodeError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int) api.ApiError {
+func decodeError(t testing.TB, rec *httptest.ResponseRecorder, wantStatus int) api.ApiError {
 	t.Helper()
 	var body api.ApiError
 	decode(t, rec, wantStatus, &body)

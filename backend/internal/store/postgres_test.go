@@ -15,7 +15,7 @@ import (
 // newPostgres connects to TEST_DATABASE_URL, applies migrations, and hands back a store.
 // Without that variable the whole file skips — `go test ./...` must stay runnable on a
 // laptop with no database.
-func newPostgres(t *testing.T) *store.Postgres {
+func newPostgres(t testing.TB) *store.Postgres {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
@@ -43,7 +43,7 @@ func newPostgres(t *testing.T) *store.Postgres {
 }
 
 // uniqueEmail keeps tests independent without truncating shared tables.
-func uniqueEmail(t *testing.T) string {
+func uniqueEmail(t testing.TB) string {
 	t.Helper()
 	suffix, err := ids.NewUUID()
 	if err != nil {
