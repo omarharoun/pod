@@ -92,6 +92,23 @@ stays in one place. (`verify` also keeps the APK as a run artefact, but artefact
 an account-wide quota and quietly stops accepting uploads when it is full — which is why
 the release exists.)
 
+**What it takes to actually sign in.** The app is a client; on its own it shows a sign-in
+screen and nothing else. End to end you need:
+
+1. Postgres, migrated: `cd backend && go run ./cmd/migrate up`.
+2. The API listening on all interfaces, not just loopback, so the phone can reach it.
+3. The APK built against your machine's address on that network — `192.168.x.x`, not
+   `localhost`, and not `10.0.2.2` unless you are on the emulator.
+4. **The sign-in code, from the API's log.** There is no email provider wired in
+   (ADR-002); in development the mailer writes codes to the log and says so at startup.
+   Nothing arrives in an inbox, because nothing is sending anything.
+5. `cd backend && go run ./cmd/matcher once` after signing up — matching is a scheduled
+   job and never runs on request (`CLAUDE.md` §5), so without it you wait in the pool
+   forever. `cmd/weekly once` turns weeks over the same way.
+
+A pod needs two people, so signing in twice on two devices — or one device and one
+`curl` — is the smallest thing that reaches the week loop.
+
 By default a debug build points at `http://10.0.2.2:8080`, which is the *emulator's* alias
 for your host machine and means nothing on a real phone. Tell it where the backend is:
 

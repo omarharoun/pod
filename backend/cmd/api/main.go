@@ -67,7 +67,8 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	// The hashing embedder until the hosted one is wired in — see ADR-011.
+	// The lexicon embedder. A hosted model would still be better, and swapping it is
+	// this line plus `cmd/reembed` — see ADR-011, ADR-031.
 	onboardingService := onboarding.NewService(db, embed.Lexical{}, now, verifier)
 	// The API queues notifications; cmd/weekly drains the outbox.
 	weekService := week.NewService(db, blobs, now, notify.NewService(db, now, log))
