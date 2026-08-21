@@ -88,6 +88,15 @@ notifications · M5 recovery + dissolution · M6 cycle completion · M7 paywall.
 
 M3 is the product. Nothing after it starts until it feels finished on both platforms.
 
-**Where we are: M1.** The contract covers onboarding, pod, week and proof; auth and
-health are implemented; both clients sign in and read health. Everything specified beyond
-M1 answers `501 not_implemented_yet` (ADR-007).
+**Where we are: M2.** Auth, onboarding, the matching queue and pod assignment are
+implemented, and both clients run the whole path — sign in, answer four questions, wait
+for the next window, land in a pod. The week loop (M3) is next, and it is the product.
+Everything specified beyond M2 answers `501 not_implemented_yet` (ADR-007).
+
+The matching job runs on a schedule, never on request (`CLAUDE.md` §5):
+
+```bash
+make backend-run                       # the API
+cd backend && go run ./cmd/matcher once    # one window
+cd backend && go run ./cmd/matcher serve   # every hour
+```
