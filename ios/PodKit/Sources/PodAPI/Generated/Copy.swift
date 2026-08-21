@@ -189,15 +189,6 @@ public extension CopyKey {
     /// "Leave the queue"
     static let poolWaitingLeave = CopyKey(rawValue: "pool.waiting.leave")
 
-    /// "Your pod"
-    static let podTitle = CopyKey(rawValue: "pod.title")
-
-    /// "The two of you."
-    static let podMembersTwo = CopyKey(rawValue: "pod.members.two")
-
-    /// "The three of you."
-    static let podMembersThree = CopyKey(rawValue: "pod.members.three")
-
     /// "You"
     static let podYou = CopyKey(rawValue: "pod.you")
 
@@ -508,9 +499,6 @@ public extension CopyKey {
         .poolWaitingBody,
         .poolWaitingNextWindow,
         .poolWaitingLeave,
-        .podTitle,
-        .podMembersTwo,
-        .podMembersThree,
         .podYou,
         .podNewlyFormedTitle,
         .podNewlyFormedBody,

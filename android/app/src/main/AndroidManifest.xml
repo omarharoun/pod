@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Asked for at the moment someone chooses a voice note, never at launch. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!--
       Pod asks for nothing else. No location, no contacts, no health data — a dependency
@@ -27,5 +30,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!--
+          Proof is written to the app's cache directory and handed to the camera through
+          this provider. It is deleted as soon as the bytes have been uploaded — nothing
+          about proof outlives the week it belongs to (CLAUDE.md §2 rule 4).
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.proof"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/proof_paths" />
+        </provider>
     </application>
 </manifest>

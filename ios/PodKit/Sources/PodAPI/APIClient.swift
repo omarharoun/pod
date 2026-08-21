@@ -102,6 +102,104 @@ public actor APIClient {
 
     // MARK: - Pod
 
+    // MARK: - The week
+
+    public func currentWeek(podID: UUID) async throws -> Week {
+        try await send(Request(method: "GET", path: "/v1/pods/\(podID.uuidString.lowercased())/weeks/current"))
+    }
+
+    public func weeks(podID: UUID) async throws -> WeekList {
+        try await send(Request(method: "GET", path: "/v1/pods/\(podID.uuidString.lowercased())/weeks"))
+    }
+
+    public func setWeekAction(podID: UUID, weekID: UUID, actionText: String) async throws -> Week {
+        try await send(Request(
+            method: "PUT",
+            path: "/v1/pods/\(podID.uuidString.lowercased())/weeks/\(weekID.uuidString.lowercased())/action",
+            body: try encoder.encode(WeekActionRequest(actionText: actionText))
+        ))
+    }
+
+    // MARK: - Proof
+
+    /// Posts a proof: reserve a slot, PUT the bytes straight to storage, then commit.
+    ///
+    /// The three steps live together because they are one action from the person's point
+    /// of view, and because a slot with no bytes in it must never be committed (ADR-008).
+    public func postProof(
+        podID: UUID,
+        weekID: UUID,
+        kind: ProofKind,
+        contentType: String,
+        data: Data,
+        durationMs: Int? = nil
+    ) async throws -> Proof {
+        let base = "/v1/pods/\(podID.uuidString.lowercased())/weeks/\(weekID.uuidString.lowercased())/proof"
+        let slot: ProofUpload = try await send(Request(
+            method: "POST",
+            path: base,
+            body: try encoder.encode(ProofUploadRequest(
+                kind: kind,
+                contentType: contentType,
+                byteSize: data.count,
+                durationMs: durationMs
+            ))
+        ))
+
+        try await putBytes(data, to: slot)
+
+        return try await send(Request(
+            method: "POST",
+            path: "\(base)/\(slot.proofId.uuidString.lowercased())/commit"
+        ))
+    }
+
+    public func proof(podID: UUID, weekID: UUID, proofID: UUID) async throws -> Proof {
+        try await send(Request(
+            method: "GET",
+            path: "/v1/pods/\(podID.uuidString.lowercased())/weeks/\(weekID.uuidString.lowercased())/proof/\(proofID.uuidString.lowercased())"
+        ))
+    }
+
+    /// Fetches the bytes behind a short-lived view link.
+    public func proofData(at url: URL) async throws -> Data {
+        do {
+            let (data, response) = try await session.data(from: url)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                // A view link that has expired, or a proof already swept. Neither is an
+                // error worth a message — the thing is simply not there.
+                throw APIError.malformedResponse
+            }
+            return data
+        } catch let error as URLError {
+            throw APIError.offline(error)
+        }
+    }
+
+    /// PUTs proof bytes to the signed URL. This never touches the API: it is the whole
+    /// point of the two-step upload that the bytes go straight to storage (ADR-008).
+    private func putBytes(_ data: Data, to slot: ProofUpload) async throws {
+        var request = URLRequest(url: slot.uploadUrl)
+        request.httpMethod = slot.uploadMethod
+        for (name, value) in slot.uploadHeaders ?? [:] {
+            // Content-Length is set by URLSession from the body; setting it here as well
+            // makes the request malformed.
+            guard name.lowercased() != "content-length" else { continue }
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+
+        do {
+            let (_, response) = try await session.upload(for: request, from: data)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                throw APIError.malformedResponse
+            }
+        } catch let error as URLError {
+            throw APIError.offline(error)
+        }
+    }
+
+    // MARK: - Pod
+
     /// The caller's active pod, or `nil` when they have not been matched yet.
     ///
     /// The server answers 204 rather than 404 for "no pod": not being matched yet is a

@@ -184,15 +184,6 @@ const (
 	// "Leave the queue"
 	KeyPoolWaitingLeave Key = "pool.waiting.leave"
 
-	// "Your pod"
-	KeyPodTitle Key = "pod.title"
-
-	// "The two of you."
-	KeyPodMembersTwo Key = "pod.members.two"
-
-	// "The three of you."
-	KeyPodMembersThree Key = "pod.members.three"
-
 	// "You"
 	KeyPodYou Key = "pod.you"
 
@@ -504,9 +495,6 @@ var AllKeys = []Key{
 	KeyPoolWaitingBody,
 	KeyPoolWaitingNextWindow,
 	KeyPoolWaitingLeave,
-	KeyPodTitle,
-	KeyPodMembersTwo,
-	KeyPodMembersThree,
 	KeyPodYou,
 	KeyPodNewlyFormedTitle,
 	KeyPodNewlyFormedBody,
@@ -647,9 +635,6 @@ var catalogue = map[Key]map[string]string{
 	KeyPoolWaitingBody:                {"other": "We match every hour, so you're not waiting long. We'll let you know."},
 	KeyPoolWaitingNextWindow:          {"other": "Next match at {time}"},
 	KeyPoolWaitingLeave:               {"other": "Leave the queue"},
-	KeyPodTitle:                       {"other": "Your pod"},
-	KeyPodMembersTwo:                  {"other": "The two of you."},
-	KeyPodMembersThree:                {"other": "The three of you."},
 	KeyPodYou:                         {"other": "You"},
 	KeyPodNewlyFormedTitle:            {"other": "You're matched"},
 	KeyPodNewlyFormedBody:             {"other": "Same goal, same kind of week. Your first action lands soon."},

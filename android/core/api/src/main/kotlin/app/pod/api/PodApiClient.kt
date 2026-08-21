@@ -13,7 +13,14 @@ import app.pod.api.generated.IntentRequest
 import app.pod.api.generated.OnboardingState
 import app.pod.api.generated.Pod
 import app.pod.api.generated.PoolTicket
+import app.pod.api.generated.Proof
+import app.pod.api.generated.ProofKind
+import app.pod.api.generated.ProofUpload
+import app.pod.api.generated.ProofUploadRequest
 import app.pod.api.generated.User
+import app.pod.api.generated.Week
+import app.pod.api.generated.WeekActionRequest
+import app.pod.api.generated.WeekList
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.call.body
@@ -117,6 +124,84 @@ public class PodApiClient(
      * state, not a failure, and the two must not look the same to the client.
      */
     public suspend fun currentPod(): Pod? = sendOrNull("/v1/pods/current", HttpMethod.Get)
+
+    // ---- The week --------------------------------------------------------------
+
+    public suspend fun currentWeek(podId: String): Week =
+        send("/v1/pods/$podId/weeks/current", HttpMethod.Get)
+
+    public suspend fun weeks(podId: String): WeekList =
+        send("/v1/pods/$podId/weeks", HttpMethod.Get)
+
+    public suspend fun setWeekAction(podId: String, weekId: String, actionText: String): Week =
+        send("/v1/pods/$podId/weeks/$weekId/action", HttpMethod.Put, WeekActionRequest(actionText))
+
+    // ---- Proof -----------------------------------------------------------------
+
+    /**
+     * Posts a proof: reserve a slot, PUT the bytes straight to storage, then commit.
+     *
+     * The three steps live together because they are one action from the person's point
+     * of view, and because a slot with no bytes in it must never be committed (ADR-008).
+     */
+    public suspend fun postProof(
+        podId: String,
+        weekId: String,
+        kind: ProofKind,
+        contentType: String,
+        bytes: ByteArray,
+        durationMs: Int? = null,
+    ): Proof {
+        val base = "/v1/pods/$podId/weeks/$weekId/proof"
+        val slot: ProofUpload = send(
+            base,
+            HttpMethod.Post,
+            ProofUploadRequest(
+                kind = kind,
+                contentType = contentType,
+                byteSize = bytes.size,
+                durationMs = durationMs,
+            ),
+        )
+        putBytes(slot, contentType, bytes)
+        return send("$base/${slot.proofId}/commit", HttpMethod.Post)
+    }
+
+    public suspend fun proof(podId: String, weekId: String, proofId: String): Proof =
+        send("/v1/pods/$podId/weeks/$weekId/proof/$proofId", HttpMethod.Get)
+
+    /** Fetches the bytes behind a short-lived view link. */
+    public suspend fun proofBytes(url: String): ByteArray {
+        val response = try {
+            http.request(url) { method = HttpMethod.Get }
+        } catch (io: IOException) {
+            throw ApiException.Offline(io)
+        }
+        if (response.status.value !in 200..299) throw ApiException.Malformed()
+        return response.body()
+    }
+
+    /**
+     * PUTs proof bytes to the signed URL. This never touches the API: it is the whole
+     * point of the two-step upload that the bytes go straight to storage (ADR-008).
+     */
+    private suspend fun putBytes(slot: ProofUpload, contentType: String, bytes: ByteArray) {
+        val response = try {
+            http.request(slot.uploadUrl) {
+                method = HttpMethod.parse(slot.uploadMethod)
+                slot.uploadHeaders.orEmpty().forEach { (name, value) ->
+                    // Content-Length is set from the body; setting it again makes the
+                    // request malformed.
+                    if (!name.equals("Content-Length", ignoreCase = true)) header(name, value)
+                }
+                contentType(ContentType.parse(contentType))
+                setBody(bytes)
+            }
+        } catch (io: IOException) {
+            throw ApiException.Offline(io)
+        }
+        if (response.status.value !in 200..299) throw ApiException.Malformed()
+    }
 
     /**
      * Ends this device's session. The local tokens are cleared even if the call fails —

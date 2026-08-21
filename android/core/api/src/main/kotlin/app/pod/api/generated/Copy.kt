@@ -296,21 +296,6 @@ public object CopyKey {
     public const val POOL_WAITING_LEAVE: String = "pool.waiting.leave"
 
     /**
-     * "Your pod"
-     */
-    public const val POD_TITLE: String = "pod.title"
-
-    /**
-     * "The two of you."
-     */
-    public const val POD_MEMBERS_TWO: String = "pod.members.two"
-
-    /**
-     * "The three of you."
-     */
-    public const val POD_MEMBERS_THREE: String = "pod.members.three"
-
-    /**
      * "You"
      */
     public const val POD_YOU: String = "pod.you"
@@ -778,9 +763,6 @@ public object CopyKey {
         POOL_WAITING_BODY,
         POOL_WAITING_NEXT_WINDOW,
         POOL_WAITING_LEAVE,
-        POD_TITLE,
-        POD_MEMBERS_TWO,
-        POD_MEMBERS_THREE,
         POD_YOU,
         POD_NEWLY_FORMED_TITLE,
         POD_NEWLY_FORMED_BODY,

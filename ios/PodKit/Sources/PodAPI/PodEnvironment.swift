@@ -12,6 +12,16 @@ public final class PodEnvironment {
     public let session: SessionController
     public let onboarding: OnboardingController
 
+    /// Created per pod, because a week controller with no pod has nothing to show.
+    public func weekController(podID: UUID) -> WeekController {
+        if let existing = weekControllers[podID] { return existing }
+        let controller = WeekController(client: client, podID: podID)
+        weekControllers[podID] = controller
+        return controller
+    }
+
+    private var weekControllers: [UUID: WeekController] = [:]
+
     public init(client: APIClient, copy: Copywriter = .bundled, deviceName: String? = nil) {
         self.client = client
         self.copy = copy

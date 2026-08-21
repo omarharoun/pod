@@ -65,7 +65,11 @@ private struct SignedInView: View {
         case .waiting(let ticket):
             WaitingView(controller: environment.onboarding, ticket: ticket)
         case .matched(let pod):
-            PodView(pod: pod, session: environment.session)
+            WeekView(
+                controller: environment.weekController(podID: pod.id),
+                pod: pod,
+                session: environment.session
+            )
         }
     }
 }

@@ -5,6 +5,7 @@ import app.pod.BuildConfig
 import app.pod.api.Copywriter
 import app.pod.api.OnboardingRepository
 import app.pod.api.PodApiClient
+import app.pod.api.WeekRepositories
 import app.pod.api.SessionRepository
 import app.pod.api.TokenStore
 import app.pod.data.EncryptedTokenStore
@@ -49,4 +50,9 @@ object AppModule {
     @Singleton
     fun onboardingRepository(client: PodApiClient): OnboardingRepository =
         OnboardingRepository(client)
+
+    /** One week repository per pod, kept for the process. */
+    @Provides
+    @Singleton
+    fun weekRepositories(client: PodApiClient): WeekRepositories = WeekRepositories(client)
 }

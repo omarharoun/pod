@@ -152,6 +152,87 @@ together", never as a number next to a person.
 
 ---
 
+## M3 — The week
+
+This is the product (`CLAUDE.md` §7). Everything else exists to get someone here.
+
+### The shared ring
+
+**Variant A — one ring each.** A small ring per member, side by side, each filling when
+that person posts.
+
+**Variant B — one ring, segmented.** A single ring divided into two or three arcs, one per
+member. It closes only when everyone is in.
+
+**Picked: B, and it is not a close call.** Variant A is three individual progress
+indicators arranged in a row, which is three individual scores however carefully they are
+drawn — and the first thing anyone does with three of anything is compare them.
+`CLAUDE.md` §2 rule 3 puts the streak on the pod because individual streaks reintroduce
+private guilt; a per-member ring reintroduces it visually, one layer below where the rule
+was written.
+
+One ring made of everyone's segments is the visual form of "the streak is shared". It is
+incomplete until the pod is complete, and it is nobody's ring in particular.
+
+What B gives up: you cannot tell at a glance *which* segment is yours without reading the
+names beneath. That is the right trade — the names are right there, and a ring that
+highlights your own arc is a ring that invites you to compare it with the others'.
+
+**Segment colours** come from `state.*` in `design/tokens.json`, and the palette has no
+error role by construction:
+
+* `posted` — soft green. In.
+* `open` — warm grey. Not yet, and the week is still running. Reads as unfilled, not as
+  absent.
+* `resting` — cool grey. The week closed without them. Visibly different from `open`
+  because it is a different fact, and deliberately *not* louder than it.
+
+The gap between `open` and `resting` is the whole design problem of this screen. Resting
+has to be legible — the pod can see who is in, that is the point — without being a
+verdict. Cool grey against warm grey says "this is settled" without saying "this is bad",
+and neither is anywhere near the red the tokens do not contain.
+
+### Posting
+
+**Variant A — a sheet with two big choices**, photo or voice, then capture.
+
+**Variant B — one primary button that opens the camera immediately**, with voice behind a
+smaller secondary.
+
+**Picked: A.** B is fewer taps for the photo case, and it is wrong for this product: a
+camera that opens itself is a camera pointed at whatever is in front of you, and the
+person who chose a voice note did so because they are not somewhere they want to
+photograph. Making one of the two feel like the real option and the other like a fallback
+is the same mistake as making one member's ring bigger.
+
+Both paths cap at ten seconds and say so before recording, not after.
+
+Under the capture options, always: *"It disappears when the week closes. Nobody outside
+your pod ever sees it."* That sentence is the product's central promise and this is the
+one moment a person is deciding whether to believe it.
+
+### What is deliberately absent
+
+* No count of how many weeks anyone has personally posted.
+* No ordering of members by anything.
+* No "X hasn't posted yet" notification copy, here or in M4.
+* No streak number rendered next to a person — `state.pod.weeksTogether` reads as "6 weeks
+  together" and is attached to the ring, not to a face.
+* No progress bar toward a goal. There is no goal to be a percentage of.
+
+### Closing
+
+When a week closes complete, the ring closes and the count moves. It lasts
+`motion.settle` — 420ms — and nothing else happens. No confetti (`design/tokens.json`
+says so explicitly). The reward is the other people.
+
+When a week closes incomplete, nothing happens at all. The next week opens with everyone
+open again, and `state.pod.restartingNote` — "The pod picks back up this week" — is the
+entire acknowledgement. There is no screen that reports what went wrong, because nothing
+did.
+
+---
+
 ## Errors
 
 Failures render as a calm block under the content: a title, a line of explanation, and a

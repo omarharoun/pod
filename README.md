@@ -88,15 +88,19 @@ notifications · M5 recovery + dissolution · M6 cycle completion · M7 paywall.
 
 M3 is the product. Nothing after it starts until it feels finished on both platforms.
 
-**Where we are: M2.** Auth, onboarding, the matching queue and pod assignment are
-implemented, and both clients run the whole path — sign in, answer four questions, wait
-for the next window, land in a pod. The week loop (M3) is next, and it is the product.
-Everything specified beyond M2 answers `501 not_implemented_yet` (ADR-007).
+**Where we are: M3 — the week loop, which is the product.** Sign in, name the thing
+you've been putting off, wait for the next matching window, land in a pod, and then every
+week: one small action, ten seconds of proof, and a ring that closes only when everyone is
+in. Proof is deleted when the week closes, server-side, and there is a test that says so.
 
-The matching job runs on a schedule, never on request (`CLAUDE.md` §5):
+Every operation in `openapi.yaml` is implemented. Nothing answers `501` any more.
+
+Two scheduled jobs, neither of which ever runs on request (`CLAUDE.md` §5):
 
 ```bash
-make backend-run                       # the API
-cd backend && go run ./cmd/matcher once    # one window
-cd backend && go run ./cmd/matcher serve   # every hour
+make backend-run                        # the API
+cd backend && go run ./cmd/matcher once # one matching window
+cd backend && go run ./cmd/weekly once  # turn weeks over, sweep expired proof
 ```
+
+Both take `serve` instead of `once` to run on their own schedule.

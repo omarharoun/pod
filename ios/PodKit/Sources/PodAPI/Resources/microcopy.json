@@ -68,9 +68,6 @@
   "pool.waiting.nextWindow": "Next match at {time}",
   "pool.waiting.leave": "Leave the queue",
 
-  "pod.title": "Your pod",
-  "pod.members.two": "The two of you.",
-  "pod.members.three": "The three of you.",
   "pod.you": "You",
   "pod.newlyFormed.title": "You're matched",
   "pod.newlyFormed.body": "Same goal, same kind of week. Your first action lands soon.",

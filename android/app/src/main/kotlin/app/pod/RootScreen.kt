@@ -29,7 +29,7 @@ import app.pod.api.OnboardingPhase
 import app.pod.feature.onboarding.OnboardingScreen
 import app.pod.feature.onboarding.OnboardingViewModel
 import app.pod.feature.onboarding.WaitingScreen
-import app.pod.feature.pod.PodScreen
+import app.pod.feature.week.WeekScreen
 import app.pod.ui.theme.LocalCopywriter
 import app.pod.ui.theme.LocalPodColors
 
@@ -130,6 +130,6 @@ private fun SignedInScreen(
             )
 
         is OnboardingPhase.Matched ->
-            PodScreen(pod = phase.pod, onSignOut = onSignOut)
+            WeekScreen(pod = phase.pod, onSignOut = onSignOut)
     }
 }
