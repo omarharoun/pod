@@ -1,0 +1,64 @@
+import SwiftUI
+import PodAPI
+
+/// Chooses the screen from the session state, and nothing else.
+struct RootView: View {
+    let environment: PodEnvironment
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        content
+            .environment(\.palette, PodPalette(colorScheme))
+            .environment(\.copy, environment.copy)
+            .animation(.easeOut(duration: PodTokens.Duration.standard), value: stateID)
+            .task { await environment.session.restore() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch environment.session.state {
+        case .restoring:
+            LoadingView()
+        case .signedOut:
+            SignInView(session: environment.session)
+        case .awaitingCode(let email, let expiresAt, let resendAfter):
+            VerifyCodeView(
+                session: environment.session,
+                email: email,
+                expiresAt: expiresAt,
+                resendAfter: resendAfter
+            )
+        case .signedIn(let user):
+            HomeView(session: environment.session, user: user)
+        }
+    }
+
+    /// A coarse identity for the state, so the transition animates on a screen change and
+    /// not on every countdown tick.
+    private var stateID: Int {
+        switch environment.session.state {
+        case .restoring: 0
+        case .signedOut: 1
+        case .awaitingCode: 2
+        case .signedIn: 3
+        }
+    }
+}
+
+private struct LoadingView: View {
+    @Environment(\.palette) private var palette
+    @Environment(\.copy) private var copy
+
+    var body: some View {
+        ProgressView()
+            .tint(palette(.accentPrimary))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(palette(.surfaceCanvas))
+            .accessibilityLabel(copy(.a11yLoading))
+    }
+}
+
+#Preview("Root — signed out") {
+    RootView(environment: .preview())
+}

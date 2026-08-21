@@ -1,0 +1,48 @@
+# XcodeGen input. The .xcodeproj is generated and not committed — a project file is a
+# merge conflict waiting to happen, and everything it would encode belongs here in the
+# open. Run `xcodegen generate` in this directory.
+name: Pod
+options:
+  bundleIdPrefix: app.pod
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  PodKit:
+    path: PodKit
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  Pod:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: PodKit
+        product: PodAPI
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Pod
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Pod has no reason to want background location, contacts or health data
+        # (CLAUDE.md §8). If a dependency ever asks, that is an escalation, not a plist
+        # edit.
+        PodAPIBaseURL: $(POD_API_BASE_URL)
+    settings:
+      base:
+        POD_API_BASE_URL: https://api.pod.app
+        PRODUCT_BUNDLE_IDENTIFIER: app.pod.ios
+      configs:
+        Debug:
+          POD_API_BASE_URL: http://localhost:8080
