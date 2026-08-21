@@ -1,0 +1,835 @@
+openapi: 3.1.0
+info:
+  title: Pod API
+  version: 1.0.0
+  summary: Small-group accountability. Two or three people, one small action a week.
+  description: |
+    This document is **the contract**. Clients never hand-write models — they are generated
+    from this file (`make generate`). If a client needs a field that isn't here, this file
+    changes first, in its own commit.
+
+    ## Invariants encoded in this spec
+
+    These come from `CLAUDE.md` §2 and are not negotiable at the API layer:
+
+    * **No individual streaks.** `Pod.streak_weeks` is pod-level. There is deliberately no
+      per-member streak, completion percentage, or count anywhere in this document.
+    * **The reliability score is never returned.** It exists server-side only, is used for
+      matching, and appears in no response schema. Not as a number, not as a band, not as a
+      label. See `CLAUDE.md` §6.
+    * **No shaming vocabulary.** `MemberWeekState` is `posted` / `open` / `resting`. There is
+      no `missed`, `failed`, or `broken`. Every human-readable string is resolved by the
+      client (or by the push pipeline) from `content/microcopy.json` via a `copy_key` — the
+      API returns keys and parameters, never sentences.
+    * **Proof is ephemeral.** Every `Proof` carries `expires_at`, and the server deletes the
+      bytes at cycle end. This is a promise, not a cleanup job.
+    * **No feed, no follower counts, no public profiles.** Every read is scoped to a pod the
+      caller belongs to.
+
+    ## Milestones
+
+    Operations are tagged with `x-milestone`. Everything beyond **M1** is specified but
+    answers `501` with `code: not_implemented_yet` until its milestone lands.
+  license:
+    name: Proprietary
+servers:
+  - url: https://api.pod.app
+    description: Production
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: system
+    description: Liveness and readiness.
+  - name: auth
+    description: Passwordless sign-in. Under 15 seconds, end to end.
+  - name: onboarding
+    description: The one thing you've been putting off, and how much you can give.
+  - name: pod
+    description: The two or three people you're in it with.
+  - name: week
+    description: The weekly action and who is in.
+  - name: proof
+    description: Ten seconds of evidence, then it's gone.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/health:
+    get:
+      operationId: getHealth
+      summary: Liveness and dependency readiness.
+      tags: [system]
+      security: []
+      x-milestone: M1
+      responses:
+        '200':
+          description: The service is serving. Individual dependencies may still be degraded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          description: The service cannot serve requests.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+  /v1/auth/start:
+    post:
+      operationId: startAuth
+      summary: Begin sign-in — sends a 6-digit code to the address.
+      description: |
+        Always succeeds for a well-formed address, whether or not an account exists, so the
+        endpoint can't be used to enumerate accounts. Rate limited per address and per IP.
+      tags: [auth]
+      security: []
+      x-milestone: M1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthStartRequest' }
+      responses:
+        '200':
+          description: A challenge was created and a code dispatched.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthStartResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/auth/verify:
+    post:
+      operationId: verifyAuth
+      summary: Exchange a challenge and code for tokens.
+      tags: [auth]
+      security: []
+      x-milestone: M1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthVerifyRequest' }
+      responses:
+        '200':
+          description: Signed in. Creates the account on first successful verify.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: The code was wrong, expired, or spent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/auth/refresh:
+    post:
+      operationId: refreshAuth
+      summary: Rotate a refresh token for a fresh token pair.
+      description: |
+        Refresh tokens are single-use. Presenting a token that has already been rotated
+        revokes the whole family — that is the reuse-detection path.
+      tags: [auth]
+      security: []
+      x-milestone: M1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthRefreshRequest' }
+      responses:
+        '200':
+          description: A new token pair. The presented refresh token is now spent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthSession' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: Unknown, expired, or already-rotated refresh token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current device's refresh-token family.
+      tags: [auth]
+      x-milestone: M1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthRefreshRequest' }
+      responses:
+        '204':
+          description: Revoked. Idempotent — an unknown token also answers 204.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/me:
+    get:
+      operationId: getMe
+      summary: The signed-in user.
+      tags: [auth]
+      x-milestone: M1
+      responses:
+        '200':
+          description: The caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/onboarding/state:
+    get:
+      operationId: getOnboardingState
+      summary: Where the caller is in onboarding, and what's next.
+      tags: [onboarding]
+      x-milestone: M2
+      responses:
+        '200':
+          description: The caller's onboarding position.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OnboardingState' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/onboarding/intent:
+    put:
+      operationId: putIntent
+      summary: The one thing they've been putting off, and how much they can give.
+      tags: [onboarding]
+      x-milestone: M2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IntentRequest' }
+      responses:
+        '200':
+          description: Stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Intent' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/pool:
+    post:
+      operationId: joinPool
+      summary: Enter the matching pool.
+      description: |
+        Matching runs as a scheduled job, not on request (`CLAUDE.md` §5). The response
+        carries the next matching window so the client can say when, rather than spinning.
+      tags: [onboarding]
+      x-milestone: M2
+      responses:
+        '202':
+          description: In the pool, waiting for the next matching window.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PoolTicket' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Already in an active pod, or already queued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+    delete:
+      operationId: leavePool
+      summary: Leave the matching pool.
+      tags: [onboarding]
+      x-milestone: M2
+      responses:
+        '204': { description: No longer queued. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/pods/current:
+    get:
+      operationId: getCurrentPod
+      summary: The caller's active pod, if they have one.
+      tags: [pod]
+      x-milestone: M2
+      responses:
+        '200':
+          description: The active pod.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pod' }
+        '204':
+          description: No active pod — the caller is queued, or hasn't onboarded.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/pods/{podId}:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+    get:
+      operationId: getPod
+      summary: One pod the caller belongs to.
+      tags: [pod]
+      x-milestone: M2
+      responses:
+        '200':
+          description: The pod.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pod' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/pods/{podId}/weeks/current:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+    get:
+      operationId: getCurrentWeek
+      summary: This week's action and who is in.
+      tags: [week]
+      x-milestone: M3
+      responses:
+        '200':
+          description: The open week.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Week' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/pods/{podId}/weeks:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+    get:
+      operationId: listWeeks
+      summary: The pod's weeks, newest first.
+      description: Proof bytes are long gone for closed weeks; only the states remain.
+      tags: [week]
+      x-milestone: M3
+      responses:
+        '200':
+          description: The pod's history.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WeekList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/pods/{podId}/weeks/{weekId}/proof:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+      - $ref: '#/components/parameters/WeekId'
+    post:
+      operationId: createProofUpload
+      summary: Ask for a one-time upload slot for a 10-second proof.
+      description: |
+        Two steps so the bytes never pass through the API: this returns a short-lived
+        upload URL, the client PUTs to it, then calls `commitProof`. An uncommitted
+        upload is swept and never becomes visible to the pod.
+      tags: [proof]
+      x-milestone: M3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProofUploadRequest' }
+      responses:
+        '201':
+          description: An upload slot, valid for a few minutes.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProofUpload' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The week is closed, or the caller already posted this week.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}/commit:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+      - $ref: '#/components/parameters/WeekId'
+      - $ref: '#/components/parameters/ProofId'
+    post:
+      operationId: commitProof
+      summary: Publish an uploaded proof to the pod.
+      tags: [proof]
+      x-milestone: M3
+      responses:
+        '200':
+          description: The pod can see it now. It disappears at `expires_at`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Proof' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Nothing was uploaded to the slot, or it already expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+      - $ref: '#/components/parameters/WeekId'
+      - $ref: '#/components/parameters/ProofId'
+    get:
+      operationId: getProof
+      summary: A short-lived link to one pod-mate's proof.
+      tags: [proof]
+      x-milestone: M3
+      responses:
+        '200':
+          description: The proof, with a view URL that expires well before the proof does.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Proof' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: No such proof, or it has already been deleted at cycle end.
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token from `/v1/auth/verify` or `/v1/auth/refresh`.
+
+  parameters:
+    PodId:
+      name: podId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    WeekId:
+      name: weekId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProofId:
+      name: proofId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: The request was malformed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Unauthorized:
+      description: Missing, expired, or invalid access token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    NotFound:
+      description: No such resource, or it isn't the caller's.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    RateLimited:
+      description: Too many attempts.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    ServerError:
+      description: Something went wrong on our side.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    NotImplementedYet:
+      description: Specified, but its milestone hasn't landed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+
+  schemas:
+    ApiError:
+      type: object
+      description: |
+        The API never returns a sentence. It returns a machine code plus a `copy_key` into
+        `content/microcopy.json` and the parameters that key interpolates, so display text
+        has exactly one source and can be checked against the never-shame rule.
+      required: [code, copy_key, request_id]
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        copy_key:
+          type: string
+          description: Key into `content/microcopy.json`, e.g. `auth.verify.error.codeExpired`.
+          examples: ['auth.verify.error.codeExpired']
+        params:
+          type: object
+          description: Interpolation values for `copy_key`.
+          additionalProperties: { type: string }
+        request_id:
+          type: string
+          description: Echoes `X-Request-Id`. Quote this in a bug report.
+        retry_after_seconds:
+          type: integer
+          description: Present on 429. How long to wait.
+
+    ErrorCode:
+      type: string
+      enum:
+        - bad_request
+        - unauthorized
+        - forbidden
+        - not_found
+        - conflict
+        - rate_limited
+        - code_incorrect
+        - code_expired
+        - too_many_attempts
+        - session_expired
+        - not_implemented_yet
+        - server_error
+
+    Health:
+      type: object
+      required: [status, version, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+          description: |
+            `ok` — everything answers. `degraded` — a non-essential dependency is down but
+            requests still serve. `down` — the datastore is unreachable; served with 503.
+        version:
+          type: string
+          description: Build identifier of the serving instance.
+        checks:
+          type: array
+          items: { $ref: '#/components/schemas/HealthCheck' }
+
+    HealthCheck:
+      type: object
+      required: [name, status]
+      properties:
+        name:
+          type: string
+          examples: ['postgres', 'redis']
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        latency_ms:
+          type: integer
+        detail:
+          type: string
+          description: Operator-facing only. Never shown to a user.
+
+    AuthStartRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+
+    AuthStartResponse:
+      type: object
+      required: [challenge_id, expires_at, code_length, resend_after_seconds]
+      properties:
+        challenge_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+        code_length: { type: integer, examples: [6] }
+        resend_after_seconds:
+          type: integer
+          description: Drives the resend countdown. Copy key `auth.verify.resendCountdown`.
+
+    AuthVerifyRequest:
+      type: object
+      required: [challenge_id, code]
+      properties:
+        challenge_id: { type: string, format: uuid }
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+        device_name:
+          type: string
+          maxLength: 64
+          description: Shown only to the account owner in their own device list.
+
+    AuthRefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+
+    AuthSession:
+      type: object
+      required: [access_token, refresh_token, expires_in_seconds, token_type, user]
+      properties:
+        access_token: { type: string }
+        refresh_token:
+          type: string
+          description: Single-use. Rotated on every refresh.
+        expires_in_seconds: { type: integer, description: Lifetime of the access token. }
+        token_type: { type: string, enum: [Bearer] }
+        user: { $ref: '#/components/schemas/User' }
+
+    User:
+      type: object
+      description: |
+        Deliberately thin. No follower counts, no public handle, no reliability figure — the
+        product has no public profile surface (`CLAUDE.md` §2 rules 3 and 5).
+      required: [id, email, created_at, onboarding_complete]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name:
+          type: string
+          description: First name or a nickname. Visible only to the caller's own pod.
+        created_at: { type: string, format: date-time }
+        onboarding_complete: { type: boolean }
+
+    OnboardingState:
+      type: object
+      required: [step, intent_complete, in_pool]
+      properties:
+        step:
+          type: string
+          enum: [intent, waiting_for_pod, ready]
+        intent_complete: { type: boolean }
+        in_pool: { type: boolean }
+        pool_ticket: { $ref: '#/components/schemas/PoolTicket' }
+
+    GoalCategory:
+      type: string
+      description: The hard filter — a pod is always same-category.
+      enum: [movement, creative, admin, learning, career, home, health, connection, money]
+
+    Intensity:
+      type: integer
+      description: |
+        How much the person can realistically give in a week, 1 (a few minutes) to 5
+        (several hours). The matching hard filter is ±1 (`CLAUDE.md` §6); see ADR-005 for
+        why the scale has five points rather than three.
+      minimum: 1
+      maximum: 5
+
+    SelfReportReliability:
+      type: string
+      description: |
+        Cold-start only — the answer to "how often do you keep commitments to yourself".
+        Adjusts the starting reliability by ±0.1 and is never shown back to the user.
+      enum: [rarely, sometimes, usually]
+
+    AvailabilityWindow:
+      type: object
+      description: A recurring window in the user's own timezone.
+      required: [day_of_week, start_minute, end_minute]
+      properties:
+        day_of_week: { type: integer, minimum: 0, maximum: 6, description: '0 = Monday.' }
+        start_minute: { type: integer, minimum: 0, maximum: 1439 }
+        end_minute: { type: integer, minimum: 1, maximum: 1440 }
+
+    IntentRequest:
+      type: object
+      required: [goal_text, goal_category, intensity, timezone, self_report_reliability]
+      properties:
+        goal_text:
+          type: string
+          minLength: 3
+          maxLength: 140
+          description: In their words. Embedded server-side for the 0.40 similarity signal.
+        goal_category: { $ref: '#/components/schemas/GoalCategory' }
+        intensity: { $ref: '#/components/schemas/Intensity' }
+        timezone:
+          type: string
+          description: IANA zone, e.g. `Europe/Lisbon`. Hard filter is ±3 hours.
+          examples: ['Europe/Lisbon']
+        self_report_reliability: { $ref: '#/components/schemas/SelfReportReliability' }
+        availability_windows:
+          type: array
+          maxItems: 21
+          items: { $ref: '#/components/schemas/AvailabilityWindow' }
+        display_name: { type: string, maxLength: 40 }
+
+    Intent:
+      type: object
+      required: [goal_text, goal_category, intensity, timezone, updated_at]
+      properties:
+        goal_text: { type: string }
+        goal_category: { $ref: '#/components/schemas/GoalCategory' }
+        intensity: { $ref: '#/components/schemas/Intensity' }
+        timezone: { type: string }
+        availability_windows:
+          type: array
+          items: { $ref: '#/components/schemas/AvailabilityWindow' }
+        updated_at: { type: string, format: date-time }
+
+    PoolTicket:
+      type: object
+      required: [queued_at, next_window_at]
+      properties:
+        queued_at: { type: string, format: date-time }
+        next_window_at:
+          type: string
+          format: date-time
+          description: When the matching job next runs. Matching is never on-request.
+
+    PodState:
+      type: string
+      enum: [forming, active, dissolved]
+
+    Pod:
+      type: object
+      required: [id, state, goal_category, timezone, streak_weeks, members, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        state: { $ref: '#/components/schemas/PodState' }
+        goal_category: { $ref: '#/components/schemas/GoalCategory' }
+        timezone:
+          type: string
+          description: The pod's shared zone. Cycles anchor here, not to each device.
+        streak_weeks:
+          type: integer
+          minimum: 0
+          description: |
+            Consecutive weeks the **pod** completed. Pod-level by design — there is no
+            per-member equivalent anywhere in this API (`CLAUDE.md` §2 rule 3).
+        members:
+          type: array
+          minItems: 2
+          maxItems: 3
+          items: { $ref: '#/components/schemas/PodMember' }
+        created_at: { type: string, format: date-time }
+        dissolved_at: { type: string, format: date-time }
+
+    PodMember:
+      type: object
+      description: |
+        No reliability score, no band, no personal completion rate, no individual streak.
+        If a future feature seems to need one here, it doesn't — read `CLAUDE.md` §6 first.
+      required: [id, display_name, is_you, joined_at]
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string }
+        is_you: { type: boolean }
+        joined_at: { type: string, format: date-time }
+
+    MemberWeekState:
+      type: string
+      description: |
+        `posted` — a proof is in. `open` — the week is still running and they haven't posted
+        yet. `resting` — the week closed without a proof. There is no `missed` and no
+        `failed`; the display strings live under `state.member.*` in microcopy.
+      enum: [posted, open, resting]
+
+    MemberWeek:
+      type: object
+      required: [member_id, state]
+      properties:
+        member_id: { type: string, format: uuid }
+        state: { $ref: '#/components/schemas/MemberWeekState' }
+        proof_id:
+          type: string
+          format: uuid
+          description: Absent once the proof has been deleted at cycle end.
+        posted_at: { type: string, format: date-time }
+
+    Week:
+      type: object
+      required: [id, pod_id, index, action_text, opens_at, closes_at, members, pod_completed]
+      properties:
+        id: { type: string, format: uuid }
+        pod_id: { type: string, format: uuid }
+        index: { type: integer, minimum: 1, description: 1-based, within this pod. }
+        action_text:
+          type: string
+          description: The one small action for the week, in the pod's words.
+        opens_at: { type: string, format: date-time }
+        closes_at:
+          type: string
+          format: date-time
+          description: Anchored to the pod's timezone. Also when this week's proof dies.
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/MemberWeek' }
+        pod_completed:
+          type: boolean
+          description: Whether the pod as a whole completed. Never a per-member verdict.
+
+    WeekList:
+      type: object
+      required: [weeks]
+      properties:
+        weeks:
+          type: array
+          items: { $ref: '#/components/schemas/Week' }
+
+    ProofKind:
+      type: string
+      enum: [photo, voice]
+
+    ProofUploadRequest:
+      type: object
+      required: [kind, content_type, byte_size]
+      properties:
+        kind: { $ref: '#/components/schemas/ProofKind' }
+        content_type:
+          type: string
+          examples: ['image/heic', 'audio/m4a']
+        byte_size: { type: integer, minimum: 1 }
+        duration_ms:
+          type: integer
+          maximum: 12000
+          description: Voice proofs only. Ten seconds, with a little slack.
+
+    ProofUpload:
+      type: object
+      required: [proof_id, upload_url, upload_method, upload_expires_at]
+      properties:
+        proof_id: { type: string, format: uuid }
+        upload_url: { type: string, format: uri }
+        upload_method: { type: string, enum: [PUT, POST] }
+        upload_headers:
+          type: object
+          additionalProperties: { type: string }
+        upload_expires_at: { type: string, format: date-time }
+
+    Proof:
+      type: object
+      required: [id, week_id, member_id, kind, created_at, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        week_id: { type: string, format: uuid }
+        member_id: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/ProofKind' }
+        duration_ms: { type: integer }
+        created_at: { type: string, format: date-time }
+        expires_at:
+          type: string
+          format: date-time
+          description: |
+            When the bytes are deleted server-side. Enforced by a sweep plus a storage
+            lifecycle rule, and asserted by a test — the user was promised this.
+        view_url:
+          type: string
+          format: uri
+          description: Short-lived, single-pod-scoped. Expires long before `expires_at`.
+        view_url_expires_at: { type: string, format: date-time }

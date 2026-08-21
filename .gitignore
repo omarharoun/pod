@@ -1,0 +1,27 @@
+# Build output
+backend/bin/
+*.test
+
+# Local environment
+.env
+.env.local
+
+# iOS
+ios/**/.build/
+ios/**/*.xcodeproj/
+ios/**/*.xcworkspace/
+ios/**/xcuserdata/
+ios/**/DerivedData/
+.swiftpm/
+
+# Android
+android/.gradle/
+android/build/
+android/**/build/
+android/local.properties
+android/.idea/
+*.iml
+
+# Tooling
+.DS_Store
+node_modules/

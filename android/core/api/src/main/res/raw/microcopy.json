@@ -1,0 +1,76 @@
+{
+  "$meta": {
+    "version": "1.0.0",
+    "locale": "en-US",
+    "rule": "Single source of truth for every user-facing string, on both clients and in every push notification (resolved server-side). No client may hardcode display text. Every string here must pass CLAUDE.md §2 rule 1: never shame. See tools/copylint.",
+    "placeholders": "Interpolation uses {braced} names. The same placeholder set must appear in every locale of a key.",
+    "voice": "Plain, warm, short. Second person. No exclamation marks. No streaks-as-pressure. Nothing a person would be embarrassed to have read over their shoulder."
+  },
+
+  "app.name": "Pod",
+  "app.tagline": "Two or three people. One small thing a week.",
+
+  "auth.start.title": "Let's get you in",
+  "auth.start.body": "We'll email you a 6-digit code. No password to remember.",
+  "auth.start.emailLabel": "Email",
+  "auth.start.emailPlaceholder": "you@example.com",
+  "auth.start.submit": "Send code",
+  "auth.start.legal": "By continuing you agree to our terms and privacy notice.",
+  "auth.start.error.emailInvalid": "That doesn't look like an email address yet.",
+
+  "auth.verify.title": "Check your email",
+  "auth.verify.body": "We sent a 6-digit code to {email}. It's good for {minutes} minutes.",
+  "auth.verify.codeLabel": "6-digit code",
+  "auth.verify.submit": "Continue",
+  "auth.verify.resend": "Send it again",
+  "auth.verify.resendCountdown": "You can resend in {seconds}s",
+  "auth.verify.changeEmail": "Use a different email",
+  "auth.verify.error.codeIncorrect": "That code didn't match. Give it another go.",
+  "auth.verify.error.codeExpired": "That code has expired. We can send a fresh one.",
+  "auth.verify.error.tooManyAttempts": "Let's start over with a new code.",
+
+  "auth.signedOut.title": "You're signed out",
+  "auth.signedOut.body": "Your pod is still there when you come back.",
+  "auth.signOut.action": "Sign out",
+
+  "home.placeholder.title": "You're in",
+  "home.placeholder.body": "Nothing to do yet — we'll set up your pod next.",
+  "home.signedInAs": "Signed in as {email}",
+
+  "state.member.posted.short": "In",
+  "state.member.posted.detail": "{name} is in this week.",
+  "state.member.open.short": "Not yet",
+  "state.member.open.detail": "{name} hasn't posted yet.",
+  "state.member.resting.short": "Resting",
+  "state.member.resting.detail": "{name} sat this one out. The pod carries on.",
+  "state.member.you.posted.detail": "You're in this week.",
+  "state.member.you.open.detail": "Your 10 seconds is still open.",
+  "state.member.you.resting.detail": "You sat this one out. Next week is open.",
+
+  "state.pod.weeksTogether": {
+    "one": "{count} week together",
+    "other": "{count} weeks together"
+  },
+  "state.pod.restartingNote": "The pod picks back up this week.",
+
+  "error.network.title": "Can't reach Pod",
+  "error.network.body": "Check your connection and try again.",
+  "error.network.retry": "Try again",
+  "error.server.title": "Something's off on our end",
+  "error.server.body": "Nothing you did. Try again in a moment.",
+  "error.rateLimited.title": "Hang on a moment",
+  "error.rateLimited.body": "Too many tries just now. Try again in {seconds}s.",
+  "error.sessionExpired.title": "Time to sign in again",
+  "error.sessionExpired.body": "For your security we sign you out after a while.",
+
+  "common.cancel": "Cancel",
+  "common.done": "Done",
+  "common.back": "Back",
+  "common.loading": "One second",
+
+  "a11y.codeField": "Six digit sign-in code",
+  "a11y.loading": "Loading",
+  "a11y.memberPosted": "{name}, posted this week",
+  "a11y.memberOpen": "{name}, not posted yet",
+  "a11y.memberResting": "{name}, resting this week"
+}
