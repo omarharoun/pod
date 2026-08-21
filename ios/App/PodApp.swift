@@ -45,7 +45,10 @@ enum AppConfiguration {
     }
 
     /// Shown only to the account owner, in their own device list.
-    static var deviceName: String? {
+    ///
+    /// `UIDevice.current` is main-actor isolated, and the one place this is read — the
+    /// environment's initial value — is on the main actor too.
+    @MainActor static var deviceName: String? {
         #if canImport(UIKit)
         UIDevice.current.name
         #else

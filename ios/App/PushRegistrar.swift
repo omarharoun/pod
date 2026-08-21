@@ -76,7 +76,12 @@ public final class PushRegistrar {
 /// a delegate method and nowhere else.
 final class PushAppDelegate: NSObject, UIApplicationDelegate {
     /// Set by `PodApp` before the delegate can receive anything.
-    nonisolated(unsafe) static var registrar: PushRegistrar?
+    ///
+    /// Main-actor isolated rather than `nonisolated(unsafe)`: both ends genuinely are on
+    /// the main actor — `PodApp` writes it from a `.task`, and the delegate reads it from
+    /// a `@MainActor` hop — so the compiler can check this instead of being told to trust
+    /// it.
+    @MainActor static var registrar: PushRegistrar?
 
     func application(
         _ application: UIApplication,
