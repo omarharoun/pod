@@ -202,3 +202,63 @@ func TestOnboardingRoutesRequireAuth(t *testing.T) {
 		})
 	}
 }
+
+// The recovery flow re-offers a lower intensity without making anyone re-answer the rest,
+// which only works if a client can read its own intent back.
+func TestReadIntentBack(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	saved := validIntent()
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", saved, session.AccessToken), http.StatusOK, nil)
+
+	var got api.Intent
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/intent", nil, session.AccessToken), http.StatusOK, &got)
+	if got.GoalText != saved.GoalText || got.GoalCategory != saved.GoalCategory {
+		t.Errorf("goal: got %q/%q", got.GoalText, got.GoalCategory)
+	}
+	if got.Intensity != saved.Intensity || got.Timezone != saved.Timezone {
+		t.Errorf("intensity/timezone: got %d/%q", got.Intensity, got.Timezone)
+	}
+	if len(got.AvailabilityWindows) != 1 || got.AvailabilityWindows[0].DayOfWeek != 5 {
+		t.Errorf("availability windows: got %+v", got.AvailabilityWindows)
+	}
+}
+
+func TestReadIntentBeforeThereIsOne(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	body := decodeError(t, h.do(http.MethodGet, "/v1/onboarding/intent", nil, session.AccessToken), http.StatusNotFound)
+	if body.Code != api.ErrorCodeNotFound {
+		t.Errorf("code: got %q, want not_found", body.Code)
+	}
+}
+
+// Lowering the bar resends the intent with one field changed. The self-report is a
+// question we do not want to ask twice, so omitting it keeps what is stored.
+func TestOmittingTheSelfReportKeepsTheStoredOne(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	first := validIntent()
+	first.SelfReportReliability = api.SelfReportReliabilityRarely
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", first, session.AccessToken), http.StatusOK, nil)
+
+	lowered := first
+	lowered.Intensity = 1
+	lowered.SelfReportReliability = ""
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", lowered, session.AccessToken), http.StatusOK, nil)
+
+	// The score is never exposed, so read the effect through what the pool sees.
+	candidate, err := h.store.GetIntent(t.Context(), session.User.ID)
+	if err != nil {
+		t.Fatalf("GetIntent: %v", err)
+	}
+	if candidate.Intensity != 1 {
+		t.Errorf("intensity: got %d, want 1", candidate.Intensity)
+	}
+	if candidate.SelfReport != string(api.SelfReportReliabilityRarely) {
+		t.Errorf("self report: got %q, want the stored %q", candidate.SelfReport, api.SelfReportReliabilityRarely)
+	}
+}

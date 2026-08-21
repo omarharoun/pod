@@ -122,6 +122,22 @@ func (h *harness) seedPod(userIDs ...string) string {
 	if err := h.store.CreatePod(context.Background(), pod, userIDs, h.clock.Now()); err != nil {
 		h.t.Fatalf("CreatePod: %v", err)
 	}
+	// Nobody reaches a pod without first writing an intent, so the fixture writes one
+	// too. Without it the seeded state is one production can never produce.
+	for _, userID := range userIDs {
+		if err := h.store.UpsertIntent(context.Background(), store.Intent{
+			UserID:       userID,
+			GoalText:     "clear the kitchen table",
+			GoalCategory: pod.GoalCategory,
+			Intensity:    3,
+			Timezone:     pod.Timezone,
+			SelfReport:   "sometimes",
+			Embedding:    make([]float32, 0),
+			UpdatedAt:    h.clock.Now(),
+		}); err != nil {
+			h.t.Fatalf("UpsertIntent: %v", err)
+		}
+	}
 	return podID
 }
 

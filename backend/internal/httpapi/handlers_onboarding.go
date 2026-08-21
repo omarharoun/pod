@@ -38,6 +38,19 @@ func (s *Server) handleOnboardingState(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, r, http.StatusOK, body)
 }
 
+func (s *Server) handleGetIntent(w http.ResponseWriter, r *http.Request) {
+	intent, err := s.onboarding.Intent(r.Context(), UserIDFrom(r.Context()))
+	if err != nil {
+		if errors.Is(err, onboarding.ErrNoIntent) {
+			s.writeError(w, r, notFound(), err)
+			return
+		}
+		s.writeError(w, r, serverError(), err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, intentResponse(intent))
+}
+
 func (s *Server) handlePutIntent(w http.ResponseWriter, r *http.Request) {
 	var body api.IntentRequest
 	if err := decodeJSON(r, &body); err != nil {
@@ -50,7 +63,11 @@ func (s *Server) handlePutIntent(w http.ResponseWriter, r *http.Request) {
 		GoalCategory: string(body.GoalCategory),
 		Intensity:    int(body.Intensity),
 		Timezone:     body.Timezone,
-		SelfReport:   string(body.SelfReportReliability),
+	}
+	// The generator never pointerises a $ref-to-enum field: the zero value "" is
+	// already "absent" for a string enum. Omitted means "keep what is stored".
+	if body.SelfReportReliability != "" {
+		input.SelfReport = string(body.SelfReportReliability)
 	}
 	if body.DisplayName != nil {
 		input.DisplayName = *body.DisplayName

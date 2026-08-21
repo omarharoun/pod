@@ -24,6 +24,7 @@ func (s *Server) routes() http.Handler {
 
 	// ---- M2: implemented ------------------------------------------------------
 	mux.HandleFunc("GET /v1/onboarding/state", s.requireAuth(s.handleOnboardingState))
+	mux.HandleFunc("GET /v1/onboarding/intent", s.requireAuth(s.handleGetIntent))
 	mux.HandleFunc("PUT /v1/onboarding/intent", s.requireAuth(s.handlePutIntent))
 	mux.HandleFunc("POST /v1/pool", s.requireAuth(s.handleJoinPool))
 	mux.HandleFunc("DELETE /v1/pool", s.requireAuth(s.handleLeavePool))

@@ -125,7 +125,23 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, in Input) (Inte
 	if _, err := time.LoadLocation(in.Timezone); err != nil {
 		return Intent{}, ErrUnknownTimezone
 	}
-	switch reliability.SelfReport(in.SelfReport) {
+	selfReport := in.SelfReport
+	if selfReport == "" {
+		// Omitted: keep the answer already on file. It is asked once, at onboarding, and
+		// nobody should have to re-answer a question about themselves in order to change
+		// how much time they have.
+		existing, err := s.store.GetIntent(ctx, userID)
+		switch {
+		case err == nil:
+			selfReport = existing.SelfReport
+		case errors.Is(err, store.ErrNotFound):
+			// Nothing on file and nothing supplied: the neutral answer.
+			selfReport = string(reliability.SelfReportSometimes)
+		default:
+			return Intent{}, fmt.Errorf("onboarding: read intent: %w", err)
+		}
+	}
+	switch reliability.SelfReport(selfReport) {
 	case reliability.SelfReportRarely, reliability.SelfReportSometimes, reliability.SelfReportUsually:
 	default:
 		return Intent{}, ErrUnknownSelfReport
@@ -150,7 +166,7 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, in Input) (Inte
 		GoalCategory:        in.GoalCategory,
 		Intensity:           in.Intensity,
 		Timezone:            in.Timezone,
-		SelfReport:          in.SelfReport,
+		SelfReport:          selfReport,
 		AvailabilityWindows: windows,
 		Embedding:           vectors[0],
 		UpdatedAt:           now,
@@ -171,6 +187,25 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, in Input) (Inte
 		}
 	}
 
+	return Intent{
+		GoalText:            record.GoalText,
+		GoalCategory:        record.GoalCategory,
+		Intensity:           record.Intensity,
+		Timezone:            record.Timezone,
+		AvailabilityWindows: record.AvailabilityWindows,
+		UpdatedAt:           record.UpdatedAt,
+	}, nil
+}
+
+// Intent returns what is on file, so a client can read what it can write.
+func (s *Service) Intent(ctx context.Context, userID string) (Intent, error) {
+	record, err := s.store.GetIntent(ctx, userID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return Intent{}, ErrNoIntent
+		}
+		return Intent{}, fmt.Errorf("onboarding: read intent: %w", err)
+	}
 	return Intent{
 		GoalText:            record.GoalText,
 		GoalCategory:        record.GoalCategory,
