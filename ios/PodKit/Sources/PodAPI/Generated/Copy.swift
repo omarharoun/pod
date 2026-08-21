@@ -192,6 +192,64 @@ public extension CopyKey {
     /// "You"
     static let podYou = CopyKey(rawValue: "pod.you")
 
+    /// "Someone in your pod"
+    static let podSomeone = CopyKey(rawValue: "pod.someone")
+
+    /// "You've got a pod"
+    static let pushPodFormedTitle = CopyKey(rawValue: "push.podFormed.title")
+
+    /// "{names} are in it with you."
+    /// Placeholders: names
+    static let pushPodFormedBody = CopyKey(rawValue: "push.podFormed.body")
+
+    /// "New week"
+    static let pushWeekOpenedTitle = CopyKey(rawValue: "push.weekOpened.title")
+
+    /// "{action}"
+    /// Placeholders: action
+    static let pushWeekOpenedBody = CopyKey(rawValue: "push.weekOpened.body")
+
+    /// "{name} is in"
+    /// Placeholders: name
+    static let pushMemberPostedTitle = CopyKey(rawValue: "push.memberPosted.title")
+
+    /// "Ten seconds, whenever you're ready."
+    static let pushMemberPostedBody = CopyKey(rawValue: "push.memberPosted.body")
+
+    /// "Your pod's week closes tomorrow"
+    static let pushWeekClosingTitle = CopyKey(rawValue: "push.weekClosing.title")
+
+    /// "Whatever happens, next week opens on Monday."
+    static let pushWeekClosingBody = CopyKey(rawValue: "push.weekClosing.body")
+
+    /// "Everyone was in"
+    static let pushPodCompletedTitle = CopyKey(rawValue: "push.podCompleted.title")
+
+    /// "{count} weeks together."
+    /// Placeholders: count
+    static let pushPodCompletedBody = CopyKey(rawValue: "push.podCompleted.body")
+
+    /// "This week's proof goes tonight"
+    static let pushProofExpiringTitle = CopyKey(rawValue: "push.proofExpiring.title")
+
+    /// "Have a look before it does."
+    static let pushProofExpiringBody = CopyKey(rawValue: "push.proofExpiring.body")
+
+    /// "Notifications"
+    static let notificationsTitle = CopyKey(rawValue: "notifications.title")
+
+    /// "Can we let you know?"
+    static let notificationsPermissionTitle = CopyKey(rawValue: "notifications.permission.title")
+
+    /// "Only when your pod does something. Never to chase you."
+    static let notificationsPermissionBody = CopyKey(rawValue: "notifications.permission.body")
+
+    /// "Allow"
+    static let notificationsPermissionAllow = CopyKey(rawValue: "notifications.permission.allow")
+
+    /// "Not now"
+    static let notificationsPermissionNotNow = CopyKey(rawValue: "notifications.permission.notNow")
+
     /// "You're matched"
     static let podNewlyFormedTitle = CopyKey(rawValue: "pod.newlyFormed.title")
 
@@ -500,6 +558,24 @@ public extension CopyKey {
         .poolWaitingNextWindow,
         .poolWaitingLeave,
         .podYou,
+        .podSomeone,
+        .pushPodFormedTitle,
+        .pushPodFormedBody,
+        .pushWeekOpenedTitle,
+        .pushWeekOpenedBody,
+        .pushMemberPostedTitle,
+        .pushMemberPostedBody,
+        .pushWeekClosingTitle,
+        .pushWeekClosingBody,
+        .pushPodCompletedTitle,
+        .pushPodCompletedBody,
+        .pushProofExpiringTitle,
+        .pushProofExpiringBody,
+        .notificationsTitle,
+        .notificationsPermissionTitle,
+        .notificationsPermissionBody,
+        .notificationsPermissionAllow,
+        .notificationsPermissionNotNow,
         .podNewlyFormedTitle,
         .podNewlyFormedBody,
         .weekDefaultAction,

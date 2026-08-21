@@ -187,6 +187,64 @@ const (
 	// "You"
 	KeyPodYou Key = "pod.you"
 
+	// "Someone in your pod"
+	KeyPodSomeone Key = "pod.someone"
+
+	// "You've got a pod"
+	KeyPushPodFormedTitle Key = "push.podFormed.title"
+
+	// "{names} are in it with you."
+	// Placeholders: names
+	KeyPushPodFormedBody Key = "push.podFormed.body"
+
+	// "New week"
+	KeyPushWeekOpenedTitle Key = "push.weekOpened.title"
+
+	// "{action}"
+	// Placeholders: action
+	KeyPushWeekOpenedBody Key = "push.weekOpened.body"
+
+	// "{name} is in"
+	// Placeholders: name
+	KeyPushMemberPostedTitle Key = "push.memberPosted.title"
+
+	// "Ten seconds, whenever you're ready."
+	KeyPushMemberPostedBody Key = "push.memberPosted.body"
+
+	// "Your pod's week closes tomorrow"
+	KeyPushWeekClosingTitle Key = "push.weekClosing.title"
+
+	// "Whatever happens, next week opens on Monday."
+	KeyPushWeekClosingBody Key = "push.weekClosing.body"
+
+	// "Everyone was in"
+	KeyPushPodCompletedTitle Key = "push.podCompleted.title"
+
+	// "{count} weeks together."
+	// Placeholders: count
+	KeyPushPodCompletedBody Key = "push.podCompleted.body"
+
+	// "This week's proof goes tonight"
+	KeyPushProofExpiringTitle Key = "push.proofExpiring.title"
+
+	// "Have a look before it does."
+	KeyPushProofExpiringBody Key = "push.proofExpiring.body"
+
+	// "Notifications"
+	KeyNotificationsTitle Key = "notifications.title"
+
+	// "Can we let you know?"
+	KeyNotificationsPermissionTitle Key = "notifications.permission.title"
+
+	// "Only when your pod does something. Never to chase you."
+	KeyNotificationsPermissionBody Key = "notifications.permission.body"
+
+	// "Allow"
+	KeyNotificationsPermissionAllow Key = "notifications.permission.allow"
+
+	// "Not now"
+	KeyNotificationsPermissionNotNow Key = "notifications.permission.notNow"
+
 	// "You're matched"
 	KeyPodNewlyFormedTitle Key = "pod.newlyFormed.title"
 
@@ -496,6 +554,24 @@ var AllKeys = []Key{
 	KeyPoolWaitingNextWindow,
 	KeyPoolWaitingLeave,
 	KeyPodYou,
+	KeyPodSomeone,
+	KeyPushPodFormedTitle,
+	KeyPushPodFormedBody,
+	KeyPushWeekOpenedTitle,
+	KeyPushWeekOpenedBody,
+	KeyPushMemberPostedTitle,
+	KeyPushMemberPostedBody,
+	KeyPushWeekClosingTitle,
+	KeyPushWeekClosingBody,
+	KeyPushPodCompletedTitle,
+	KeyPushPodCompletedBody,
+	KeyPushProofExpiringTitle,
+	KeyPushProofExpiringBody,
+	KeyNotificationsTitle,
+	KeyNotificationsPermissionTitle,
+	KeyNotificationsPermissionBody,
+	KeyNotificationsPermissionAllow,
+	KeyNotificationsPermissionNotNow,
 	KeyPodNewlyFormedTitle,
 	KeyPodNewlyFormedBody,
 	KeyWeekDefaultAction,
@@ -636,6 +712,24 @@ var catalogue = map[Key]map[string]string{
 	KeyPoolWaitingNextWindow:          {"other": "Next match at {time}"},
 	KeyPoolWaitingLeave:               {"other": "Leave the queue"},
 	KeyPodYou:                         {"other": "You"},
+	KeyPodSomeone:                     {"other": "Someone in your pod"},
+	KeyPushPodFormedTitle:             {"other": "You've got a pod"},
+	KeyPushPodFormedBody:              {"other": "{names} are in it with you."},
+	KeyPushWeekOpenedTitle:            {"other": "New week"},
+	KeyPushWeekOpenedBody:             {"other": "{action}"},
+	KeyPushMemberPostedTitle:          {"other": "{name} is in"},
+	KeyPushMemberPostedBody:           {"other": "Ten seconds, whenever you're ready."},
+	KeyPushWeekClosingTitle:           {"other": "Your pod's week closes tomorrow"},
+	KeyPushWeekClosingBody:            {"other": "Whatever happens, next week opens on Monday."},
+	KeyPushPodCompletedTitle:          {"other": "Everyone was in"},
+	KeyPushPodCompletedBody:           {"other": "{count} weeks together."},
+	KeyPushProofExpiringTitle:         {"other": "This week's proof goes tonight"},
+	KeyPushProofExpiringBody:          {"other": "Have a look before it does."},
+	KeyNotificationsTitle:             {"other": "Notifications"},
+	KeyNotificationsPermissionTitle:   {"other": "Can we let you know?"},
+	KeyNotificationsPermissionBody:    {"other": "Only when your pod does something. Never to chase you."},
+	KeyNotificationsPermissionAllow:   {"other": "Allow"},
+	KeyNotificationsPermissionNotNow:  {"other": "Not now"},
 	KeyPodNewlyFormedTitle:            {"other": "You're matched"},
 	KeyPodNewlyFormedBody:             {"other": "Same goal, same kind of week. Your first action lands soon."},
 	KeyWeekDefaultAction:              {"other": "One small thing towards it this week."},

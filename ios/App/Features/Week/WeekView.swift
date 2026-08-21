@@ -10,6 +10,7 @@ struct WeekView: View {
     @Environment(\.palette) private var palette
     @Environment(\.copy) private var copy
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.pushRegistrar) private var pushRegistrar
     @State private var isCapturing = false
     @State private var isEditingAction = false
     @State private var draftAction = ""
@@ -41,7 +42,12 @@ struct WeekView: View {
             .padding(.vertical, PodTokens.Spacing.xxl)
         }
         .background(palette(.surfaceCanvas))
-        .task { await controller.load() }
+        .task {
+            await controller.load()
+            // Asked here rather than at launch: this is the first moment the question
+            // has a subject — two other people who might do something worth knowing.
+            await pushRegistrar?.askIfNeeded()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await controller.refresh() }

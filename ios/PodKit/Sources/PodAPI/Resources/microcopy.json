@@ -69,6 +69,27 @@
   "pool.waiting.leave": "Leave the queue",
 
   "pod.you": "You",
+  "pod.someone": "Someone in your pod",
+
+  "push.podFormed.title": "You've got a pod",
+  "push.podFormed.body": "{names} are in it with you.",
+  "push.weekOpened.title": "New week",
+  "push.weekOpened.body": "{action}",
+  "push.memberPosted.title": "{name} is in",
+  "push.memberPosted.body": "Ten seconds, whenever you're ready.",
+  "push.weekClosing.title": "Your pod's week closes tomorrow",
+  "push.weekClosing.body": "Whatever happens, next week opens on Monday.",
+  "push.podCompleted.title": "Everyone was in",
+  "push.podCompleted.body": "{count} weeks together.",
+  "push.proofExpiring.title": "This week's proof goes tonight",
+  "push.proofExpiring.body": "Have a look before it does.",
+
+  "notifications.title": "Notifications",
+  "notifications.permission.title": "Can we let you know?",
+  "notifications.permission.body": "Only when your pod does something. Never to chase you.",
+  "notifications.permission.allow": "Allow",
+  "notifications.permission.notNow": "Not now",
+
   "pod.newlyFormed.title": "You're matched",
   "pod.newlyFormed.body": "Same goal, same kind of week. Your first action lands soon.",
 

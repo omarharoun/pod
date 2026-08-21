@@ -20,6 +20,7 @@ import (
 	"github.com/omarharoun/pod/backend/internal/config"
 	"github.com/omarharoun/pod/backend/internal/copy"
 	"github.com/omarharoun/pod/backend/internal/embed"
+	"github.com/omarharoun/pod/backend/internal/notify"
 	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
 	"github.com/omarharoun/pod/backend/internal/week"
@@ -69,7 +70,7 @@ func newHarness(t testing.TB) *harness {
 	h.server = New(
 		auth.NewService(h.store, h.mailer, h.clock, cfg),
 		onboarding.NewService(h.store, embed.Hashing{}, h.clock),
-		week.NewService(h.store, blobs, h.clock),
+		week.NewService(h.store, blobs, h.clock, notify.NewService(h.store, h.clock, log)),
 		h.store, h.clock, cfg, log, blobs,
 	)
 	return h

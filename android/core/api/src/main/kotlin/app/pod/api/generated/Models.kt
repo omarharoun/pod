@@ -503,6 +503,43 @@ public data class WeekList(
     val weeks: List<Week>,
 )
 
+/**
+ * An unrecognised value from a newer server decodes as [UNKNOWN] rather than throwing.
+ */
+@Serializable(with = DevicePlatformSerializer::class)
+public enum class DevicePlatform(override val wire: String) : WireEnum {
+    IOS("ios"),
+    ANDROID("android"),
+
+    /** A value this build does not know about. */
+    UNKNOWN(""),
+    ;
+
+    public companion object {
+        public fun fromWire(value: String): DevicePlatform = entries.firstOrNull { it.wire == value } ?: UNKNOWN
+    }
+}
+
+internal object DevicePlatformSerializer : WireEnumSerializer<DevicePlatform>(
+    "app.pod.api.generated.DevicePlatform",
+    { value -> DevicePlatform.fromWire(value) },
+)
+
+@Serializable
+public data class DeviceRequest(
+    /**
+     * The APNs or FCM token. Opaque to us, and stored hashed.
+     */
+    val token: String,
+    val platform: DevicePlatform,
+
+    /**
+     * BCP 47, e.g. `en-US`. Chooses which catalogue a notification is resolved from
+     * once there is more than one.
+     */
+    val locale: String? = null,
+)
+
 @Serializable
 public data class WeekActionRequest(
     /**

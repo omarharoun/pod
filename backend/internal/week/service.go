@@ -12,8 +12,10 @@ import (
 
 	"github.com/omarharoun/pod/backend/internal/blob"
 	"github.com/omarharoun/pod/backend/internal/clock"
+	"github.com/omarharoun/pod/backend/internal/copy"
 	"github.com/omarharoun/pod/backend/internal/cycle"
 	"github.com/omarharoun/pod/backend/internal/ids"
+	"github.com/omarharoun/pod/backend/internal/notify"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
 
@@ -74,13 +76,14 @@ type Proof struct {
 }
 
 type Service struct {
-	store store.Store
-	blobs blob.Store
-	clock clock.Clock
+	store    store.Store
+	blobs    blob.Store
+	clock    clock.Clock
+	notifier *notify.Service
 }
 
-func NewService(s store.Store, b blob.Store, c clock.Clock) *Service {
-	return &Service{store: s, blobs: b, clock: c}
+func NewService(s store.Store, b blob.Store, c clock.Clock, n *notify.Service) *Service {
+	return &Service{store: s, blobs: b, clock: c, notifier: n}
 }
 
 // Current returns the pod's open week, creating it if the scheduled job has not got to it
@@ -292,7 +295,68 @@ func (s *Service) CommitProof(ctx context.Context, weekID, proofID, userID strin
 		}
 		return Proof{}, fmt.Errorf("week: commit proof: %w", err)
 	}
+
+	// Tell the others. This is the product's core loop — low-stakes social witness,
+	// arriving as it happens — and it is the only notification triggered by a person
+	// rather than by the clock.
+	s.announce(ctx, weekID, userID)
+
 	return s.ViewProof(ctx, proofID, userID)
+}
+
+// announce tells the rest of the pod that somebody is in. A failure here must not fail
+// the post: the proof is committed, and that is what the person asked for.
+func (s *Service) announce(ctx context.Context, weekID, posterID string) {
+	if s.notifier == nil {
+		return
+	}
+	week, err := s.store.GetWeekForMember(ctx, weekID, posterID)
+	if err != nil {
+		return
+	}
+	pod, err := s.store.GetPodForMember(ctx, week.PodID, posterID)
+	if err != nil {
+		return
+	}
+	name := ""
+	for _, member := range pod.Members {
+		if member.UserID == posterID {
+			name = member.DisplayName
+		}
+	}
+	if name == "" {
+		// A display name is optional at onboarding, and silence would be the wrong
+		// answer: the pod still gets the witness, just without a name on it.
+		resolved, err := copy.Resolve(copy.KeyPodSomeone, nil)
+		if err != nil {
+			return
+		}
+		name = resolved
+	}
+	// If the pod is now complete, that is the more interesting fact and it goes to
+	// everyone, including the person who just finished it.
+	if everyonePosted(week, posterID) {
+		s.notifier.PodCompleted(ctx, week, pod.StreakWeeks+1)
+		return
+	}
+	s.notifier.MemberPosted(ctx, pod, week, posterID, name)
+}
+
+// everyonePosted treats the caller as posted, since the week was read before their commit
+// could be reflected in every path.
+func everyonePosted(week store.Week, posterID string) bool {
+	if len(week.Members) == 0 {
+		return false
+	}
+	for _, member := range week.Members {
+		if member.UserID == posterID {
+			continue
+		}
+		if member.State != store.MemberWeekPosted {
+			return false
+		}
+	}
+	return true
 }
 
 // ViewProof returns a proof and a short-lived link to it.

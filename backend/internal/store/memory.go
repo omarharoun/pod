@@ -12,19 +12,23 @@ import (
 // invariants Postgres enforces — atomic attempt counting, single-use rotation — so that a
 // test passing here means something.
 type Memory struct {
-	mu          sync.Mutex
-	users       map[string]User
-	usersByKey  map[string]string // normalised email -> user id
-	challenges  map[string]AuthChallenge
-	tokens      map[string]RefreshToken
-	intents     map[string]Intent
-	pool        map[string]PoolTicket
-	pods        map[string]Pod
-	podMembers  map[string][]PodMember
-	weeks       map[string]Week
-	memberWeeks map[string][]MemberWeek
-	proofs      map[string]Proof
-	nextID      int
+	mu                sync.Mutex
+	users             map[string]User
+	usersByKey        map[string]string // normalised email -> user id
+	challenges        map[string]AuthChallenge
+	tokens            map[string]RefreshToken
+	intents           map[string]Intent
+	pool              map[string]PoolTicket
+	pods              map[string]Pod
+	podMembers        map[string][]PodMember
+	weeks             map[string]Week
+	memberWeeks       map[string][]MemberWeek
+	proofs            map[string]Proof
+	devices           map[string]Device
+	notifications     map[string]Notification
+	notificationKeys  map[string]string
+	notificationsSent map[string]time.Time
+	nextID            int
 
 	// FailPing makes Ping report the datastore as unreachable, for health tests.
 	FailPing error
@@ -32,17 +36,21 @@ type Memory struct {
 
 func NewMemory() *Memory {
 	return &Memory{
-		users:       map[string]User{},
-		usersByKey:  map[string]string{},
-		challenges:  map[string]AuthChallenge{},
-		tokens:      map[string]RefreshToken{},
-		intents:     map[string]Intent{},
-		pool:        map[string]PoolTicket{},
-		pods:        map[string]Pod{},
-		podMembers:  map[string][]PodMember{},
-		weeks:       map[string]Week{},
-		memberWeeks: map[string][]MemberWeek{},
-		proofs:      map[string]Proof{},
+		users:             map[string]User{},
+		usersByKey:        map[string]string{},
+		challenges:        map[string]AuthChallenge{},
+		tokens:            map[string]RefreshToken{},
+		intents:           map[string]Intent{},
+		pool:              map[string]PoolTicket{},
+		pods:              map[string]Pod{},
+		podMembers:        map[string][]PodMember{},
+		weeks:             map[string]Week{},
+		memberWeeks:       map[string][]MemberWeek{},
+		proofs:            map[string]Proof{},
+		devices:           map[string]Device{},
+		notifications:     map[string]Notification{},
+		notificationKeys:  map[string]string{},
+		notificationsSent: map[string]time.Time{},
 	}
 }
 
@@ -669,4 +677,85 @@ func (m *Memory) isMemberOf(podID, userID string) bool {
 		}
 	}
 	return false
+}
+
+// ------------------------------------------------------------ M4: notifications
+
+func (m *Memory) RegisterDevice(_ context.Context, device Device) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.devices[device.TokenHash]; ok {
+		// Re-registering keeps the device's place rather than making a second one.
+		existing.Platform = device.Platform
+		existing.Locale = device.Locale
+		existing.UserID = device.UserID
+		existing.LastSeenAt = device.LastSeenAt
+		m.devices[device.TokenHash] = existing
+		return nil
+	}
+	m.devices[device.TokenHash] = device
+	return nil
+}
+
+func (m *Memory) RetireDevice(_ context.Context, tokenHash string, _ time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.devices, tokenHash)
+	return nil
+}
+
+func (m *Memory) DevicesFor(_ context.Context, userID string) ([]Device, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Device
+	for _, device := range m.devices {
+		if device.UserID == userID {
+			out = append(out, device)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].TokenHash < out[j].TokenHash })
+	return out, nil
+}
+
+func (m *Memory) QueueNotification(_ context.Context, notification Notification) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := notification.Kind + "|" + notification.SubjectID + "|" + notification.UserID
+	if _, ok := m.notificationKeys[key]; ok {
+		return ErrConflict
+	}
+	m.notificationKeys[key] = notification.ID
+	m.notifications[notification.ID] = notification
+	return nil
+}
+
+func (m *Memory) PendingNotifications(_ context.Context, limit int) ([]Notification, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Notification
+	for id, notification := range m.notifications {
+		if _, done := m.notificationsSent[id]; !done {
+			out = append(out, notification)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].CreatedAt.Before(out[j].CreatedAt)
+		}
+		return out[i].ID < out[j].ID
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *Memory) MarkNotificationSent(_ context.Context, id string, at time.Time, failed bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.notifications[id]; !ok {
+		return ErrNotFound
+	}
+	m.notificationsSent[id] = at
+	return nil
 }

@@ -43,6 +43,8 @@ tags:
     description: Liveness and readiness.
   - name: auth
     description: Passwordless sign-in. Under 15 seconds, end to end.
+  - name: notifications
+    description: Push registration. Bodies are resolved server-side from microcopy.
   - name: onboarding
     description: The one thing you've been putting off, and how much you can give.
   - name: pod
@@ -187,6 +189,46 @@ paths:
               schema: { $ref: '#/components/schemas/User' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/ServerError' }
+
+  /v1/devices:
+    put:
+      operationId: registerDevice
+      summary: Register this device for push.
+      description: |
+        Idempotent on the token. Re-registering the same token updates its platform and
+        keeps its place rather than creating a second device.
+
+        Notification bodies are resolved server-side from `content/microcopy.json`, so the
+        server sends sentences here and only here — see ADR-003 and ADR-016 for why this
+        is the one exception and what constrains it.
+      tags: [notifications]
+      x-milestone: M4
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceRequest' }
+      responses:
+        '204':
+          description: Registered.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+    delete:
+      operationId: unregisterDevice
+      summary: Stop sending push to this device.
+      tags: [notifications]
+      x-milestone: M4
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceRequest' }
+      responses:
+        '204':
+          description: Gone. Idempotent — an unknown token also answers 204.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
 
   /v1/onboarding/state:
     get:
@@ -848,6 +890,26 @@ components:
         weeks:
           type: array
           items: { $ref: '#/components/schemas/Week' }
+
+    DevicePlatform:
+      type: string
+      enum: [ios, android]
+
+    DeviceRequest:
+      type: object
+      required: [token, platform]
+      properties:
+        token:
+          type: string
+          maxLength: 512
+          description: The APNs or FCM token. Opaque to us, and stored hashed.
+        platform: { $ref: '#/components/schemas/DevicePlatform' }
+        locale:
+          type: string
+          maxLength: 16
+          description: |
+            BCP 47, e.g. `en-US`. Chooses which catalogue a notification is resolved from
+            once there is more than one.
 
     WeekActionRequest:
       type: object

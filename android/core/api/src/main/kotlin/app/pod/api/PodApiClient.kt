@@ -6,6 +6,8 @@ import app.pod.api.generated.AuthSession
 import app.pod.api.generated.AuthStartRequest
 import app.pod.api.generated.AuthStartResponse
 import app.pod.api.generated.AuthVerifyRequest
+import app.pod.api.generated.DevicePlatform
+import app.pod.api.generated.DeviceRequest
 import app.pod.api.generated.ErrorCode
 import app.pod.api.generated.Health
 import app.pod.api.generated.Intent
@@ -100,6 +102,16 @@ public class PodApiClient(
     }
 
     public suspend fun currentUser(): User = send("/v1/me", HttpMethod.Get)
+
+    // ---- Devices ---------------------------------------------------------------
+
+    public suspend fun registerDevice(token: String, platform: DevicePlatform, locale: String) {
+        sendUnit("/v1/devices", HttpMethod.Put, DeviceRequest(token = token, platform = platform, locale = locale))
+    }
+
+    public suspend fun unregisterDevice(token: String, platform: DevicePlatform) {
+        sendUnit("/v1/devices", HttpMethod.Delete, DeviceRequest(token = token, platform = platform))
+    }
 
     // ---- Onboarding ------------------------------------------------------------
 

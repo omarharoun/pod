@@ -78,6 +78,24 @@ public actor APIClient {
         try await send(Request(method: "GET", path: "/v1/me"))
     }
 
+    // MARK: - Devices
+
+    public func registerDevice(token: String, platform: DevicePlatform, locale: String) async throws {
+        let _: EmptyResponse = try await send(Request(
+            method: "PUT",
+            path: "/v1/devices",
+            body: try encoder.encode(DeviceRequest(token: token, platform: platform, locale: locale))
+        ))
+    }
+
+    public func unregisterDevice(token: String, platform: DevicePlatform) async throws {
+        let _: EmptyResponse = try await send(Request(
+            method: "DELETE",
+            path: "/v1/devices",
+            body: try encoder.encode(DeviceRequest(token: token, platform: platform, locale: nil))
+        ))
+    }
+
     // MARK: - Onboarding
 
     public func onboardingState() async throws -> OnboardingState {

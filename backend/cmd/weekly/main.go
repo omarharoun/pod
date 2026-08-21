@@ -22,6 +22,8 @@ import (
 	"github.com/omarharoun/pod/backend/internal/blob"
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
+	"github.com/omarharoun/pod/backend/internal/notify"
+	"github.com/omarharoun/pod/backend/internal/push"
 	"github.com/omarharoun/pod/backend/internal/store"
 	"github.com/omarharoun/pod/backend/internal/week"
 )
@@ -63,7 +65,12 @@ func run(log *slog.Logger) error {
 	}
 
 	now := clock.System{}
-	job := week.NewJob(week.NewService(db, blobs, now), db, blobs, now, log)
+	sender, err := selectSender(cfg, log)
+	if err != nil {
+		return err
+	}
+	notifier := notify.NewService(db, now, log)
+	job := week.NewJob(week.NewService(db, blobs, now, notifier), db, blobs, now, log, notifier, sender)
 
 	if command == "once" {
 		_, err := job.Tick(ctx)
@@ -85,6 +92,16 @@ func run(log *slog.Logger) error {
 			}
 		}
 	}
+}
+
+// selectSender refuses to run outside development without a real push provider, rather
+// than silently writing notifications to a log nobody reads.
+func selectSender(cfg config.Config, log *slog.Logger) (push.Sender, error) {
+	if !cfg.IsDevelopment() {
+		return nil, fmt.Errorf("config: no push provider is configured for env %q; wire APNs and FCM in before deploying", cfg.Env)
+	}
+	log.Warn("development push sender selected — notifications are written to this log, not sent")
+	return push.Logger{Log: log}, nil
 }
 
 // selectBlobStore mirrors the API's: it refuses to run outside development without object

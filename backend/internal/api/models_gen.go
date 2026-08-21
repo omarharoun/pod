@@ -363,6 +363,38 @@ type WeekList struct {
 	Weeks []Week `json:"weeks"`
 }
 
+type DevicePlatform string
+
+const (
+	DevicePlatformIos     DevicePlatform = "ios"
+	DevicePlatformAndroid DevicePlatform = "android"
+)
+
+// KnownDevicePlatforms lists every value this build understands. A peer may send others.
+func KnownDevicePlatforms() []DevicePlatform {
+	return []DevicePlatform{DevicePlatformIos, DevicePlatformAndroid}
+}
+
+// IsKnown reports whether v is a value this build understands.
+func (v DevicePlatform) IsKnown() bool {
+	for _, known := range KnownDevicePlatforms() {
+		if v == known {
+			return true
+		}
+	}
+	return false
+}
+
+type DeviceRequest struct {
+	// The APNs or FCM token. Opaque to us, and stored hashed.
+	Token    string         `json:"token"`
+	Platform DevicePlatform `json:"platform"`
+
+	// BCP 47, e.g. `en-US`. Chooses which catalogue a notification is resolved from
+	// once there is more than one.
+	Locale *string `json:"locale,omitempty"`
+}
+
 type WeekActionRequest struct {
 	// Small enough to do in the week the pod said they had. Nothing enforces that but
 	// the length limit and the people in the pod.

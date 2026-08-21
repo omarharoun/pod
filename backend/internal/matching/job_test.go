@@ -27,7 +27,7 @@ func newJobHarness(t *testing.T, opts Options) *jobHarness {
 		t:     t,
 		store: memory,
 		clock: fixed,
-		job:   NewJob(memory, fixed, slog.New(slog.NewTextHandler(io.Discard, nil)), opts),
+		job:   NewJob(memory, fixed, slog.New(slog.NewTextHandler(io.Discard, nil)), opts, nil),
 	}
 }
 

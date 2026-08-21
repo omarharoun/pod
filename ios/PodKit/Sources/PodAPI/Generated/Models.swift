@@ -702,6 +702,44 @@ public struct WeekList: Codable, Hashable, Sendable {
     }
 }
 
+///
+/// Open enum: an unrecognised value from a newer server decodes rather than throwing.
+public struct DevicePlatform: RawRepresentable, Codable, Hashable, Sendable {
+    public let rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public static let ios = DevicePlatform(rawValue: "ios")
+    public static let android = DevicePlatform(rawValue: "android")
+
+    /// Every value this build knows about, in contract order.
+    public static let knownCases: [DevicePlatform] = [.ios, .android]
+
+    public var isKnown: Bool { Self.knownCases.contains(self) }
+}
+
+public struct DeviceRequest: Codable, Hashable, Sendable {
+    /// The APNs or FCM token. Opaque to us, and stored hashed.
+    public let token: String
+    public let platform: DevicePlatform
+
+    /// BCP 47, e.g. `en-US`. Chooses which catalogue a notification is resolved from
+    /// once there is more than one.
+    public let locale: String?
+
+    public init(
+        token: String,
+        platform: DevicePlatform,
+        locale: String? = nil
+    ) {
+        self.token = token
+        self.platform = platform
+        self.locale = locale
+    }
+}
+
 public struct WeekActionRequest: Codable, Hashable, Sendable {
     /// Small enough to do in the week the pod said they had. Nothing enforces that but
     /// the length limit and the people in the pod.

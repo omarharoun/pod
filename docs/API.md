@@ -46,6 +46,8 @@ answers `501` with `code: not_implemented_yet` until its milestone lands.
 | M1 | `POST` | `/v1/auth/refresh` | `refreshAuth` | public |
 | M1 | `POST` | `/v1/auth/logout` | `logout` | bearer |
 | M1 | `GET` | `/v1/me` | `getMe` | bearer |
+| M4 | `PUT` | `/v1/devices` | `registerDevice` | bearer |
+| M4 | `DELETE` | `/v1/devices` | `unregisterDevice` | bearer |
 | M2 | `GET` | `/v1/onboarding/state` | `getOnboardingState` | bearer |
 | M2 | `PUT` | `/v1/onboarding/intent` | `putIntent` | bearer |
 | M2 | `POST` | `/v1/pool` | `joinPool` | bearer |
@@ -151,6 +153,44 @@ Milestone M1 · Requires a bearer access token.
 | `200` | [`User`](#user) | The caller. |
 | `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
 | `500` | [`ApiError`](#apierror) | Something went wrong on our side. |
+
+## Notifications
+
+Push registration. Bodies are resolved server-side from microcopy.
+
+### `PUT /v1/devices` — registerDevice
+
+**Register this device for push**  
+Milestone M4 · Requires a bearer access token.
+
+Idempotent on the token. Re-registering the same token updates its platform and
+keeps its place rather than creating a second device.
+
+Notification bodies are resolved server-side from `content/microcopy.json`, so the
+server sends sentences here and only here — see ADR-003 and ADR-016 for why this
+is the one exception and what constrains it.
+
+Request body: [`DeviceRequest`](#devicerequest)
+
+| Status | Body | |
+|---|---|---|
+| `204` | — | Registered. |
+| `400` | [`ApiError`](#apierror) | The request was malformed. |
+| `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
+| `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
+
+### `DELETE /v1/devices` — unregisterDevice
+
+**Stop sending push to this device**  
+Milestone M4 · Requires a bearer access token.
+
+Request body: [`DeviceRequest`](#devicerequest)
+
+| Status | Body | |
+|---|---|---|
+| `204` | — | Gone. Idempotent — an unknown token also answers 204. |
+| `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
+| `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
 
 ## Onboarding
 
@@ -440,6 +480,18 @@ A recurring window in the user's own timezone.
 | `day_of_week` | `integer` | yes | 0 = Monday. |
 | `start_minute` | `integer` | yes |  |
 | `end_minute` | `integer` | yes |  |
+
+### DevicePlatform
+
+One of: `ios`, `android`
+
+### DeviceRequest
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `token` | `string` | yes | The APNs or FCM token. Opaque to us, and stored hashed. |
+| `platform` | [`DevicePlatform`](#deviceplatform) | yes |  |
+| `locale` | `string` |  | BCP 47, e.g. `en-US`. Chooses which catalogue a notification is resolved from once there is more than one. |
 
 ### ErrorCode
 

@@ -20,6 +20,7 @@ import (
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
 	"github.com/omarharoun/pod/backend/internal/matching"
+	"github.com/omarharoun/pod/backend/internal/notify"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
 
@@ -54,7 +55,9 @@ func run(log *slog.Logger) error {
 	}
 	defer db.Close()
 
-	job := matching.NewJob(db, clock.System{}, log, matching.Options{})
+	now := clock.System{}
+	notifier := notify.NewService(db, now, log)
+	job := matching.NewJob(db, now, log, matching.Options{}, notifier)
 
 	if command == "once" {
 		_, err := job.RunWindow(ctx)

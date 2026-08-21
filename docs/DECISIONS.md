@@ -513,3 +513,59 @@ relying on anyone remembering.
   are reusable against S3 or GCS signed URLs with no change to callers.
 * An upload is bounded twice — by the size the slot was signed for and by a hard cap on the
   route — so a client that signs for a small photo cannot then send a large one.
+
+---
+
+## ADR-016 — There is no notification about not having posted
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M4
+
+**Context.** Every accountability product sends the reminder. "Alex hasn't posted yet."
+"2 of 3 are in — don't be the one." "Your streak ends tonight." It is the most obvious
+lever available and it is the single most effective way to violate `CLAUDE.md` §2 rule 1
+while technically shipping the feature.
+
+The temptation is strongest here because push is the one surface with no screen around it:
+no context, no way to soften it, and it arrives while someone is doing something else.
+
+**Decision.** The set of notification kinds is closed, and every one of them is either
+addressed to the whole pod or is about something that **happened**:
+
+| kind | who gets it |
+|---|---|
+| `pod_formed` | everyone |
+| `week_opened` | everyone |
+| `member_posted` | the others — someone is in |
+| `week_closing` | **everyone**, including people who have already posted |
+| `pod_completed` | everyone |
+
+There is no kind for "you have not posted", and adding one means editing a closed `Kind`
+set in `internal/notify`, which is where this ADR is quoted.
+
+Three specifics that carry the weight:
+
+1. **`week_closing` goes to everyone.** Sending it only to those still open would make it
+   a message *about not having posted*, delivered to exactly the person who would read it
+   that way. Its body — "Whatever happens, next week opens on Monday" — is §2 rule 2 said
+   out loud, and it is true for every recipient.
+2. **A week that closes incomplete sends nothing at all.** Nothing went wrong, so nothing
+   reports that it did.
+3. **The last person to post triggers `pod_completed`, not `member_posted`.** The pod
+   finishing is the more interesting fact, and it belongs to everyone rather than being an
+   announcement about the person who happened to go last.
+
+**Why the server sends sentences here at all.** ADR-003 says the API returns copy keys and
+never display text. A push payload has nowhere to put a key, because there is no client
+running to resolve it. So this is the one exception, and it is bounded: bodies are resolved
+from `content/microcopy.json` at send time, the outbox stores a key and parameters rather
+than a rendered sentence, and `tools/copylint` covers those strings exactly as it covers
+every other. A wording fix reaches everything not yet sent.
+
+**Consequences.**
+* Engagement will be lower than a product that nags. That is the trade the whole brief is
+  making.
+* A person with no display name still produces a notification, using `pod.someone` —
+  silence would cost the pod its witness over a missing optional field.
+* The outbox's `subject_id` is text, not a uuid, because `member_posted` is about a pair
+  of things. Keying on the week alone would collapse two pod-mates' posts into one; keying
+  on the poster alone would suppress their post in every week after the first.

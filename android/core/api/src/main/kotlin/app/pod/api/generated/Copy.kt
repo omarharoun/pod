@@ -301,6 +301,100 @@ public object CopyKey {
     public const val POD_YOU: String = "pod.you"
 
     /**
+     * "Someone in your pod"
+     */
+    public const val POD_SOMEONE: String = "pod.someone"
+
+    /**
+     * "You've got a pod"
+     */
+    public const val PUSH_POD_FORMED_TITLE: String = "push.podFormed.title"
+
+    /**
+     * "{names} are in it with you."
+     * Placeholders: names
+     */
+    public const val PUSH_POD_FORMED_BODY: String = "push.podFormed.body"
+
+    /**
+     * "New week"
+     */
+    public const val PUSH_WEEK_OPENED_TITLE: String = "push.weekOpened.title"
+
+    /**
+     * "{action}"
+     * Placeholders: action
+     */
+    public const val PUSH_WEEK_OPENED_BODY: String = "push.weekOpened.body"
+
+    /**
+     * "{name} is in"
+     * Placeholders: name
+     */
+    public const val PUSH_MEMBER_POSTED_TITLE: String = "push.memberPosted.title"
+
+    /**
+     * "Ten seconds, whenever you're ready."
+     */
+    public const val PUSH_MEMBER_POSTED_BODY: String = "push.memberPosted.body"
+
+    /**
+     * "Your pod's week closes tomorrow"
+     */
+    public const val PUSH_WEEK_CLOSING_TITLE: String = "push.weekClosing.title"
+
+    /**
+     * "Whatever happens, next week opens on Monday."
+     */
+    public const val PUSH_WEEK_CLOSING_BODY: String = "push.weekClosing.body"
+
+    /**
+     * "Everyone was in"
+     */
+    public const val PUSH_POD_COMPLETED_TITLE: String = "push.podCompleted.title"
+
+    /**
+     * "{count} weeks together."
+     * Placeholders: count
+     */
+    public const val PUSH_POD_COMPLETED_BODY: String = "push.podCompleted.body"
+
+    /**
+     * "This week's proof goes tonight"
+     */
+    public const val PUSH_PROOF_EXPIRING_TITLE: String = "push.proofExpiring.title"
+
+    /**
+     * "Have a look before it does."
+     */
+    public const val PUSH_PROOF_EXPIRING_BODY: String = "push.proofExpiring.body"
+
+    /**
+     * "Notifications"
+     */
+    public const val NOTIFICATIONS_TITLE: String = "notifications.title"
+
+    /**
+     * "Can we let you know?"
+     */
+    public const val NOTIFICATIONS_PERMISSION_TITLE: String = "notifications.permission.title"
+
+    /**
+     * "Only when your pod does something. Never to chase you."
+     */
+    public const val NOTIFICATIONS_PERMISSION_BODY: String = "notifications.permission.body"
+
+    /**
+     * "Allow"
+     */
+    public const val NOTIFICATIONS_PERMISSION_ALLOW: String = "notifications.permission.allow"
+
+    /**
+     * "Not now"
+     */
+    public const val NOTIFICATIONS_PERMISSION_NOT_NOW: String = "notifications.permission.notNow"
+
+    /**
      * "You're matched"
      */
     public const val POD_NEWLY_FORMED_TITLE: String = "pod.newlyFormed.title"
@@ -764,6 +858,24 @@ public object CopyKey {
         POOL_WAITING_NEXT_WINDOW,
         POOL_WAITING_LEAVE,
         POD_YOU,
+        POD_SOMEONE,
+        PUSH_POD_FORMED_TITLE,
+        PUSH_POD_FORMED_BODY,
+        PUSH_WEEK_OPENED_TITLE,
+        PUSH_WEEK_OPENED_BODY,
+        PUSH_MEMBER_POSTED_TITLE,
+        PUSH_MEMBER_POSTED_BODY,
+        PUSH_WEEK_CLOSING_TITLE,
+        PUSH_WEEK_CLOSING_BODY,
+        PUSH_POD_COMPLETED_TITLE,
+        PUSH_POD_COMPLETED_BODY,
+        PUSH_PROOF_EXPIRING_TITLE,
+        PUSH_PROOF_EXPIRING_BODY,
+        NOTIFICATIONS_TITLE,
+        NOTIFICATIONS_PERMISSION_TITLE,
+        NOTIFICATIONS_PERMISSION_BODY,
+        NOTIFICATIONS_PERMISSION_ALLOW,
+        NOTIFICATIONS_PERMISSION_NOT_NOW,
         POD_NEWLY_FORMED_TITLE,
         POD_NEWLY_FORMED_BODY,
         WEEK_DEFAULT_ACTION,

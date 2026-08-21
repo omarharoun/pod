@@ -9,6 +9,9 @@ import app.pod.api.WeekRepositories
 import app.pod.api.SessionRepository
 import app.pod.api.TokenStore
 import app.pod.data.EncryptedTokenStore
+import app.pod.data.NoPushTokenSource
+import app.pod.data.PushRegistrar
+import app.pod.data.PushTokenSource
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -50,6 +53,20 @@ object AppModule {
     @Singleton
     fun onboardingRepository(client: PodApiClient): OnboardingRepository =
         OnboardingRepository(client)
+
+    /**
+     * No FCM configuration ships in this repository, so the default source never yields a
+     * token and the app behaves as it does for anyone who declines push. Swap this
+     * binding per environment to wire Firebase in.
+     */
+    @Provides
+    @Singleton
+    fun pushTokenSource(): PushTokenSource = NoPushTokenSource()
+
+    @Provides
+    @Singleton
+    fun pushRegistrar(client: PodApiClient, tokens: PushTokenSource): PushRegistrar =
+        PushRegistrar(client, tokens)
 
     /** One week repository per pod, kept for the process. */
     @Provides

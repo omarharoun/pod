@@ -12,3 +12,16 @@ extension EnvironmentValues {
         set { self[CopywriterKey.self] = newValue }
     }
 }
+
+private struct PushRegistrarKey: EnvironmentKey {
+    static let defaultValue: PushRegistrar? = nil
+}
+
+extension EnvironmentValues {
+    /// Nil until the app has built one, and nil forever in previews — every caller has to
+    /// cope with push being unavailable, which is also true of a person who declines it.
+    var pushRegistrar: PushRegistrar? {
+        get { self[PushRegistrarKey.self] }
+        set { self[PushRegistrarKey.self] = newValue }
+    }
+}

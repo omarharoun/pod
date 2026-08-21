@@ -848,3 +848,108 @@ func (p *Postgres) withMembers(ctx context.Context, week Week) (Week, error) {
 	}
 	return week, wrap("load member weeks", rows.Err())
 }
+
+// ------------------------------------------------------------ M4: notifications
+
+func (p *Postgres) RegisterDevice(ctx context.Context, device Device) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO devices (token_hash, user_id, platform, locale, registered_at, last_seen_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (token_hash) DO UPDATE SET
+			user_id = EXCLUDED.user_id,
+			platform = EXCLUDED.platform,
+			locale = EXCLUDED.locale,
+			last_seen_at = EXCLUDED.last_seen_at,
+			retired_at = NULL`,
+		device.TokenHash, device.UserID, device.Platform, device.Locale, device.RegisteredAt, device.LastSeenAt)
+	return wrap("register device", err)
+}
+
+func (p *Postgres) RetireDevice(ctx context.Context, tokenHash string, at time.Time) error {
+	_, err := p.pool.Exec(ctx, `
+		UPDATE devices SET retired_at = $2 WHERE token_hash = $1 AND retired_at IS NULL`, tokenHash, at)
+	return wrap("retire device", err)
+}
+
+func (p *Postgres) DevicesFor(ctx context.Context, userID string) ([]Device, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT token_hash, user_id, platform, locale, registered_at, last_seen_at
+		FROM devices WHERE user_id = $1 AND retired_at IS NULL ORDER BY token_hash`, userID)
+	if err != nil {
+		return nil, wrap("list devices", err)
+	}
+	defer rows.Close()
+	var devices []Device
+	for rows.Next() {
+		var device Device
+		if err := rows.Scan(&device.TokenHash, &device.UserID, &device.Platform, &device.Locale,
+			&device.RegisteredAt, &device.LastSeenAt); err != nil {
+			return nil, wrap("scan device", err)
+		}
+		devices = append(devices, device)
+	}
+	return devices, wrap("list devices", rows.Err())
+}
+
+func (p *Postgres) QueueNotification(ctx context.Context, notification Notification) error {
+	params, err := json.Marshal(notification.Params)
+	if err != nil {
+		return fmt.Errorf("store: encode notification params: %w", err)
+	}
+	tag, err := p.pool.Exec(ctx, `
+		INSERT INTO notifications (id, user_id, kind, subject_id, copy_key, params, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (kind, subject_id, user_id) DO NOTHING`,
+		notification.ID, notification.UserID, notification.Kind, notification.SubjectID,
+		notification.CopyKey, params, notification.CreatedAt)
+	if err != nil {
+		return wrap("queue notification", err)
+	}
+	if tag.RowsAffected() == 0 {
+		// Already queued. This is what stops an hourly job sending the same "new week"
+		// push every hour for a week.
+		return ErrConflict
+	}
+	return nil
+}
+
+func (p *Postgres) PendingNotifications(ctx context.Context, limit int) ([]Notification, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, user_id, kind, subject_id, copy_key, params, created_at
+		FROM notifications
+		WHERE sent_at IS NULL AND failed_at IS NULL
+		ORDER BY created_at, id
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, wrap("list pending notifications", err)
+	}
+	defer rows.Close()
+
+	var out []Notification
+	for rows.Next() {
+		var notification Notification
+		var params []byte
+		if err := rows.Scan(&notification.ID, &notification.UserID, &notification.Kind,
+			&notification.SubjectID, &notification.CopyKey, &params, &notification.CreatedAt); err != nil {
+			return nil, wrap("scan notification", err)
+		}
+		if err := json.Unmarshal(params, &notification.Params); err != nil {
+			return nil, fmt.Errorf("store: decode notification params: %w", err)
+		}
+		out = append(out, notification)
+	}
+	return out, wrap("list pending notifications", rows.Err())
+}
+
+func (p *Postgres) MarkNotificationSent(ctx context.Context, id string, at time.Time, failed bool) error {
+	column := "sent_at"
+	if failed {
+		column = "failed_at"
+	}
+	_, err := p.pool.Exec(ctx,
+		fmt.Sprintf(`UPDATE notifications SET %s = $2 WHERE id = $1`, column), id, at)
+	return wrap("mark notification sent", err)
+}

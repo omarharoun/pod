@@ -16,7 +16,13 @@ class CopywriterTest {
         "seconds" to "30",
         "count" to "3",
         "name" to "Ada",
+        "names" to "Ada and Sam",
         "code" to "482913",
+        "action" to "Clear one shelf",
+        "time" to "10:00",
+        "label" to "Half an hour",
+        "index" to "2",
+        "total" to "3",
     )
 
     // The generated constants and the packaged catalogue come from the same file. If they

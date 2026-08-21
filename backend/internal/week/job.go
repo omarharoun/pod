@@ -9,7 +9,10 @@ import (
 
 	"github.com/omarharoun/pod/backend/internal/blob"
 	"github.com/omarharoun/pod/backend/internal/clock"
+	"github.com/omarharoun/pod/backend/internal/copy"
 	"github.com/omarharoun/pod/backend/internal/cycle"
+	"github.com/omarharoun/pod/backend/internal/notify"
+	"github.com/omarharoun/pod/backend/internal/push"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
 
@@ -20,23 +23,27 @@ const TickInterval = time.Hour
 
 // JobResult is what one tick did. Counts only: a job log line must never carry a user id.
 type JobResult struct {
-	PodsSeen      int
-	WeeksOpened   int
-	WeeksClosed   int
-	ProofsDeleted int
-	SweepFailures int
+	PodsSeen           int
+	WeeksOpened        int
+	WeeksClosed        int
+	ProofsDeleted      int
+	SweepFailures      int
+	NotificationsSent  int
+	NotificationsQuiet int
 }
 
 type Job struct {
-	service *Service
-	store   store.Store
-	blobs   blob.Store
-	clock   clock.Clock
-	log     *slog.Logger
+	service  *Service
+	store    store.Store
+	blobs    blob.Store
+	clock    clock.Clock
+	log      *slog.Logger
+	notifier *notify.Service
+	sender   push.Sender
 }
 
-func NewJob(service *Service, s store.Store, b blob.Store, c clock.Clock, log *slog.Logger) *Job {
-	return &Job{service: service, store: s, blobs: b, clock: c, log: log}
+func NewJob(service *Service, s store.Store, b blob.Store, c clock.Clock, log *slog.Logger, n *notify.Service, sender push.Sender) *Job {
+	return &Job{service: service, store: s, blobs: b, clock: c, log: log, notifier: n, sender: sender}
 }
 
 // Tick closes weeks that are over, opens the ones that are due, and sweeps proof that has
@@ -69,12 +76,25 @@ func (j *Job) Tick(ctx context.Context) (JobResult, error) {
 	result.ProofsDeleted = deleted
 	result.SweepFailures = failures
 
+	// Draining the outbox last means everything this tick queued goes out in the same
+	// tick rather than an hour later.
+	if j.notifier != nil && j.sender != nil {
+		sent, err := j.notifier.Send(ctx, j.sender, 0)
+		if err != nil {
+			j.log.ErrorContext(ctx, "could not drain the notification outbox", slog.Any("error", err))
+		}
+		result.NotificationsSent = sent.Sent
+		result.NotificationsQuiet = sent.NoDevices
+	}
+
 	j.log.InfoContext(ctx, "week tick complete",
 		slog.Int("pods_seen", result.PodsSeen),
 		slog.Int("weeks_opened", result.WeeksOpened),
 		slog.Int("weeks_closed", result.WeeksClosed),
 		slog.Int("proofs_deleted", result.ProofsDeleted),
 		slog.Int("sweep_failures", result.SweepFailures),
+		slog.Int("notifications_sent", result.NotificationsSent),
+		slog.Int("notifications_quiet", result.NotificationsQuiet),
 	)
 	return result, nil
 }
@@ -94,10 +114,21 @@ func (j *Job) turnOver(ctx context.Context, pod store.Pod, now time.Time) (close
 	}
 	for _, week := range weeks {
 		if week.ClosedAt == nil && !now.Before(week.ClosesAt) {
-			if _, err := j.store.CloseWeek(ctx, week.ID, now); err != nil {
+			settled, err := j.store.CloseWeek(ctx, week.ID, now)
+			if err != nil {
 				return closed, opened, fmt.Errorf("week: close: %w", err)
 			}
 			closed++
+			if j.notifier != nil && settled.PodCompleted {
+				// Only the good news is announced at close. A week that did not
+				// complete produces no notification at all: nothing went wrong, so
+				// nothing reports that it did (CLAUDE.md §2 rule 1).
+				j.notifier.PodCompleted(ctx, settled, pod.StreakWeeks+1)
+			}
+			continue
+		}
+		if j.notifier != nil && j.notifier.DueForClosingNotice(week) {
+			j.notifier.WeekClosing(ctx, week)
 		}
 	}
 
@@ -110,10 +141,20 @@ func (j *Job) turnOver(ctx context.Context, pod store.Pod, now time.Time) (close
 		}
 	}
 	if !existing {
-		if _, err := j.service.open(ctx, pod, now); err != nil {
+		fresh, err := j.service.open(ctx, pod, now)
+		if err != nil {
 			return closed, opened, fmt.Errorf("week: open: %w", err)
 		}
 		opened++
+		if j.notifier != nil {
+			action, err := copy.Resolve(copy.KeyWeekDefaultAction, nil)
+			if err == nil {
+				if fresh.ActionText != "" {
+					action = fresh.ActionText
+				}
+				j.notifier.WeekOpened(ctx, pod, fresh, action)
+			}
+		}
 	}
 	return closed, opened, nil
 }

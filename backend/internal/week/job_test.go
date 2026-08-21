@@ -10,6 +10,8 @@ import (
 
 	"github.com/omarharoun/pod/backend/internal/blob"
 	"github.com/omarharoun/pod/backend/internal/clock"
+	"github.com/omarharoun/pod/backend/internal/notify"
+	"github.com/omarharoun/pod/backend/internal/push"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
 
@@ -24,6 +26,10 @@ type harness struct {
 	members []string
 }
 
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 func newHarness(t *testing.T, zone string) *harness {
 	t.Helper()
 	memory := store.NewMemory()
@@ -36,10 +42,16 @@ func newHarness(t *testing.T, zone string) *harness {
 
 	ctx := context.Background()
 	var members []string
-	for _, email := range []string{"sam@example.com", "alex@example.com"} {
-		user, err := memory.UpsertUserByEmail(ctx, email, fixed.Now())
+	for _, person := range []struct{ email, name string }{
+		{"sam@example.com", "Sam"},
+		{"alex@example.com", "Alex"},
+	} {
+		user, err := memory.UpsertUserByEmail(ctx, person.email, fixed.Now())
 		if err != nil {
 			t.Fatalf("UpsertUserByEmail: %v", err)
+		}
+		if err := memory.SetDisplayName(ctx, user.ID, person.name); err != nil {
+			t.Fatalf("SetDisplayName: %v", err)
 		}
 		members = append(members, user.ID)
 	}
@@ -50,10 +62,12 @@ func newHarness(t *testing.T, zone string) *harness {
 		t.Fatalf("CreatePod: %v", err)
 	}
 
-	service := NewService(memory, blobs, fixed)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	notifier := notify.NewService(memory, fixed, log)
+	service := NewService(memory, blobs, fixed, notifier)
 	return &harness{
-		t: t, service: service, job: NewJob(service, memory, blobs, fixed, log),
+		t: t, service: service,
+		job:   NewJob(service, memory, blobs, fixed, log, notifier, push.Logger{Log: log}),
 		store: memory, blobs: blobs, clock: fixed, podID: podID, members: members,
 	}
 }

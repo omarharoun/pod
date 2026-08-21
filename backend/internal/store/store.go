@@ -185,6 +185,29 @@ type Proof struct {
 	DeletedAt *time.Time
 }
 
+// Device is one phone registered for push. The token is stored hashed: it is a
+// credential for reaching somebody's phone.
+type Device struct {
+	TokenHash    string
+	UserID       string
+	Platform     string
+	Locale       string
+	RegisteredAt time.Time
+	LastSeenAt   time.Time
+}
+
+// Notification is one queued push. It stores a copy key and parameters rather than a
+// rendered sentence, so a wording fix reaches everything not yet sent (ADR-003).
+type Notification struct {
+	ID        string
+	UserID    string
+	Kind      string
+	SubjectID string
+	CopyKey   string
+	Params    map[string]string
+	CreatedAt time.Time
+}
+
 // Store is everything the service needs from persistence. It grows a method per
 // milestone; it does not grow a generic query escape hatch.
 type Store interface {
@@ -273,4 +296,21 @@ type Store interface {
 	ListExpiredProofs(ctx context.Context, at time.Time, limit int) ([]Proof, error)
 	// MarkProofDeleted records that the bytes are gone.
 	MarkProofDeleted(ctx context.Context, proofID string, at time.Time) error
+
+	// RegisterDevice records a phone for push. Idempotent on the token hash.
+	RegisterDevice(ctx context.Context, device Device) error
+	// RetireDevice stops sending to a token, whether the person asked or the provider
+	// told us it was dead.
+	RetireDevice(ctx context.Context, tokenHash string, at time.Time) error
+	// DevicesFor returns a user's live devices.
+	DevicesFor(ctx context.Context, userID string) ([]Device, error)
+
+	// QueueNotification writes to the outbox. Returns ErrConflict if this exact
+	// notification has already been queued — which is what stops an hourly job sending
+	// the same "new week" push every hour for a week.
+	QueueNotification(ctx context.Context, notification Notification) error
+	// PendingNotifications is the sender's input.
+	PendingNotifications(ctx context.Context, limit int) ([]Notification, error)
+	// MarkNotificationSent records delivery, or a permanent failure.
+	MarkNotificationSent(ctx context.Context, id string, at time.Time, failed bool) error
 }

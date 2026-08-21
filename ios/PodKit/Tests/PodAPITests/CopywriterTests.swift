@@ -56,6 +56,8 @@ final class CopywriterTests: XCTestCase {
     /// resolution rather than about which key takes what.
     private func placeholders(for key: CopyKey) -> [String: String] {
         ["email": "sam@example.com", "minutes": "10", "seconds": "30", "count": "3",
-         "name": "Ada", "code": "482913"]
+         "name": "Ada", "names": "Ada and Sam", "code": "482913",
+         "action": "Clear one shelf", "time": "10:00", "label": "Half an hour",
+         "index": "2", "total": "3"]
     }
 }

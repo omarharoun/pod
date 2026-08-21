@@ -6,6 +6,7 @@ import app.pod.api.ApiException
 import app.pod.api.WeekPhase
 import app.pod.api.WeekRepositories
 import app.pod.api.generated.ProofKind
+import app.pod.data.PushRegistrar
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,7 @@ data class WeekUiState(
 @HiltViewModel
 class WeekViewModel @Inject constructor(
     private val repositories: WeekRepositories,
+    private val push: PushRegistrar,
 ) : ViewModel() {
 
     private val podId = MutableStateFlow<String?>(null)
@@ -54,6 +56,9 @@ class WeekViewModel @Inject constructor(
         if (podId.value == pod) return
         podId.value = pod
         viewModelScope.launch { repositories.forPod(pod).load() }
+        // Registered here rather than at launch: this is the first moment there is
+        // anything to notify anyone about.
+        viewModelScope.launch { push.registerIfPossible() }
     }
 
     fun refresh() {

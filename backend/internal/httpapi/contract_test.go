@@ -61,6 +61,7 @@ var implementedMilestones = map[string]bool{
 	"M1": true,
 	"M2": true,
 	"M3": true,
+	"M4": true,
 }
 
 // fillPath substitutes the path parameters. podId is a pod the caller really belongs to,

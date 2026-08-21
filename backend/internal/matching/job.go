@@ -10,6 +10,7 @@ import (
 
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/ids"
+	"github.com/omarharoun/pod/backend/internal/notify"
 	"github.com/omarharoun/pod/backend/internal/reliability"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
@@ -36,14 +37,15 @@ type Result struct {
 
 // Job runs one matching window.
 type Job struct {
-	store store.Store
-	clock clock.Clock
-	log   *slog.Logger
-	opts  Options
+	store    store.Store
+	clock    clock.Clock
+	log      *slog.Logger
+	opts     Options
+	notifier *notify.Service
 }
 
-func NewJob(s store.Store, c clock.Clock, log *slog.Logger, opts Options) *Job {
-	return &Job{store: s, clock: c, log: log, opts: opts}
+func NewJob(s store.Store, c clock.Clock, log *slog.Logger, opts Options, n *notify.Service) *Job {
+	return &Job{store: s, clock: c, log: log, opts: opts, notifier: n}
 }
 
 // RunWindow reads the whole pool, forms what pods it can, and leaves the rest queued.
@@ -120,6 +122,14 @@ func (j *Job) persist(ctx context.Context, pod Pod, waiting []store.PoolCandidat
 			return false, nil
 		}
 		return false, err
+	}
+
+	if j.notifier != nil {
+		// Read the pod back so the notification can name people, which needs the
+		// display names the matcher deliberately never sees.
+		if formed, err := j.store.GetActivePod(ctx, memberIDs[0]); err == nil {
+			j.notifier.PodFormed(ctx, formed)
+		}
 	}
 	return true, nil
 }

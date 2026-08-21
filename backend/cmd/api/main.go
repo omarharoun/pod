@@ -19,6 +19,7 @@ import (
 	"github.com/omarharoun/pod/backend/internal/embed"
 	"github.com/omarharoun/pod/backend/internal/httpapi"
 	"github.com/omarharoun/pod/backend/internal/mail"
+	"github.com/omarharoun/pod/backend/internal/notify"
 	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
 	"github.com/omarharoun/pod/backend/internal/week"
@@ -62,7 +63,8 @@ func run(log *slog.Logger) error {
 
 	// The hashing embedder until the hosted one is wired in — see ADR-011.
 	onboardingService := onboarding.NewService(db, embed.Hashing{}, now)
-	weekService := week.NewService(db, blobs, now)
+	// The API queues notifications; cmd/weekly drains the outbox.
+	weekService := week.NewService(db, blobs, now, notify.NewService(db, now, log))
 	server := httpapi.New(
 		auth.NewService(db, mailer, now, cfg),
 		onboardingService,
