@@ -120,6 +120,24 @@ public object CopyKey {
     public const val AUTH_SIGNOUT_ACTION: String = "auth.signOut.action"
 
     /**
+     * "Your Pod code: {code}"
+     * Placeholders: code
+     */
+    public const val EMAIL_LOGINCODE_SUBJECT: String = "email.loginCode.subject"
+
+    /**
+     * "It's good for {minutes} minutes."
+     * Placeholders: minutes
+     */
+    public const val EMAIL_LOGINCODE_PREHEADER: String = "email.loginCode.preheader"
+
+    /**
+     * "Here's your sign-in code: {code}. It's good for {minutes} minutes. If you didn't ask for it, you can ignore this."
+     * Placeholders: code, minutes
+     */
+    public const val EMAIL_LOGINCODE_BODY: String = "email.loginCode.body"
+
+    /**
      * "You're in"
      */
     public const val HOME_PLACEHOLDER_TITLE: String = "home.placeholder.title"
@@ -312,6 +330,9 @@ public object CopyKey {
         AUTH_SIGNEDOUT_TITLE,
         AUTH_SIGNEDOUT_BODY,
         AUTH_SIGNOUT_ACTION,
+        EMAIL_LOGINCODE_SUBJECT,
+        EMAIL_LOGINCODE_PREHEADER,
+        EMAIL_LOGINCODE_BODY,
         HOME_PLACEHOLDER_TITLE,
         HOME_PLACEHOLDER_BODY,
         HOME_SIGNEDINAS,

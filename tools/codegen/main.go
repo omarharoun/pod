@@ -37,7 +37,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "codegen: %d generated file(s) out of date — run `make generate`\n", g.stale)
 		os.Exit(1)
 	}
-	fmt.Printf("codegen: %d file(s) up to date\n", g.written)
+	if g.check {
+		fmt.Printf("codegen: %d file(s) checked, all up to date\n", g.written)
+		return
+	}
+	fmt.Printf("codegen: %d file(s) written\n", g.written)
 }
 
 func fail(err error) {
@@ -86,6 +90,7 @@ func (g *generator) run() error {
 		body string
 	}{
 		{"backend/internal/api/models_gen.go", emitGoModels(spec)},
+		{"backend/internal/copy/catalogue_gen.go", emitGoCopy(copyKeys, pluralFormsByKey)},
 		{"ios/PodKit/Sources/PodAPI/Generated/Models.swift", emitSwiftModels(spec)},
 		{"ios/PodKit/Sources/PodAPI/Generated/Copy.swift", emitSwiftCopy(copyKeys)},
 		{"ios/PodKit/Sources/PodAPI/Generated/Tokens.swift", emitSwiftTokens(tokens)},
@@ -127,6 +132,7 @@ func (g *generator) run() error {
 func (g *generator) write(rel, body string) error {
 	path := filepath.Join(g.root, rel)
 	if g.check {
+		g.written++
 		existing, err := os.ReadFile(path)
 		if err != nil || string(existing) != body {
 			fmt.Fprintf(os.Stderr, "  stale: %s\n", rel)

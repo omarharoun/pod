@@ -83,6 +83,18 @@ public extension CopyKey {
     /// "Sign out"
     static let authSignOutAction = CopyKey(rawValue: "auth.signOut.action")
 
+    /// "Your Pod code: {code}"
+    /// Placeholders: code
+    static let emailLoginCodeSubject = CopyKey(rawValue: "email.loginCode.subject")
+
+    /// "It's good for {minutes} minutes."
+    /// Placeholders: minutes
+    static let emailLoginCodePreheader = CopyKey(rawValue: "email.loginCode.preheader")
+
+    /// "Here's your sign-in code: {code}. It's good for {minutes} minutes. If you didn't ask for it, you can ignore this."
+    /// Placeholders: code, minutes
+    static let emailLoginCodeBody = CopyKey(rawValue: "email.loginCode.body")
+
     /// "You're in"
     static let homePlaceholderTitle = CopyKey(rawValue: "home.placeholder.title")
 
@@ -212,6 +224,9 @@ public extension CopyKey {
         .authSignedOutTitle,
         .authSignedOutBody,
         .authSignOutAction,
+        .emailLoginCodeSubject,
+        .emailLoginCodePreheader,
+        .emailLoginCodeBody,
         .homePlaceholderTitle,
         .homePlaceholderBody,
         .homeSignedInAs,

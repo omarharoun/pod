@@ -10,6 +10,10 @@ import "time"
 // The API never returns a sentence. It returns a machine code plus a `copy_key` into
 // `content/microcopy.json` and the parameters that key interpolates, so display text
 // has exactly one source and can be checked against the never-shame rule.
+//
+// `copy_key` always names the **body** string. A client that also wants a title
+// chooses one locally from `code` — the server does not decide how an error is
+// framed on a screen it cannot see.
 type ApiError struct {
 	Code ErrorCode `json:"code"`
 

@@ -17,7 +17,6 @@
   "auth.start.submit": "Send code",
   "auth.start.legal": "By continuing you agree to our terms and privacy notice.",
   "auth.start.error.emailInvalid": "That doesn't look like an email address yet.",
-
   "auth.verify.title": "Check your email",
   "auth.verify.body": "We sent a 6-digit code to {email}. It's good for {minutes} minutes.",
   "auth.verify.codeLabel": "6-digit code",
@@ -28,10 +27,13 @@
   "auth.verify.error.codeIncorrect": "That code didn't match. Give it another go.",
   "auth.verify.error.codeExpired": "That code has expired. We can send a fresh one.",
   "auth.verify.error.tooManyAttempts": "Let's start over with a new code.",
-
   "auth.signedOut.title": "You're signed out",
   "auth.signedOut.body": "Your pod is still there when you come back.",
   "auth.signOut.action": "Sign out",
+
+  "email.loginCode.subject": "Your Pod code: {code}",
+  "email.loginCode.preheader": "It's good for {minutes} minutes.",
+  "email.loginCode.body": "Here's your sign-in code: {code}. It's good for {minutes} minutes. If you didn't ask for it, you can ignore this.",
 
   "home.placeholder.title": "You're in",
   "home.placeholder.body": "Nothing to do yet — we'll set up your pod next.",
@@ -46,7 +48,6 @@
   "state.member.you.posted.detail": "You're in this week.",
   "state.member.you.open.detail": "Your 10 seconds is still open.",
   "state.member.you.resting.detail": "You sat this one out. Next week is open.",
-
   "state.pod.weeksTogether": {
     "one": "{count} week together",
     "other": "{count} weeks together"

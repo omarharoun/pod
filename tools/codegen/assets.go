@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
+
+func sortStrings(s []string) { sort.Strings(s) }
 
 // orderedKeys returns the keys of a JSON object in the order the file lists them, so
 // generated constants read the way the source file reads.
@@ -57,6 +60,10 @@ type CopyKey struct {
 
 var pluralCategories = map[string]bool{"zero": true, "one": true, "two": true, "few": true, "many": true, "other": true}
 
+// pluralFormsByKey is filled by loadCopyKeys so the Go catalogue can carry every CLDR
+// form, not just the one used for documentation.
+var pluralFormsByKey = map[string]map[string]string{}
+
 func loadCopyKeys(path string) ([]CopyKey, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -90,6 +97,7 @@ func copyEntry(key string, raw json.RawMessage) (CopyKey, error) {
 		return CopyKey{}, fmt.Errorf("expected a string or a plural object")
 	}
 	entry := CopyKey{Key: key, Plural: true}
+	collected := map[string]string{}
 	for _, f := range forms {
 		if !pluralCategories[f] {
 			return CopyKey{}, fmt.Errorf("nested object with non-plural key %q — flatten it into a dotted key instead", f)
@@ -98,11 +106,13 @@ func copyEntry(key string, raw json.RawMessage) (CopyKey, error) {
 		if err := json.Unmarshal(byForm[f], &text); err != nil {
 			return CopyKey{}, err
 		}
+		collected[f] = text
 		if f == "other" || entry.Sample == "" {
 			entry.Sample = text
 			entry.Placeholders = placeholders(text)
 		}
 	}
+	pluralFormsByKey[key] = collected
 	return entry, nil
 }
 
@@ -494,4 +504,54 @@ func kotlinNumberGroup(b *strings.Builder, name, doc string, tokens []NumberToke
 		fmt.Fprintf(b, "        public const val %s: %s = %s\n", screamingSnake(tok.Name), kind, value)
 	}
 	b.WriteString("    }\n\n")
+}
+
+// emitGoCopy gives the server the same catalogue the clients ship, as typed keys plus
+// the strings themselves. Push and email bodies are resolved here (ADR-003), and a
+// handler physically cannot name a key that doesn't exist.
+func emitGoCopy(keys []CopyKey, pluralForms map[string]map[string]string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, banner, "content/microcopy.json")
+	b.WriteString(`//
+// Every user-facing string the server can produce — error copy keys, email bodies,
+// push bodies. A literal sentence in a handler is a bug: see CLAUDE.md §2 rule 1.
+
+package copy
+
+// Key indexes the catalogue. It is a distinct type so that a handler cannot pass an
+// arbitrary string where a copy key belongs.
+type Key string
+
+const (
+`)
+	for _, k := range keys {
+		b.WriteString(docComment("\t", "// ", copyDoc(k)))
+		fmt.Fprintf(&b, "\tKey%s Key = %q\n\n", goPascal(strings.ReplaceAll(k.Key, ".", "_")), k.Key)
+	}
+	b.WriteString(")\n\n// AllKeys is every key in the catalogue, in file order.\nvar AllKeys = []Key{\n")
+	for _, k := range keys {
+		fmt.Fprintf(&b, "\tKey%s,\n", goPascal(strings.ReplaceAll(k.Key, ".", "_")))
+	}
+	b.WriteString("}\n\n// catalogue holds the en-US strings. Plural keys carry one entry per CLDR category.\nvar catalogue = map[Key]map[string]string{\n")
+	for _, k := range keys {
+		forms := pluralForms[k.Key]
+		if forms == nil {
+			forms = map[string]string{"other": k.Sample}
+		}
+		fmt.Fprintf(&b, "\tKey%s: {", goPascal(strings.ReplaceAll(k.Key, ".", "_")))
+		formKeys := make([]string, 0, len(forms))
+		for f := range forms {
+			formKeys = append(formKeys, f)
+		}
+		sortStrings(formKeys)
+		for i, f := range formKeys {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "%q: %q", f, forms[f])
+		}
+		b.WriteString("},\n")
+	}
+	b.WriteString("}\n")
+	return b.String()
 }
