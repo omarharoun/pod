@@ -325,3 +325,118 @@ func (j *journey) decode(rec *httptest.ResponseRecorder, want int, into any) {
 		panic(fmt.Sprintf("decode %s: %v", rec.Body.String(), err))
 	}
 }
+
+// A pod that goes quiet dissolves, and its members are offered a gentler restart.
+//
+// This is the path the members-less week list broke, and it was invisible because every
+// test of it ran against store.Memory. It runs against Postgres now.
+func TestAQuietPodDissolvesAgainstPostgres(t *testing.T) {
+	j := newJourney(t)
+
+	sam := j.signIn("sam@example.com")
+	alex := j.signIn("alex@example.com")
+	for _, person := range []session{sam, alex} {
+		j.do(t, http.MethodPut, "/v1/onboarding/intent", person, api.IntentRequest{
+			GoalText: "finally sort out the spare room", GoalCategory: api.GoalCategoryHome,
+			Intensity: 3, Timezone: "Europe/Lisbon",
+			SelfReportReliability: api.SelfReportReliabilitySometimes,
+		}, http.StatusOK, nil)
+		j.do(t, http.MethodPost, "/v1/pool", person, nil, http.StatusAccepted, nil)
+	}
+	if _, err := j.matcher.RunWindow(context.Background()); err != nil {
+		t.Fatalf("matching window: %v", err)
+	}
+
+	var pod api.Pod
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusOK, &pod)
+
+	// One quiet week is not enough — a pod is allowed a bad week.
+	j.quietWeek(t, pod.ID, sam)
+	sam, alex = j.signIn("sam@example.com"), j.signIn("alex@example.com")
+	var still api.Pod
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusOK, &still)
+	if still.State != api.PodStateActive {
+		t.Fatalf("one quiet week and the pod is %q", still.State)
+	}
+
+	// Two is.
+	j.quietWeek(t, pod.ID, sam)
+	sam, alex = j.signIn("sam@example.com"), j.signIn("alex@example.com")
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusNoContent, nil)
+
+	// And both are offered the gentler restart, in the lane the pod occupied.
+	for _, person := range []session{sam, alex} {
+		var state api.OnboardingState
+		j.do(t, http.MethodGet, "/v1/onboarding/state", person, nil, http.StatusOK, &state)
+		if state.Recovery == nil || !state.Recovery.OfferLowerIntensity {
+			t.Errorf("a pod dissolved and %s was offered nothing: %+v", person.userID, state.Recovery)
+			continue
+		}
+		if state.Recovery.SuggestedIntensity == nil || *state.Recovery.SuggestedIntensity != 2 {
+			t.Errorf("suggested intensity: %v, want 2", state.Recovery.SuggestedIntensity)
+		}
+		// Nothing about the pod that ended, or about anyone in it.
+		body := j.raw(t, http.MethodGet, "/v1/onboarding/state", person)
+		for _, forbidden := range []string{"inactive", "dissolved_reason", "dissolved_pods", "missed"} {
+			if bytes.Contains(body, []byte(forbidden)) {
+				t.Errorf("the state response says %q: %s", forbidden, body)
+			}
+		}
+	}
+}
+
+// A pod where one person keeps showing up is not inactive. It is a pod carrying somebody,
+// which is the product working (ADR-019).
+func TestAPodOnePersonCarriesDoesNotDissolveAgainstPostgres(t *testing.T) {
+	j := newJourney(t)
+
+	sam := j.signIn("sam@example.com")
+	alex := j.signIn("alex@example.com")
+	for _, person := range []session{sam, alex} {
+		j.do(t, http.MethodPut, "/v1/onboarding/intent", person, api.IntentRequest{
+			GoalText: "finally sort out the spare room", GoalCategory: api.GoalCategoryHome,
+			Intensity: 3, Timezone: "Europe/Lisbon",
+			SelfReportReliability: api.SelfReportReliabilitySometimes,
+		}, http.StatusOK, nil)
+		j.do(t, http.MethodPost, "/v1/pool", person, nil, http.StatusAccepted, nil)
+	}
+	if _, err := j.matcher.RunWindow(context.Background()); err != nil {
+		t.Fatalf("matching window: %v", err)
+	}
+	var pod api.Pod
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusOK, &pod)
+
+	// Three weeks where only Sam posts.
+	for n := 0; n < 3; n++ {
+		var current api.Week
+		j.do(t, http.MethodGet, fmt.Sprintf("/v1/pods/%s/weeks/current", pod.ID), sam, nil, http.StatusOK, &current)
+		j.post(t, pod.ID, current.ID, sam)
+		j.clock.Advance(current.ClosesAt.Sub(j.clock.Now()) + time.Hour)
+		if _, err := j.weekly.Tick(context.Background()); err != nil {
+			t.Fatalf("tick: %v", err)
+		}
+		sam = j.signIn("sam@example.com")
+	}
+
+	var carried api.Pod
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusOK, &carried)
+	if carried.State != api.PodStateActive {
+		t.Fatalf("a pod one person carried for three weeks is %q", carried.State)
+	}
+	// No week completed, so the shared streak is zero — and that is all it is. Nothing
+	// anywhere says who was missing.
+	if carried.StreakWeeks != 0 {
+		t.Errorf("streak: got %d, want 0", carried.StreakWeeks)
+	}
+}
+
+// quietWeek advances past the current week's close with nobody posting.
+func (j *journey) quietWeek(t *testing.T, podID string, s session) {
+	t.Helper()
+	var current api.Week
+	j.do(t, http.MethodGet, fmt.Sprintf("/v1/pods/%s/weeks/current", podID), s, nil, http.StatusOK, &current)
+	j.clock.Advance(current.ClosesAt.Sub(j.clock.Now()) + time.Hour)
+	if _, err := j.weekly.Tick(context.Background()); err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+}
