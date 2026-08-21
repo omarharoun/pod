@@ -822,3 +822,35 @@ func TestPostgresListExpiredProofs(t *testing.T) {
 		t.Fatal("an expired proof was not queued for deletion — the sweep would never reach it")
 	}
 }
+
+// A limit above the ceiling must be clamped down to it, not reset to the small default.
+// The reliability fold asks for a decade of weeks (ADR-022); an implementation that
+// answered 8 would break the §6 movement cap in production with every test still green.
+func TestPostgresOutcomeLimitClampsDownNotBackToTheDefault(t *testing.T) {
+	ctx := context.Background()
+	db := newPostgres(t)
+	user := seedUser(t, db)
+	podID := seedPodWith(t, db, user)
+	for i := 0; i < 12; i++ {
+		week := seedWeek(t, db, podID, user)
+		if _, err := db.CloseWeek(ctx, week.ID, time.Now().UTC()); err != nil {
+			t.Fatalf("CloseWeek: %v", err)
+		}
+	}
+
+	all, err := db.RecentOutcomes(ctx, user.ID, 10_000)
+	if err != nil {
+		t.Fatalf("RecentOutcomes: %v", err)
+	}
+	if len(all) != 12 {
+		t.Fatalf("asking for more history than exists returned %d weeks, want all 12", len(all))
+	}
+
+	capped, err := db.RecentOutcomes(ctx, user.ID, 5)
+	if err != nil {
+		t.Fatalf("RecentOutcomes: %v", err)
+	}
+	if len(capped) != 5 {
+		t.Fatalf("an explicit limit of 5 returned %d weeks", len(capped))
+	}
+}

@@ -720,3 +720,68 @@ was skipped.
 
 ---
 
+---
+
+## ADR-022 — The reliability score is a fold, replayed from a fixed seed
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M5
+
+**Context.** `Compute` implemented the two §6 movement rules — increment larger than
+decrement, cap per-week movement so a single bad week can't drop a band — by comparing
+this week against `raw(older weeks)` and damping the difference. Its own doc comment
+called that "the score their history had before the most recent week".
+
+It was not. The score they had before this week was itself damped. Measuring against the
+undamped formula re-opened the whole gap every week, so both guarantees were computed
+against a number the person never had. Checked exhaustively over every history inside the
+window:
+
+* a single week could move a score by **0.47**, against a stated cap of 0.10
+* **56,388** histories where one bad week dropped a band
+* histories where **posting a proof lowered the score by 0.30** — §2 rule 2 backwards
+
+Every fixture test in the package passed throughout. The bug was invisible to examples
+and obvious to enumeration.
+
+**Decision.** `Compute` replays the history forward from a seed, one week at a time,
+applying the asymmetry and the cap at every step.
+
+1. **`raw` keeps the §6 window.** The formula sees a rolling 8 weeks, exactly as stated.
+2. **The fold does not.** A cap on per-week movement is a statement about a trajectory,
+   and a trajectory cannot be a function of an 8-week slice. `Window` (8, the formula) and
+   `Replay` (520, the fold) are now separate constants.
+3. **The seed must sit at a fixed point.** A fold seeded at "eight weeks ago" re-seeds
+   itself every week, and the discontinuity is not small: measured, one week could move a
+   score by **0.24** and a first bad week dropped a band in ~1.3% of full-window cases.
+   Lengthening the replay shrinks it (0.13 at 12 weeks, 0.10 at 16, 0.025 at 52) but never
+   removes it. Only a fixed anchor does, so the fold starts at the first week on record.
+4. **The band floor holds for one week and is cleared by posting.** Keying it off position
+   instead — "you may not cross unless you are already on the floor" — meant someone who
+   reached a boundary by doing well lost a band to their first bad week. It is now
+   explicit state in the fold, and a week someone posted never spends it.
+
+**What is asserted now.** Over all 4^8 histories × 3 self-reports, and over the sequences
+someone actually lives:
+
+* no first bad week ever drops a band
+* posting is never worse than not posting — ties only, where both are held at a floor
+* no week moves the score by more than the cap
+* out of the low band in **5** posted weeks; out of the high band in **6** missed ones
+
+That last pair is §2 rule 2 in the form a person feels: getting back is cheaper than
+falling.
+
+**Consequences.**
+* `raw` is still the §6 formula and is still tested as such. What changed is that it is
+  the fold's *target*, not the score.
+* Old weeks influence the score, through where they left it. They cannot not — that is
+  what a movement cap means. `TestOnlyTheRollingWindowCounts` asserted the opposite and
+  was wrong to; it is now `TestTheFormulaSeesOnlyTheRollingWindow`, plus a test that a bad
+  patch washes out.
+* `Postgres.RecentOutcomes` used to reset an over-large limit to 8. With `Replay` at 520
+  that would have silently returned the old behaviour and no test would have failed. It
+  clamps down to a ceiling now, and there is a test for the clamp specifically.
+* The weights and the bands are untouched. This is a fix to the arithmetic that was
+  supposed to implement §6, not a change to §6, so it is not an escalation under §8.
+* The invariants are checked by enumeration, not by example. Fixtures could not have found
+  this and did not.

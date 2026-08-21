@@ -133,8 +133,18 @@ const (
 	WeightPodImpact      = 0.15
 )
 
-// Window is the rolling history the score is computed over.
+// Window is the rolling history the §6 formula is computed over.
 const Window = 8
+
+// Replay is how many weeks Compute folds forward. It is not the same as Window and it
+// deliberately covers a long life rather than a recent slice: the fold's seed has to sit
+// at a *fixed* point in someone's history, because a seed that moves forward one week at
+// a time makes the score jump by up to 0.24 in a week and lets a first bad week drop a
+// band. See ADR-022 — the numbers there are measured, not estimated.
+//
+// Someone with more history than this keeps a seed that is years old, which is as close
+// to fixed as a bounded query gets.
+const Replay = 520
 
 // recencyMultiplier is how much more the last two weeks count. CLAUDE.md §6: "last 2
 // weeks counted 2×".
@@ -158,24 +168,48 @@ const maxWeeklyMovement = 0.1
 // Compute returns someone's reliability from their recent weeks, newest first.
 //
 // The score is derived from history rather than incremented in place, so it is
-// backfill-safe (CLAUDE.md §5) and there is no stored number to drift. The asymmetry and
-// the cap from §6 are then applied against the score their history had *before* the most
-// recent week, which is what "increment" and "decrement" mean when nothing is stored.
+// backfill-safe (CLAUDE.md §5) and there is no stored number to drift.
+//
+// It is a fold, not a single adjustment: the whole history is replayed forward from the
+// cold start, one week at a time, applying the §6 asymmetry and cap at every step. That
+// matters more than it looks. An earlier version compared the newest week against
+// raw(older weeks) — the undamped formula over the shorter history — and called that
+// "the score before this week". It was not. The score before this week was itself
+// damped, so measuring against the raw value re-opened the whole gap every week: the
+// per-week cap and the band floor were computed from a number the person never had, and
+// neither guarantee held on the sequence they actually lived. Weeks where posting a
+// proof *lowered* the score were reachable, which is §2 rule 2 exactly backwards.
 func Compute(outcomes []Outcome, report SelfReport) Score {
-	if len(outcomes) == 0 {
-		return ColdStart(report)
+	// Only the rolling window is replayed. CLAUDE.md §6 scopes the formula to 8 weeks,
+	// and a fold that replayed everything would quietly make the score depend on a bad
+	// month two years ago — recovery is meant to be cheaper than punishment (§2 rule 2),
+	// and a history that never drops out is punishment with no end.
+	score := ColdStart(report)
+	// heldAtFloor is whether last week's downward move was stopped by a band floor. The
+	// floor holds for exactly one week: a single bad week can never drop a band, two
+	// consecutive ones can. Without the memory the guard would have to key off position
+	// instead, and someone who arrives exactly on a boundary by doing well would lose a
+	// band to their first bad week — the opposite of what the cap is for.
+	heldAtFloor := false
+	// Oldest first: outcomes are newest-first, so walk the slice backwards.
+	for i := len(outcomes) - 1; i >= 0; i-- {
+		var held bool
+		score, held = step(score, raw(outcomes[i:]), heldAtFloor)
+		// Posting clears the protection. A week someone showed up for is not one of the
+		// "consecutive bad weeks" the floor is allowed to give way to — otherwise a week
+		// they posted could spend the protection and leave the next miss free to drop a
+		// band, which is the case this rule exists to prevent.
+		heldAtFloor = held && !outcomes[i].Posted
 	}
-	if len(outcomes) > Window {
-		outcomes = outcomes[:Window]
-	}
+	return score
+}
 
-	current := raw(outcomes)
-	previous := ColdStart(report)
-	if len(outcomes) > 1 {
-		previous = raw(outcomes[1:])
-	}
-
-	delta := current - previous
+// step moves a score one week towards what the history now says, under the two rules §6
+// states about movement. It reports whether a band floor stopped the move, which is what
+// lets the floor hold for one week and no longer.
+func step(previous, target Score, heldLastWeek bool) (Score, bool) {
+	delta := target - previous
+	// "Increment on completion must be larger than decrement on miss" (CLAUDE.md §6).
 	if delta < 0 {
 		delta *= missDampening
 	}
@@ -188,17 +222,17 @@ func Compute(outcomes []Outcome, report SelfReport) Score {
 
 	candidate := Clamp(previous + delta)
 
-	// "Cap per-week movement so a single bad week can't drop a band" (CLAUDE.md §6),
-	// implemented literally: a downward move may take you to the floor of your band but
-	// not through it. Once you are sitting on the floor, a further bad week may cross —
-	// otherwise a band would be a trap rather than a cap.
-	if candidate < previous {
-		floor := bandFloor(previous.Band())
-		if previous > floor && candidate < floor {
-			candidate = floor
+	// "Cap per-week movement so a single bad week can't drop a band" (CLAUDE.md §6). A
+	// downward move may take someone to the floor of their band but not through it —
+	// unless it was already stopped there last week, in which case the band would be a
+	// trap rather than a cap.
+	if candidate < previous && candidate < bandFloor(previous.Band()) {
+		if !heldLastWeek {
+			return bandFloor(previous.Band()), true
 		}
+		return candidate, false
 	}
-	return candidate
+	return candidate, false
 }
 
 // raw is the §6 formula with no smoothing.

@@ -70,7 +70,11 @@ func (j *Job) RunWindow(ctx context.Context) (Result, error) {
 		// History is read per candidate rather than joined in, because the reliability
 		// score is derived and never stored — there is no column to select
 		// (CLAUDE.md §6). The pool is bounded and the job is hourly, so this is cheap.
-		outcomes, err := j.store.RecentOutcomes(ctx, w.UserID, reliability.Window)
+		//
+		// The whole history is read, not the formula's 8-week window: Compute folds
+		// forward from a fixed seed and truncating the fold to the window is what made
+		// the §6 movement cap fail (ADR-022). A week is one row.
+		outcomes, err := j.store.RecentOutcomes(ctx, w.UserID, reliability.Replay)
 		if err != nil {
 			return result, fmt.Errorf("matching: read history: %w", err)
 		}

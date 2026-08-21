@@ -957,9 +957,23 @@ func (p *Postgres) MarkNotificationSent(ctx context.Context, id string, at time.
 
 // ---------------------------------------------------------------- M5: recovery
 
+// The bounds on how much week history one call will return. The ceiling is a decade of
+// weeks: enough that the reliability fold's seed is effectively fixed (ADR-022), and
+// still a bounded query.
+const (
+	defaultOutcomeLimit = 8
+	maxOutcomeLimit     = 520
+)
+
 func (p *Postgres) RecentOutcomes(ctx context.Context, userID string, limit int) ([]WeekOutcome, error) {
-	if limit <= 0 || limit > 52 {
-		limit = 8
+	// A limit that is too large is clamped down to the ceiling, never reset to a small
+	// default: silently returning 8 weeks to a caller that asked for 520 is how a
+	// reliability fix becomes a no-op in production without a single test failing.
+	if limit <= 0 {
+		limit = defaultOutcomeLimit
+	}
+	if limit > maxOutcomeLimit {
+		limit = maxOutcomeLimit
 	}
 	rows, err := p.pool.Query(ctx, `
 		SELECT w.id, mw.state = 'posted', w.pod_completed, w.closes_at
