@@ -12,6 +12,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -208,22 +210,34 @@ func newJourney(t *testing.T, pairsOnly ...bool) *journey {
 	}
 	ctx := context.Background()
 
-	conn, err := pgx.Connect(ctx, url)
+	// A database of its own, created and dropped per test.
+	//
+	// The journey needs an empty database — it asserts that *no* proof survived a cycle,
+	// which only means something if nothing else put one there. Truncating the shared one
+	// is not an option: `go test ./...` runs packages concurrently, so internal/store
+	// would be reading rows this test had just deleted. That is exactly what happened the
+	// first time, and it passed alone and failed in the suite.
+	admin, err := pgx.Connect(ctx, url)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
+	name := fmt.Sprintf("pod_journey_%d_%d", os.Getpid(), journeyCounter.Add(1))
+	if _, err := admin.Exec(ctx, `CREATE DATABASE `+pgx.Identifier{name}.Sanitize()); err != nil {
+		_ = admin.Close(ctx)
+		t.Skipf("cannot create databases with this connection: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = admin.Exec(context.Background(), `DROP DATABASE IF EXISTS `+pgx.Identifier{name}.Sanitize())
+		_ = admin.Close(context.Background())
+	})
+	url = replaceDatabaseName(url, name)
+
+	conn, err := pgx.Connect(ctx, url)
+	if err != nil {
+		t.Fatalf("connect to the journey database: %v", err)
+	}
 	if _, err := migrate.Up(ctx, conn); err != nil {
 		t.Fatalf("migrate: %v", err)
-	}
-	// A clean slate, so a previous run's pods cannot be matched into this one's.
-	for _, table := range []string{
-		"proofs", "member_weeks", "weeks", "pod_continuations", "recovery_offers",
-		"pod_members", "pods", "pool_tickets", "intents", "slot_entitlements",
-		"notifications", "devices", "refresh_tokens", "auth_challenges", "users",
-	} {
-		if _, err := conn.Exec(ctx, "DELETE FROM "+table); err != nil {
-			t.Fatalf("clear %s: %v", table, err)
-		}
 	}
 	_ = conn.Close(ctx)
 
@@ -483,7 +497,15 @@ func TestTwoLanesGetTwoPodsAgainstPostgres(t *testing.T) {
 	}, http.StatusOK, nil)
 	j.do(t, http.MethodPost, "/v1/pool?slot=1", sam, nil, http.StatusAccepted, nil)
 
+	// Everyone else queues after Sam, a minute apart.
+	//
+	// The pool is ordered by queued_at, then user id. On a fixed clock every candidate
+	// queues at the same instant, so the order falls to random UUIDs — and when the two
+	// other people happen to sort first, greedy pairs them with each other and BOTH of
+	// Sam's lanes are left over. That is correct matcher behaviour on that pool and it
+	// made this test pass or fail by coin flip.
 	for _, email := range []string{"alex@example.com", "remi@example.com"} {
+		j.clock.Advance(time.Minute)
 		other := j.signIn(email)
 		j.do(t, http.MethodPut, "/v1/onboarding/intent", other, api.IntentRequest{
 			GoalText: "finally sort out the spare room", GoalCategory: api.GoalCategoryHome,
@@ -554,4 +576,21 @@ func TestTwoLanesGetTwoPodsAgainstPostgres(t *testing.T) {
 			t.Error("posting in the free lane marked the paid lane's week as posted")
 		}
 	}
+}
+
+// journeyCounter keeps each journey's database name distinct within a process.
+var journeyCounter atomic.Int64
+
+// replaceDatabaseName swaps the database in a postgres URL, keeping everything else.
+func replaceDatabaseName(url, name string) string {
+	base, query, hasQuery := strings.Cut(url, "?")
+	slash := strings.LastIndex(base, "/")
+	if slash < 0 {
+		return url
+	}
+	out := base[:slash+1] + name
+	if hasQuery {
+		out += "?" + query
+	}
+	return out
 }
