@@ -93,11 +93,16 @@ fun GraduationScreen(
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.contentSecondary,
             )
-            // The fork that matters. A pod that completed one week of six still finished
-            // the cycle, and the screen may not imply otherwise.
+            // Weeks the pod completed, never streakWeeks. The streak is the trailing run
+            // and is reset by any miss, so binding it here handed a five-of-six pod the
+            // copy written for a pod that managed none.
+            //
+            // The fork still matters. A pod that completed one week of six finished the
+            // cycle, and the screen may not imply otherwise.
+            val everyoneIn = current.cycle?.weeksEveryoneWasIn ?: 0
             Text(
-                if (current.streakWeeks > 0) {
-                    copy(CopyKey.GRADUATION_STREAK, mapOf("count" to current.streakWeeks.toString()))
+                if (everyoneIn > 0) {
+                    copy(CopyKey.GRADUATION_STREAK, mapOf("count" to everyoneIn.toString()))
                 } else {
                     copy(CopyKey.GRADUATION_STREAK_NONE)
                 },

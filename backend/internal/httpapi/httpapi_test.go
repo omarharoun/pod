@@ -146,6 +146,27 @@ func (h *harness) seedPod(userIDs ...string) string {
 	return podID
 }
 
+// seedPodInLane puts the caller in a pod occupying one of their lanes.
+func (h *harness) seedPodInLane(slot int, userIDs ...string) string {
+	h.t.Helper()
+	podID := "44444444-4444-4444-8444-44444444444" + string(rune('0'+slot))
+	pod := store.Pod{
+		ID:           podID,
+		State:        store.PodStateActive,
+		GoalCategory: "home",
+		Timezone:     "UTC",
+		CreatedAt:    h.clock.Now(),
+	}
+	memberships := make([]store.Membership, 0, len(userIDs))
+	for _, userID := range userIDs {
+		memberships = append(memberships, store.Membership{UserID: userID, Slot: slot})
+	}
+	if err := h.store.CreatePod(context.Background(), pod, memberships, h.clock.Now()); err != nil {
+		h.t.Fatalf("CreatePod: %v", err)
+	}
+	return podID
+}
+
 // seedWeekWithProof puts the caller in a pod with an open week and a committed proof, so
 // pod-scoped routes can be exercised against real ids.
 func (h *harness) seedWeekWithProof(userID string) pathIDs {

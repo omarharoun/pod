@@ -138,7 +138,7 @@ func (j *Job) persist(ctx context.Context, pod Pod, waiting []store.PoolCandidat
 	// The offer to lower the bar was about the pod that ended. Being in a new one
 	// answers it.
 	for _, member := range memberships {
-		if err := j.store.ClearRecoveryOffer(ctx, member.UserID); err != nil {
+		if err := j.store.ClearRecoveryOffer(ctx, member.UserID, member.Slot); err != nil {
 			j.log.ErrorContext(ctx, "could not clear a recovery offer", slog.Any("error", err))
 		}
 	}

@@ -1088,3 +1088,72 @@ the free pod's existence depend on a payment record.
   opaque provider transaction id, and nothing else. No name, no card, no address, no price,
   no country. Prices come from StoreKit and Play at render time and never from this API.
   The server needs to know *that* a slot is paid for, not who paid or what it cost.
+
+---
+
+## ADR-027 — Three ways a finished cycle was reported back as a failure
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M7
+
+**Context.** A second adversarial audit ran over the M5/M6 code and the fixes from ADR-024.
+It died partway through on a usage limit — 11 of 51 agents finished — but two findings had
+already survived refutation, and a third turned up alongside them. All three are the same
+shape: a thing that went *fine* being shown to someone as a thing that went wrong. That is
+§2 rule 1, and it is the failure mode this product exists to avoid.
+
+**1. The alternate path summoned the recovery screen.**
+
+Both clients decided the recovery phase with `offerLowerIntensity || offerAlternatePath`.
+The second flag is derived from `users.dissolved_pods >= 3`, a count that only ever
+increments and is never cleared. So anyone who had had three pods dissolve saw *"That pod
+has wound down"* and the one-to-one card **every time they were between pods** — including
+immediately after graduating a cycle and choosing to stop.
+
+ADR-023 forbids exactly that in writing, and the backend honours it: `CloseCompletedPod`
+and `StartNextCycle` touch neither `dissolved_pods` nor the recovery offer. The client
+phase check broke it anyway. Worse than a one-off: such a person could effectively never
+reach the ordinary questions screen again.
+
+Gated on `offerLowerIntensity` alone now — the flag that actually means "a pod dissolved
+under you". The alternate path rides along on that screen; it does not summon it.
+
+The test that was supposed to guard this missed it by construction: it asserted both flags
+false after `CompleteCycle`, but its fixture users had `dissolved_pods = 0`, so the flag
+was false for a reason unrelated to graduating.
+
+**2. The graduation count was the trailing streak.**
+
+`streak_weeks` is reset to zero by any miss, so it is *consecutive weeks to date*, not
+*weeks everyone was in*. Bound to the graduation copy it produced two wrong screens:
+
+* fully in for weeks 1–5, missed week 6 → streak 0 → the consolation line, handed to a pod
+  that landed five of six because of *when* the miss happened;
+* fully in for 1, 2, 3, 5, 6, missed 4 → *"2 weeks where everyone was in"*, quietly
+  deleting three weeks the pod did complete and that everyone there remembers.
+
+`Cycle` gains `weeks_everyone_was_in`, counted from `weeks.pod_completed`, and both screens
+bind to that. `Cycle.weeks_completed` stays what it says it is — the position in the cycle,
+not a measure of anybody — and the two are now documented against each other.
+
+The zero-case copy was wrong too: *"Some weeks landed, some didn't"* is false for a pod
+where none did. It is *"Not every week landed. Getting to the end still counts."*
+
+**3. A pod ending in one lane followed you into another.**
+
+Found while wiring M7. `recovery_offered_at` was a column on `users`, so a lane-1 pod
+dissolving put *"that pod has wound down"* — and an offer to lower the intensity — in front
+of lane 0, whose pod was running perfectly well. Unexplainable as well as wrong, because
+ADR-018 makes the copy deliberately identical for everyone and it cannot say which pod it
+means.
+
+Migration 0008 moves the offer to a `recovery_offers` table keyed by `(user_id, slot)`. The
+dissolved-pods **count** stays per user on purpose: three pods ending under someone is a
+fact about them whichever lanes it happened in, and that is what §6 keys the one-to-one
+path on.
+
+**The pattern, again.** ADR-024's lesson was that a test and a bug can share an assumption.
+All three of these are the same lesson from the other side: the *backend* was right in every
+case, and the mistake was in what the client decided to show. Rules kept in the store and
+broken in the view are still broken. Both clients now assert their phase decisions, and the
+graduation copy is checked against a count with a defined meaning rather than the nearest
+number that looked like one.

@@ -984,7 +984,7 @@ components:
         A pod runs for a fixed number of weeks and then finishes. The client is given
         counts and an instant, not a week index to do arithmetic on — "two weeks left"
         must not be a date calculation on a device in the wrong timezone (`CLAUDE.md` §5).
-      required: [length_weeks, weeks_completed, ends_at]
+      required: [length_weeks, weeks_completed, weeks_everyone_was_in, ends_at]
       properties:
         length_weeks:
           type: integer
@@ -996,6 +996,20 @@ components:
           description: |
             Weeks of the cycle that have closed. Not weeks the pod *completed* — the two
             differ and this one is the position in the cycle, not a measure of anybody.
+        weeks_everyone_was_in:
+          type: integer
+          minimum: 0
+          description: |
+            How many weeks of the cycle the **pod** completed — every member in.
+
+            Not `streak_weeks`, which is the *trailing* run and is reset to zero by any
+            miss. A pod that was fully in for five of six weeks and missed the last one
+            has a streak of zero and five weeks here, and the graduation screen must use
+            this one: the streak would hand a five-of-six pod the copy written for a pod
+            that managed none.
+
+            Pod-level, like everything else about a cycle. There is no per-member
+            equivalent (`CLAUDE.md` §2 rule 3).
         ends_at:
           type: string
           format: date-time

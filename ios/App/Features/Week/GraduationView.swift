@@ -20,6 +20,7 @@ struct GraduationView: View {
     @Environment(\.copy) private var copy
 
     private var cycleLength: Int { pod.cycle?.lengthWeeks ?? 0 }
+    private var weeksEveryoneWasIn: Int { pod.cycle?.weeksEveryoneWasIn ?? 0 }
 
     /// Nothing about the free pod is locked, so the offer never says "unlock". It does not
     /// name a price either — the button opens the platform sheet, where the real price is.
@@ -94,11 +95,14 @@ struct GraduationView: View {
                 .podText(PodTokens.TypeScale.body)
                 .foregroundStyle(palette(.contentSecondary))
 
-            // The fork that matters. A pod that completed one week of six still finished
-            // the cycle, and the screen may not imply otherwise — "you still got here"
-            // is what refuses to make the count the point.
-            Text(pod.streakWeeks > 0
-                ? copy(.graduationStreak, ["count": String(pod.streakWeeks)])
+            // Weeks the pod completed, never `streakWeeks`. The streak is the trailing
+            // run and is reset by any miss, so binding it here handed a five-of-six pod
+            // the copy written for a pod that managed none.
+            //
+            // The fork still matters. A pod that completed one week of six finished the
+            // cycle, and the screen may not imply otherwise.
+            Text(weeksEveryoneWasIn > 0
+                ? copy(.graduationStreak, ["count": String(weeksEveryoneWasIn)])
                 : copy(.graduationStreakNone))
                 .podText(PodTokens.TypeScale.bodyStrong)
                 .foregroundStyle(palette(.statePosted))
@@ -223,6 +227,8 @@ struct GraduationView: View {
 
 private extension Pod {
     /// A graduated pod for previews. `youAnswered` nil means the choice is still open.
+    /// `streakWeeks` here doubles as the weeks-everyone-was-in count, since the previews
+    /// are about the copy fork and the two agree for a pod that never missed.
     static func previewGraduated(streakWeeks: Int, youAnswered: Bool?) -> Pod {
         let now = Date(timeIntervalSince1970: 1_787_000_000)
         return Pod(
@@ -236,7 +242,7 @@ private extension Pod {
                 PodMember(id: UUID(), displayName: "Alex", isYou: false, joinedAt: now),
                 PodMember(id: UUID(), displayName: "Remi", isYou: false, joinedAt: now),
             ],
-            cycle: Cycle(lengthWeeks: 6, weeksCompleted: 6, endsAt: now),
+            cycle: Cycle(lengthWeeks: 6, weeksCompleted: 6, weeksEveryoneWasIn: streakWeeks, endsAt: now),
             continuation: Continuation(
                 continuing: youAnswered == true ? 2 : 1,
                 undecided: 1,

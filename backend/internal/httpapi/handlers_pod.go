@@ -81,11 +81,12 @@ func (s *Server) handleGetPod(w http.ResponseWriter, r *http.Request) {
 func (s *Server) podResponseWithCycle(r *http.Request, pod store.Pod, viewerID string) api.Pod {
 	out := podResponse(pod, viewerID)
 
-	if length, completed, endsAt, err := s.weeks.CycleOf(r.Context(), pod); err == nil {
+	if cycle, err := s.weeks.CycleOf(r.Context(), pod); err == nil {
 		out.Cycle = &api.Cycle{
-			LengthWeeks:    length,
-			WeeksCompleted: completed,
-			EndsAt:         endsAt,
+			LengthWeeks:        cycle.LengthWeeks,
+			WeeksCompleted:     cycle.WeeksElapsed,
+			WeeksEveryoneWasIn: cycle.WeeksEveryoneWasIn,
+			EndsAt:             cycle.EndsAt,
 		}
 	}
 

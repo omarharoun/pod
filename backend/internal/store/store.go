@@ -27,8 +27,9 @@ type User struct {
 	// DissolvedPods counts pods that ended under this person while they were inactive.
 	// Never returned by the API — it is an input to what they are offered, not a mark.
 	DissolvedPods int
-	// RecoveryOfferedAt is set when a pod they were in dissolved.
-	RecoveryOfferedAt *time.Time
+	// There is deliberately no recovery flag here. The offer belongs to a lane, not to
+	// a person: a pod ending in one lane must not put "that pod has wound down" in front
+	// of a lane whose pod is running (migration 0008).
 }
 
 // AlternatePathAfter is how many dissolved pods it takes before someone is offered the
@@ -378,6 +379,11 @@ type Store interface {
 	GetActivePod(ctx context.Context, userID string, slot int) (Pod, error)
 	// ListActivePodsForUser is every lane the caller currently has a pod in.
 	ListActivePodsForUser(ctx context.Context, userID string) ([]Pod, error)
+	// CountWeeksEveryoneWasIn is how many of a pod's closed weeks the pod completed.
+	//
+	// Distinct from Pod.StreakWeeks, which is the trailing run and is reset by any miss.
+	// The graduation screen needs this one; the ring needs the streak.
+	CountWeeksEveryoneWasIn(ctx context.Context, podID string) (int, error)
 	// ListActivePods is the weekly job's input.
 	ListActivePods(ctx context.Context) ([]Pod, error)
 
@@ -435,8 +441,12 @@ type Store interface {
 	// DissolvePod ends a pod, records why, and counts it against the members who were
 	// inactive in it. Idempotent.
 	DissolvePod(ctx context.Context, podID, reason string, inactiveMemberIDs []string, at time.Time) error
-	// RecoveryFor reports what a person should be offered after a pod ended.
-	RecoveryFor(ctx context.Context, userID string) (Recovery, error)
+	// RecoveryFor reports what a person should be offered in one lane after a pod ended.
+	//
+	// The lower-the-bar offer is per lane; the alternate path is not. Three pods ending
+	// under someone is a fact about them whichever lanes it happened in, and that is what
+	// CLAUDE.md §6 keys the one-to-one path on.
+	RecoveryFor(ctx context.Context, userID string, slot int) (Recovery, error)
 	// ClearRecoveryOffer is called when someone acts on the offer, or joins a new pod.
-	ClearRecoveryOffer(ctx context.Context, userID string) error
+	ClearRecoveryOffer(ctx context.Context, userID string, slot int) error
 }

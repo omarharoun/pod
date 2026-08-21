@@ -560,3 +560,40 @@ func TestTheFreeLaneSurvivesABrokenEntitlementsStore(t *testing.T) {
 		t.Error("a broken entitlements store granted an unpaid lane")
 	}
 }
+
+// A pod ending in one lane must not put the recovery offer in front of another lane.
+//
+// The offer says "that pod has wound down" and proposes lowering *this* lane's intensity.
+// Shown against a lane whose pod is running perfectly well, it is both wrong and — since
+// the copy is deliberately identical for everyone (ADR-018) — unexplainable.
+func TestAPodEndingInOneLaneDoesNotFollowYouIntoAnother(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	// Two lanes, each with its own goal.
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", validIntent(), session.AccessToken), http.StatusOK, nil)
+	decode(t, h.do(http.MethodPost, "/v1/slots", api.ClaimSlotRequest{
+		Source: api.PurchaseSourceAppStore, Receipt: "dev:order-1",
+	}, session.AccessToken), http.StatusOK, nil)
+	second := validIntent()
+	second.GoalText = "learn to make bread properly"
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent?slot=1", second, session.AccessToken), http.StatusOK, nil)
+
+	// Lane 1 gets a pod, and it dissolves.
+	podID := h.seedPodInLane(1, session.User.ID)
+	if err := h.store.DissolvePod(t.Context(), podID, "inactive", nil, h.clock.Now()); err != nil {
+		t.Fatalf("DissolvePod: %v", err)
+	}
+
+	var laneOne api.OnboardingState
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/state?slot=1", nil, session.AccessToken), http.StatusOK, &laneOne)
+	if laneOne.Recovery == nil || !laneOne.Recovery.OfferLowerIntensity {
+		t.Fatalf("the lane whose pod ended was offered nothing: %+v", laneOne.Recovery)
+	}
+
+	var laneZero api.OnboardingState
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/state", nil, session.AccessToken), http.StatusOK, &laneZero)
+	if laneZero.Recovery != nil && laneZero.Recovery.OfferLowerIntensity {
+		t.Errorf("a pod ending in lane 1 offered to lower lane 0's intensity: %+v", laneZero.Recovery)
+	}
+}

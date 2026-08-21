@@ -76,7 +76,7 @@
   "graduation.title": "{count} weeks, done",
   "graduation.body": "That's the cycle. Your pod got to the end of it together.",
   "graduation.streak": "{count} weeks where everyone was in.",
-  "graduation.streakNone": "Some weeks landed, some didn't. You still got here.",
+  "graduation.streakNone": "Not every week landed. Getting to the end still counts.",
   "graduation.choice.title": "Another {count}?",
   "graduation.choice.body": "Same pod, same goal, a fresh cycle. Everyone decides for themselves.",
   "graduation.choice.yes": "I'm in for another",

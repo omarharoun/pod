@@ -342,4 +342,56 @@ class OnboardingRepositoryTest {
         )
         assertNull("no intent yet is a state, not a failure", repository.failure.value)
     }
+
+    /**
+     * Someone with three prior dissolved pods carries `offer_alternate_path` forever —
+     * `dissolved_pods` only ever increments. Gating the recovery phase on it meant that
+     * after *graduating* a cycle and choosing to stop, they were shown "That pod has wound
+     * down" and the one-to-one card: a finished cycle presented back to them as a pod that
+     * failed, and as evidence the group format is not working.
+     *
+     * ADR-023 forbids exactly this in writing, and the backend half honours it. The phase
+     * check is what broke it.
+     */
+    @Test
+    fun `the alternate path alone does not make it a pod that wound down`() = runTest {
+        val (repository, _) = repository(
+            Reply(
+                HttpStatusCode.OK,
+                """
+                {"step":"intent","intent_complete":true,"in_pool":false,
+                 "recovery":{"offer_lower_intensity":false,"offer_alternate_path":true}}
+                """.trimIndent(),
+            ),
+        )
+
+        repository.load()
+
+        assertEquals(
+            "nothing wound down, so this is the ordinary questions screen",
+            OnboardingPhase.Questions(OnboardingQuestion.GOAL),
+            repository.phase.value,
+        )
+    }
+
+    /** A pod that actually ended still shows the screen, with the card alongside. */
+    @Test
+    fun `a dissolved pod shows the recovery screen with the alternate path on it`() = runTest {
+        val (repository, _) = repository(
+            Reply(
+                HttpStatusCode.OK,
+                """
+                {"step":"intent","intent_complete":true,"in_pool":false,
+                 "recovery":{"offer_lower_intensity":true,"current_intensity":3,
+                             "suggested_intensity":2,"offer_alternate_path":true}}
+                """.trimIndent(),
+            ),
+        )
+
+        repository.load()
+
+        val phase = repository.phase.value
+        assertTrue("phase was $phase", phase is OnboardingPhase.Recovering)
+        assertTrue((phase as OnboardingPhase.Recovering).recovery.offerAlternatePath)
+    }
 }

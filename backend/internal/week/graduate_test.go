@@ -57,7 +57,7 @@ func TestGraduatingCostsNobodyAnything(t *testing.T) {
 	}
 
 	for _, member := range h.members {
-		recovery, err := h.store.RecoveryFor(ctx, member)
+		recovery, err := h.store.RecoveryFor(ctx, member, 0)
 		if err != nil {
 			t.Fatalf("RecoveryFor: %v", err)
 		}
@@ -101,7 +101,7 @@ func TestAQuietPodDissolvesRatherThanGraduating(t *testing.T) {
 	}
 
 	// And the members carry the dissolve consequence, which graduation never applies.
-	recovery, err := h.store.RecoveryFor(context.Background(), h.members[0])
+	recovery, err := h.store.RecoveryFor(context.Background(), h.members[0], 0)
 	if err != nil {
 		t.Fatalf("RecoveryFor: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestTwoContinuingKeepsThePod(t *testing.T) {
 	if restarted.StreakWeeks == 0 {
 		t.Error("carrying on reset the shared streak")
 	}
-	recovery, err := h.store.RecoveryFor(ctx, h.members[2])
+	recovery, err := h.store.RecoveryFor(ctx, h.members[2], 0)
 	if err != nil {
 		t.Fatalf("RecoveryFor: %v", err)
 	}
@@ -296,5 +296,62 @@ func TestAnsweringAfterTheDeadlineIsRejected(t *testing.T) {
 	h.clock.Advance(cycle.DecideWindow + time.Hour)
 	if _, err := h.service.Continue(ctx, pod.ID, h.members[0], true); err == nil {
 		t.Fatal("an answer was accepted after the deadline")
+	}
+}
+
+// The graduation screen's count must be weeks the pod completed, not the shared streak.
+//
+// The streak is the *trailing* run and is reset to zero by any miss. A pod that was fully
+// in for five of six weeks and missed the last one has a streak of zero — so binding the
+// screen to it handed a five-of-six pod the copy written for a pod that managed none, and
+// a pod that missed one week in the middle silently lost the weeks before it.
+func TestTheCycleCountsWeeksThePodCompletedNotTheTrailingStreak(t *testing.T) {
+	h := newTrio(t, "Europe/Lisbon")
+	ctx := context.Background()
+
+	// In for five weeks, then a quiet sixth.
+	for week := 0; week < cycle.DefaultLengthWeeks-1; week++ {
+		h.everyonePosts()
+		h.advanceOneWeek()
+	}
+	h.advanceOneWeek()
+
+	pod := h.reloadPod()
+	if pod.StreakWeeks != 0 {
+		t.Fatalf("the fixture is wrong: a missed last week should reset the streak, got %d", pod.StreakWeeks)
+	}
+
+	got, err := h.service.CycleOf(ctx, pod)
+	if err != nil {
+		t.Fatalf("CycleOf: %v", err)
+	}
+	if got.WeeksEveryoneWasIn != cycle.DefaultLengthWeeks-1 {
+		t.Errorf("weeks everyone was in: got %d, want %d — the streak says %d and must not be used here",
+			got.WeeksEveryoneWasIn, cycle.DefaultLengthWeeks-1, pod.StreakWeeks)
+	}
+}
+
+// And a miss in the middle does not delete the weeks before it.
+func TestAMissedWeekInTheMiddleDoesNotEraseTheOnesBefore(t *testing.T) {
+	h := newTrio(t, "Europe/Lisbon")
+	ctx := context.Background()
+
+	for week := 0; week < 3; week++ {
+		h.everyonePosts()
+		h.advanceOneWeek()
+	}
+	h.advanceOneWeek() // week four: nobody posts
+	for week := 0; week < 2; week++ {
+		h.everyonePosts()
+		h.advanceOneWeek()
+	}
+
+	pod := h.reloadPod()
+	got, err := h.service.CycleOf(ctx, pod)
+	if err != nil {
+		t.Fatalf("CycleOf: %v", err)
+	}
+	if got.WeeksEveryoneWasIn != 5 {
+		t.Errorf("weeks everyone was in: got %d, want 5 (three before the miss, two after)", got.WeeksEveryoneWasIn)
 	}
 }

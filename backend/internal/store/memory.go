@@ -30,6 +30,10 @@ type Memory struct {
 	// returns that lane rather than opening another.
 	grants map[string]Membership
 
+	// recoveryOffers is keyed by lane: a pod ending in one lane must not put "that pod
+	// has wound down" in front of a lane whose pod is running.
+	recoveryOffers map[string]bool
+
 	// FailEntitlements makes ListEntitlements fail, so a test can prove the free lane
 	// does not depend on it. Exported because that is the only way to set it, and the
 	// property it proves is the one CLAUDE.md §2 rule 6 is about.
@@ -462,6 +466,19 @@ func (m *Memory) GetActivePod(_ context.Context, userID string, slot int) (Pod, 
 	pod := m.pods[podID]
 	pod.Members = m.podMembers[podID]
 	return pod, nil
+}
+
+// CountWeeksEveryoneWasIn is how many of a pod's closed weeks the pod completed.
+func (m *Memory) CountWeeksEveryoneWasIn(_ context.Context, podID string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, week := range m.weeks {
+		if week.PodID == podID && week.ClosedAt != nil && week.PodCompleted {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // ListActivePodsForUser is every lane the caller currently has a pod in.
@@ -1064,16 +1081,20 @@ func (m *Memory) DissolvePod(_ context.Context, podID, reason string, inactiveMe
 			// Only inactive members carry the count (CLAUDE.md §6).
 			user.DissolvedPods++
 		}
-		offered := at
-		user.RecoveryOfferedAt = &offered
 		m.users[member.UserID] = user
+		// The offer belongs to the lane the pod occupied for *this* member, which
+		// differs per member because a slot belongs to the membership (ADR-026).
+		if m.recoveryOffers == nil {
+			m.recoveryOffers = map[string]bool{}
+		}
+		m.recoveryOffers[laneKey(member.UserID, member.Slot)] = true
 	}
 	// Membership ends with the pod, so everyone is free to be matched again.
 	m.podMembers[podID] = nil
 	return nil
 }
 
-func (m *Memory) RecoveryFor(_ context.Context, userID string) (Recovery, error) {
+func (m *Memory) RecoveryFor(_ context.Context, userID string, slot int) (Recovery, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	user, ok := m.users[userID]
@@ -1081,19 +1102,20 @@ func (m *Memory) RecoveryFor(_ context.Context, userID string) (Recovery, error)
 		return Recovery{}, ErrNotFound
 	}
 	return Recovery{
-		OfferLowerIntensity: user.RecoveryOfferedAt != nil,
-		OfferAlternatePath:  user.DissolvedPods >= AlternatePathAfter,
+		// Per lane: the offer is about the pod that ended, and it ended in one lane.
+		OfferLowerIntensity: m.recoveryOffers[laneKey(userID, slot)],
+		// Not per lane: three pods ending under someone is a fact about them whichever
+		// lanes it happened in, and that is what §6 keys the one-to-one path on.
+		OfferAlternatePath: user.DissolvedPods >= AlternatePathAfter,
 	}, nil
 }
 
-func (m *Memory) ClearRecoveryOffer(_ context.Context, userID string) error {
+func (m *Memory) ClearRecoveryOffer(_ context.Context, userID string, slot int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	user, ok := m.users[userID]
-	if !ok {
+	if _, ok := m.users[userID]; !ok {
 		return ErrNotFound
 	}
-	user.RecoveryOfferedAt = nil
-	m.users[userID] = user
+	delete(m.recoveryOffers, laneKey(userID, slot))
 	return nil
 }

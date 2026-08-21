@@ -637,6 +637,7 @@ must not be a date calculation on a device in the wrong timezone (`CLAUDE.md` §
 |---|---|---|---|
 | `length_weeks` | `integer` | yes | How long this pod's cycle is. Fixed when the pod forms. |
 | `weeks_completed` | `integer` | yes | Weeks of the cycle that have closed. Not weeks the pod *completed* — the two differ and this one is the position in the cycle, not a measure of anybody. |
+| `weeks_everyone_was_in` | `integer` | yes | How many weeks of the cycle the **pod** completed — every member in. Not `streak_weeks`, which is the *trailing* run and is reset to zero by any miss. A pod that was fully in for five of six weeks and missed the last one has a streak of zero and five weeks here, and the graduation screen must use this one: the streak would hand a five-of-six pod the copy written for a pod that managed none. Pod-level, like everything else about a cycle. There is no per-member equivalent (`CLAUDE.md` §2 rule 3). |
 | `ends_at` | `string(date-time)` | yes | When the last week of the cycle closes, in the pod's zone. |
 
 ### DevicePlatform

@@ -927,7 +927,7 @@ func TestPostgresCompleteCycleCostsNobodyAnything(t *testing.T) {
 		t.Errorf("a graduated pod has %d members, want 2", len(pod.Members))
 	}
 	for _, user := range []store.User{sam, alex} {
-		recovery, err := db.RecoveryFor(ctx, user.ID)
+		recovery, err := db.RecoveryFor(ctx, user.ID, 0)
 		if err != nil {
 			t.Fatalf("RecoveryFor: %v", err)
 		}
@@ -1052,7 +1052,7 @@ func TestPostgresStartNextCycleKeepsTheYesesAndTheStreak(t *testing.T) {
 	if _, err := db.GetActivePod(ctx, remi.ID, 0); err == nil {
 		t.Error("the member who stopped is still in the pod")
 	}
-	recovery, err := db.RecoveryFor(ctx, remi.ID)
+	recovery, err := db.RecoveryFor(ctx, remi.ID, 0)
 	if err != nil {
 		t.Fatalf("RecoveryFor: %v", err)
 	}

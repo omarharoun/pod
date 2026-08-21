@@ -118,8 +118,15 @@ public class OnboardingRepository(private val client: PodApiClient) {
                     ?.let { OnboardingPhase.Waiting(it) }
                     ?: OnboardingPhase.Questions(OnboardingQuestion.GOAL)
 
+                // Gated on offerLowerIntensity alone. That is the flag that means "a pod
+                // dissolved under you"; offerAlternatePath is derived from a count that
+                // only ever increments and is never cleared, so ORing it in showed
+                // "That pod has wound down" to anyone with three prior dissolves whenever
+                // they were between pods — including straight after graduating a cycle,
+                // which ADR-023 forbids in writing. The alternate path rides along on the
+                // screen; it does not summon it.
                 else -> state.recovery
-                    ?.takeIf { it.offerLowerIntensity || it.offerAlternatePath }
+                    ?.takeIf { it.offerLowerIntensity }
                     ?.let { OnboardingPhase.Recovering(it) }
                     ?: OnboardingPhase.Questions(OnboardingQuestion.GOAL)
             }

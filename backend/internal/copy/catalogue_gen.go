@@ -227,7 +227,7 @@ const (
 	// Placeholders: count
 	KeyGraduationStreak Key = "graduation.streak"
 
-	// "Some weeks landed, some didn't. You still got here."
+	// "Not every week landed. Getting to the end still counts."
 	KeyGraduationStreakNone Key = "graduation.streakNone"
 
 	// "Another {count}?"
@@ -917,7 +917,7 @@ var catalogue = map[Key]map[string]string{
 	KeyGraduationTitle:                {"other": "{count} weeks, done"},
 	KeyGraduationBody:                 {"other": "That's the cycle. Your pod got to the end of it together."},
 	KeyGraduationStreak:               {"other": "{count} weeks where everyone was in."},
-	KeyGraduationStreakNone:           {"other": "Some weeks landed, some didn't. You still got here."},
+	KeyGraduationStreakNone:           {"other": "Not every week landed. Getting to the end still counts."},
 	KeyGraduationChoiceTitle:          {"other": "Another {count}?"},
 	KeyGraduationChoiceBody:           {"other": "Same pod, same goal, a fresh cycle. Everyone decides for themselves."},
 	KeyGraduationChoiceYes:            {"other": "I'm in for another"},

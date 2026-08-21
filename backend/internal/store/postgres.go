@@ -98,9 +98,9 @@ func (p *Postgres) UpsertUserByEmail(ctx context.Context, email string, now time
 		INSERT INTO users (id, email, created_at)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-		RETURNING id, email, display_name, created_at, onboarding_complete, dissolved_pods, recovery_offered_at`,
+		RETURNING id, email, display_name, created_at, onboarding_complete, dissolved_pods`,
 		id, NormaliseEmail(email), now).
-		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.OnboardingComplete, &u.DissolvedPods, &u.RecoveryOfferedAt)
+		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.OnboardingComplete, &u.DissolvedPods)
 	if err != nil {
 		return User{}, wrap("upsert user", err)
 	}
@@ -110,9 +110,9 @@ func (p *Postgres) UpsertUserByEmail(ctx context.Context, email string, now time
 func (p *Postgres) GetUser(ctx context.Context, id string) (User, error) {
 	var u User
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, email, display_name, created_at, onboarding_complete, dissolved_pods, recovery_offered_at
+		SELECT id, email, display_name, created_at, onboarding_complete, dissolved_pods
 		FROM users WHERE id = $1`, id).
-		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.OnboardingComplete, &u.DissolvedPods, &u.RecoveryOfferedAt)
+		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.OnboardingComplete, &u.DissolvedPods)
 	if err != nil {
 		return User{}, wrap("get user", err)
 	}
@@ -418,6 +418,18 @@ func (p *Postgres) GetActivePod(ctx context.Context, userID string, slot int) (P
 		FROM pods p
 		JOIN pod_members m ON m.pod_id = p.id
 		WHERE m.user_id = $1 AND m.slot = $2 AND m.left_at IS NULL AND p.state <> 'dissolved'`, userID, slot)
+}
+
+// CountWeeksEveryoneWasIn is how many of a pod's closed weeks the pod completed.
+func (p *Postgres) CountWeeksEveryoneWasIn(ctx context.Context, podID string) (int, error) {
+	var count int
+	err := p.pool.QueryRow(ctx, `
+		SELECT count(*) FROM weeks
+		WHERE pod_id = $1 AND closed_at IS NOT NULL AND pod_completed`, podID).Scan(&count)
+	if err != nil {
+		return 0, wrap("count weeks everyone was in", err)
+	}
+	return count, nil
 }
 
 // ListActivePodsForUser is every lane the caller currently has a pod in.
@@ -1162,11 +1174,14 @@ func (p *Postgres) DissolvePod(ctx context.Context, podID, reason string, inacti
 		return wrap("end memberships", err)
 	}
 
-	// Everyone gets the offer to lower the bar; only inactive members carry the count
-	// (CLAUDE.md §6).
+	// Everyone gets the offer to lower the bar, in the lane the pod occupied for them —
+	// which differs per member, because a slot belongs to the membership (ADR-026).
+	// Only inactive members carry the count (CLAUDE.md §6).
 	if _, err := tx.Exec(ctx, `
-		UPDATE users SET recovery_offered_at = $2
-		WHERE id IN (SELECT user_id FROM pod_members WHERE pod_id = $1)`, podID, at); err != nil {
+		INSERT INTO recovery_offers (user_id, slot, offered_at)
+		SELECT user_id, slot, $2 FROM pod_members WHERE pod_id = $1
+		ON CONFLICT (user_id, slot) DO UPDATE SET offered_at = EXCLUDED.offered_at`,
+		podID, at); err != nil {
 		return wrap("offer recovery", err)
 	}
 	if len(inactiveMemberIDs) > 0 {
@@ -1330,22 +1345,27 @@ func (p *Postgres) StartNextCycle(ctx context.Context, podID string, at time.Tim
 	return wrap("commit next cycle", tx.Commit(ctx))
 }
 
-func (p *Postgres) RecoveryFor(ctx context.Context, userID string) (Recovery, error) {
+func (p *Postgres) RecoveryFor(ctx context.Context, userID string, slot int) (Recovery, error) {
 	var dissolved int
-	var offeredAt *time.Time
+	var offered bool
 	err := p.pool.QueryRow(ctx, `
-		SELECT dissolved_pods, recovery_offered_at FROM users WHERE id = $1`, userID).
-		Scan(&dissolved, &offeredAt)
+		SELECT u.dissolved_pods,
+		       EXISTS (SELECT 1 FROM recovery_offers r WHERE r.user_id = u.id AND r.slot = $2)
+		FROM users u WHERE u.id = $1`, userID, slot).Scan(&dissolved, &offered)
 	if err != nil {
 		return Recovery{}, wrap("recovery for", err)
 	}
 	return Recovery{
-		OfferLowerIntensity: offeredAt != nil,
-		OfferAlternatePath:  dissolved >= AlternatePathAfter,
+		// Per lane: the offer is about the pod that ended, and it ended in one lane.
+		OfferLowerIntensity: offered,
+		// Not per lane: three pods ending under someone is a fact about them whichever
+		// lanes it happened in, and that is what §6 keys the one-to-one path on.
+		OfferAlternatePath: dissolved >= AlternatePathAfter,
 	}, nil
 }
 
-func (p *Postgres) ClearRecoveryOffer(ctx context.Context, userID string) error {
-	_, err := p.pool.Exec(ctx, `UPDATE users SET recovery_offered_at = NULL WHERE id = $1`, userID)
+func (p *Postgres) ClearRecoveryOffer(ctx context.Context, userID string, slot int) error {
+	_, err := p.pool.Exec(ctx,
+		`DELETE FROM recovery_offers WHERE user_id = $1 AND slot = $2`, userID, slot)
 	return wrap("clear recovery offer", err)
 }

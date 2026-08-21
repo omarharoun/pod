@@ -104,7 +104,7 @@ func TestEveryoneIsOfferedRecoveryWhenAPodEnds(t *testing.T) {
 	h.closeCurrentWeekQuietly()
 
 	for _, member := range h.members {
-		recovery, err := h.store.RecoveryFor(ctx, member)
+		recovery, err := h.store.RecoveryFor(ctx, member, 0)
 		if err != nil {
 			t.Fatalf("RecoveryFor: %v", err)
 		}
@@ -144,7 +144,7 @@ func TestTheAlternatePathIsOfferedAfterThree(t *testing.T) {
 		}
 	}
 
-	recovery, err := h.store.RecoveryFor(ctx, user)
+	recovery, err := h.store.RecoveryFor(ctx, user, 0)
 	if err != nil {
 		t.Fatalf("RecoveryFor: %v", err)
 	}

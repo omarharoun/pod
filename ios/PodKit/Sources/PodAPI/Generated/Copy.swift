@@ -232,7 +232,7 @@ public extension CopyKey {
     /// Placeholders: count
     static let graduationStreak = CopyKey(rawValue: "graduation.streak")
 
-    /// "Some weeks landed, some didn't. You still got here."
+    /// "Not every week landed. Getting to the end still counts."
     static let graduationStreakNone = CopyKey(rawValue: "graduation.streakNone")
 
     /// "Another {count}?"

@@ -263,7 +263,7 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, slot int, in In
 
 	// Setting an intent is acting on the offer, whichever way they went. Leaving it
 	// standing would put the same prompt in front of somebody who has already answered it.
-	if err := s.store.ClearRecoveryOffer(ctx, userID); err != nil {
+	if err := s.store.ClearRecoveryOffer(ctx, userID, slot); err != nil {
 		return Intent{}, fmt.Errorf("onboarding: clear recovery offer: %w", err)
 	}
 
@@ -359,7 +359,7 @@ func (s *Service) State(ctx context.Context, userID string, slot int) (State, er
 	now := s.clock.Now()
 	state := State{Step: StepIntent}
 
-	recovery, err := s.store.RecoveryFor(ctx, userID)
+	recovery, err := s.store.RecoveryFor(ctx, userID, slot)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return State{}, fmt.Errorf("onboarding: read recovery: %w", err)
 	}

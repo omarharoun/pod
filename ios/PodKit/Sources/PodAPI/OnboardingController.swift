@@ -94,7 +94,14 @@ public final class OnboardingController {
             case "waiting_for_pod":
                 self.phase = .waiting(state.poolTicket ?? PoolTicket(queuedAt: .now, nextWindowAt: .now))
             default:
-                if let recovery = state.recovery, recovery.offerLowerIntensity || recovery.offerAlternatePath {
+                // Gated on `offerLowerIntensity` alone. That is the flag that means "a
+                // pod dissolved under you"; `offerAlternatePath` is derived from a count
+                // that only ever increments and is never cleared, so ORing it in showed
+                // "That pod has wound down" to anyone with three prior dissolves whenever
+                // they were between pods — including straight after graduating a cycle,
+                // which ADR-023 forbids in writing. The alternate path rides along on the
+                // screen; it does not summon it.
+                if let recovery = state.recovery, recovery.offerLowerIntensity {
                     self.phase = .recovering(recovery)
                     return
                 }

@@ -21,7 +21,7 @@ final class GraduationControllerTests: XCTestCase {
         {"id":"8B1F2A7C-1111-4111-8111-111111111111","display_name":"Sam","is_you":true,"joined_at":"2026-07-06T00:00:00Z"},
         {"id":"9B1F2A7C-1111-4111-8111-111111111111","display_name":"Alex","is_you":false,"joined_at":"2026-07-06T00:00:00Z"}
       ],
-      "cycle": {"length_weeks":6,"weeks_completed":6,"ends_at":"2026-08-17T00:00:00Z"},
+      "cycle": {"length_weeks":6,"weeks_completed":6,"weeks_everyone_was_in":6,"ends_at":"2026-08-17T00:00:00Z"},
       "continuation": {
         "continuing": 1, "undecided": 1, "you_answered": true,
         "you_are_continuing": true, "decide_by": "2026-08-24T00:00:00Z"

@@ -444,6 +444,21 @@ public data class Cycle(
     val weeksCompleted: Int,
 
     /**
+     * How many weeks of the cycle the **pod** completed — every member in.
+     *
+     * Not `streak_weeks`, which is the *trailing* run and is reset to zero by any
+     * miss. A pod that was fully in for five of six weeks and missed the last one
+     * has a streak of zero and five weeks here, and the graduation screen must use
+     * this one: the streak would hand a five-of-six pod the copy written for a pod
+     * that managed none.
+     *
+     * Pod-level, like everything else about a cycle. There is no per-member
+     * equivalent (`CLAUDE.md` §2 rule 3).
+     */
+    @SerialName("weeks_everyone_was_in")
+    val weeksEveryoneWasIn: Int,
+
+    /**
      * When the last week of the cycle closes, in the pod's zone.
      */
     @SerialName("ends_at")

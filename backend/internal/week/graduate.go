@@ -46,19 +46,38 @@ func (s *Service) Continuation(ctx context.Context, podID, userID string) (store
 	return s.store.ContinuationFor(ctx, podID, userID)
 }
 
+// Cycle describes where a pod is in its cycle.
+type Cycle struct {
+	LengthWeeks int
+	// WeeksElapsed is the position in the cycle: how many of its weeks have closed. Not
+	// a measure of anybody.
+	WeeksElapsed int
+	// WeeksEveryoneWasIn is how many of those the pod completed. Distinct from the
+	// shared streak, which is the trailing run and is reset by any miss.
+	WeeksEveryoneWasIn int
+	EndsAt             time.Time
+}
+
 // CycleOf describes where a pod is in its cycle.
-func (s *Service) CycleOf(ctx context.Context, pod store.Pod) (length, completed int, endsAt time.Time, err error) {
+func (s *Service) CycleOf(ctx context.Context, pod store.Pod) (Cycle, error) {
 	location, err := cycle.Load(pod.Timezone)
 	if err != nil {
-		return 0, 0, time.Time{}, err
+		return Cycle{}, err
 	}
-	length = pod.CycleLengthWeeks
+	length := pod.CycleLengthWeeks
 	if length <= 0 {
 		length = cycle.DefaultLengthWeeks
 	}
-	endsAt = cycle.FinishesAt(pod.CreatedAt, length, location)
-	completed = cycle.WeeksCompleted(pod.CreatedAt, s.clock.Now(), length, location)
-	return length, completed, endsAt, nil
+	everyoneIn, err := s.store.CountWeeksEveryoneWasIn(ctx, pod.ID)
+	if err != nil {
+		return Cycle{}, fmt.Errorf("week: count completed weeks: %w", err)
+	}
+	return Cycle{
+		LengthWeeks:        length,
+		WeeksElapsed:       cycle.WeeksCompleted(pod.CreatedAt, s.clock.Now(), length, location),
+		WeeksEveryoneWasIn: everyoneIn,
+		EndsAt:             cycle.FinishesAt(pod.CreatedAt, length, location),
+	}, nil
 }
 
 // completeIfCycleIsOver graduates a pod that has reached the end of its cycle.

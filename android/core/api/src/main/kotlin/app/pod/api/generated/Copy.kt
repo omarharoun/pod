@@ -365,7 +365,7 @@ public object CopyKey {
     public const val GRADUATION_STREAK: String = "graduation.streak"
 
     /**
-     * "Some weeks landed, some didn't. You still got here."
+     * "Not every week landed. Getting to the end still counts."
      */
     public const val GRADUATION_STREAK_NONE: String = "graduation.streakNone"
 
