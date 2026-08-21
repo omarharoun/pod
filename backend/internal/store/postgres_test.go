@@ -321,6 +321,95 @@ func TestMemoryAndPostgresAgree(t *testing.T) {
 				t.Errorf("a pod with no weeks listed %d", len(weeks))
 			}
 		}},
+		// The lane-aware methods, all in one case. This is the class of divergence that
+		// already shipped once (ADR-024): Memory checked membership explicitly where
+		// Postgres left it to a JOIN, and every test running against Memory said the
+		// rule was held. M7 threaded `slot` through eight methods at once, which is
+		// exactly the situation that produced it.
+		{"lanes are kept apart", func(t *testing.T, s store.Store) {
+			ctx := context.Background()
+			user, err := s.UpsertUserByEmail(ctx, uniqueEmail(t), time.Now().UTC())
+			if err != nil {
+				t.Fatalf("user: %v", err)
+			}
+			intent := func(slot int, goal string) store.Intent {
+				return store.Intent{
+					UserID: user.ID, Slot: slot, GoalText: goal, GoalCategory: "home",
+					Intensity: 3, Timezone: "UTC", SelfReport: "sometimes",
+					Embedding: make([]float32, 0), UpdatedAt: time.Now().UTC(),
+				}
+			}
+			if err := s.UpsertIntent(ctx, intent(0, "the free thing")); err != nil {
+				t.Fatalf("UpsertIntent lane 0: %v", err)
+			}
+			if err := s.UpsertIntent(ctx, intent(1, "the second thing")); err != nil {
+				t.Fatalf("UpsertIntent lane 1: %v", err)
+			}
+
+			// Writing one lane does not touch the other.
+			free, err := s.GetIntent(ctx, user.ID, 0)
+			if err != nil {
+				t.Fatalf("GetIntent lane 0: %v", err)
+			}
+			second, err := s.GetIntent(ctx, user.ID, 1)
+			if err != nil {
+				t.Fatalf("GetIntent lane 1: %v", err)
+			}
+			if free.GoalText == second.GoalText {
+				t.Errorf("both lanes hold %q", free.GoalText)
+			}
+			if free.Slot != 0 || second.Slot != 1 {
+				t.Errorf("slots came back as %d and %d", free.Slot, second.Slot)
+			}
+			if _, err := s.GetIntent(ctx, user.ID, 2); err != store.ErrNotFound {
+				t.Errorf("an unwritten lane returned %v, want ErrNotFound", err)
+			}
+
+			// A queue place belongs to a lane too.
+			now := time.Now().UTC()
+			if err := s.JoinPool(ctx, user.ID, 0, now); err != nil {
+				t.Fatalf("JoinPool lane 0: %v", err)
+			}
+			if _, err := s.GetPoolTicket(ctx, user.ID, 1); err != store.ErrNotFound {
+				t.Errorf("queueing lane 0 queued lane 1: %v", err)
+			}
+			if err := s.JoinPool(ctx, user.ID, 1, now); err != nil {
+				t.Errorf("lane 1 could not queue while lane 0 was queued: %v", err)
+			}
+			if err := s.LeavePool(ctx, user.ID, 0); err != nil {
+				t.Fatalf("LeavePool lane 0: %v", err)
+			}
+			if _, err := s.GetPoolTicket(ctx, user.ID, 1); err != nil {
+				t.Errorf("leaving lane 0 dequeued lane 1: %v", err)
+			}
+
+			// Entitlements: lane 0 is never in the map, and must never need to be.
+			opened, err := s.ListEntitlements(ctx, user.ID)
+			if err != nil {
+				t.Fatalf("ListEntitlements: %v", err)
+			}
+			if opened[0] {
+				t.Error("the free lane has an entitlement row — it must never need one")
+			}
+			if err := s.GrantSlot(ctx, user.ID, 1, "app_store", uniqueEmail(t), now); err != nil {
+				t.Fatalf("GrantSlot: %v", err)
+			}
+			opened, err = s.ListEntitlements(ctx, user.ID)
+			if err != nil {
+				t.Fatalf("ListEntitlements: %v", err)
+			}
+			if !opened[1] || opened[2] {
+				t.Errorf("entitlements after granting lane 1: %v", opened)
+			}
+
+			// The recovery offer is per lane (ADR-027).
+			if _, err := s.RecoveryFor(ctx, user.ID, 0); err != nil {
+				t.Errorf("RecoveryFor lane 0: %v", err)
+			}
+			if err := s.ClearRecoveryOffer(ctx, user.ID, 0); err != nil {
+				t.Errorf("ClearRecoveryOffer lane 0: %v", err)
+			}
+		}},
 		{"missing refresh token", func(t *testing.T, s store.Store) {
 			if _, err := s.GetRefreshToken(context.Background(), "nope"); err != store.ErrNotFound {
 				t.Errorf("got %v, want ErrNotFound", err)
