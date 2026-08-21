@@ -71,6 +71,13 @@ func alreadyInPod() failure {
 	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorAlreadyInPodBody}
 }
 
+// cycleChoiceClosed covers both "the pod is not asking" and "the deadline has passed".
+// The two are the same thing from the screen's point of view — the choice moved on — and
+// distinguishing them would only be useful for telling someone they were too late.
+func cycleChoiceClosed() failure {
+	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorCycleChoiceClosedBody}
+}
+
 func weekClosed() failure {
 	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorWeekClosedBody}
 }

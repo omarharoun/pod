@@ -142,3 +142,97 @@ func TestLoadRejectsAnUnknownZone(t *testing.T) {
 		t.Fatal("expected an error — a pod's zone is written by us, so a bad one is corruption")
 	}
 }
+
+// MARK: - Cycle completion (M6)
+
+func TestACycleFinishesAtTheEndOfItsLastWeek(t *testing.T) {
+	lisbon, err := Load("Europe/Lisbon")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// A Wednesday: the cycle's first week is the one containing it, not one starting now.
+	started := time.Date(2026, 8, 19, 14, 0, 0, 0, time.UTC)
+	first := WeekContaining(started, lisbon)
+
+	finish := FinishesAt(started, 6, lisbon)
+
+	weeks := WeeksBetween(first.OpensAt, finish, lisbon)
+	if weeks != 6 {
+		t.Errorf("a six-week cycle spanned %d weeks", weeks)
+	}
+	if !finish.After(started) {
+		t.Errorf("the cycle finishes at %v, before it started", finish)
+	}
+}
+
+// A cycle that crosses a daylight-saving change is still six weeks, because the boundary
+// is local midnight rather than a multiple of 168 hours.
+func TestACycleAcrossADaylightSavingChangeIsStillSixWeeks(t *testing.T) {
+	lisbon, err := Load("Europe/Lisbon")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// Late September: the six weeks run through the October change.
+	started := time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
+	finish := FinishesAt(started, 6, lisbon)
+
+	local := finish.In(lisbon)
+	if local.Hour() != 0 || local.Minute() != 0 {
+		t.Errorf("the cycle finished at %v local, not local midnight", local)
+	}
+	if local.Weekday() != time.Monday {
+		t.Errorf("the cycle finished on a %v, not a Monday", local.Weekday())
+	}
+}
+
+func TestWeeksCompletedNeverExceedsTheCycle(t *testing.T) {
+	lisbon, _ := Load("Europe/Lisbon")
+	started := time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC)
+	longAfter := started.AddDate(0, 0, 200)
+
+	if got := WeeksCompleted(started, longAfter, 6, lisbon); got != 6 {
+		t.Errorf("a long-dormant pod reported %d weeks of a 6-week cycle", got)
+	}
+	if got := WeeksCompleted(started, started, 6, lisbon); got != 0 {
+		t.Errorf("a pod on its first day reported %d weeks completed", got)
+	}
+}
+
+// The quorum is two, and the reason matters: CLAUDE.md §6 says a working pair beats a
+// forced trio, which is as true of a second cycle as of assembly.
+func TestTwoContinuingKeepsThePodAndOneDoesNot(t *testing.T) {
+	cases := []struct {
+		name   string
+		choice Choice
+		want   bool
+	}{
+		{"all three", Choice{Continuing: 3}, true},
+		{"two of three", Choice{Continuing: 2, Declined: 1}, true},
+		{"one of three", Choice{Continuing: 1, Declined: 2}, false},
+		{"two of two", Choice{Continuing: 2}, true},
+		{"one of two", Choice{Continuing: 1, Declined: 1}, false},
+		{"nobody answered", Choice{Undecided: 3}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.choice.Continues(); got != tc.want {
+				t.Errorf("Continues() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// Silence is not a no until the deadline. Someone who has not answered may still say yes,
+// and reading their silence as agreement with the people who declined is what closes pods
+// out from under the person who was going to carry on.
+func TestSilenceDoesNotSettleTheChoiceEarly(t *testing.T) {
+	if (Choice{Declined: 2, Undecided: 1}).Settled() {
+		t.Error("two declines settled the choice while someone had not answered")
+	}
+	if !(Choice{Continuing: 2, Undecided: 1}).Settled() {
+		t.Error("two continuing did not settle it — the answer cannot change")
+	}
+	if !(Choice{Continuing: 1, Declined: 2}).Settled() {
+		t.Error("everyone answered and it was not settled")
+	}
+}

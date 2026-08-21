@@ -819,3 +819,73 @@ documented as one.
 
 ---
 
+
+---
+
+## ADR-023 — A cycle is six weeks, and graduating is not dissolving
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M6
+
+**Context.** `CLAUDE.md` §7 names M6 "graduation, continue-or-close" and never says how long
+a cycle is. Nothing in §2, §5 or §6 derives it. It is not on the §8 escalation list — not a
+weight, not a band, not a §2 rule, not a parity divergence — so it is decided here and
+recorded where it is cheap to change.
+
+**Decision — six weeks.**
+
+* Long enough that a shared streak means something. At four, a pod that loses two weeks to
+  the dissolve threshold has half its cycle gone.
+* Short enough to say yes to. Six weeks is a thing someone in a rut can agree to; three
+  months is the commitment they have already failed at, which is why they are here.
+* Under the 8-week reliability window, so one cycle can never fill the window on its own
+  and pin someone's band.
+
+`cycle.DefaultLengthWeeks` is the line to change. It is **copied onto each pod at
+formation** (`pods.cycle_length_weeks`), so changing the default never moves the finish
+line under a pod that is already running. The number is interpolated into copy
+(`graduation.title` is "{count} weeks, done"), never spelled out, so changing it does not
+leave a screen lying.
+
+**Decision — `completed` is a state, and it is not `dissolved`.**
+
+A pod that finished its cycle graduated. A pod that dissolved stopped early. They are
+different events and the schema, the API and the copy all keep them apart:
+
+* `CompleteCycle` touches neither `dissolved_pods` nor `recovery_offered_at`. Someone who
+  finished six weeks and chose not to do another has nothing to recover from, and showing
+  them "that pod has wound down" would be the product telling them something went wrong
+  when nothing did.
+* A check constraint forbids a row being both. A pod that is both has no correct screen.
+* The job rules out dissolution *before* graduating, so a pod that went quiet for its last
+  two weeks dissolves rather than graduating.
+
+**Decision — the choice, and what it may not say.**
+
+1. **Two continuing keeps the pod.** §6 says a working pair beats a forced trio about
+   assembly; it is just as true of a second cycle. Whoever does not carry on re-enters the
+   pool with no penalty of any kind.
+2. **A "no" is private, structurally.** `Continuation` carries counts and the *caller's
+   own* answer, and nothing else. There is no store method that returns who declined, no
+   response field that could hold one, and a test asserts it against the serialised bytes
+   for every member's view. "Alex is not continuing" is the most shaming sentence this
+   product could show and it is one join away at all times.
+3. **Silence is not a "no" until the deadline.** Two declines do not settle the choice
+   while someone has not answered — they may still say yes, and reading their silence as
+   agreement with the people who declined is what closes a pod out from under them. At the
+   deadline, silence closes: holding someone in a pod they did not re-choose is the worse
+   of the two mistakes.
+4. **Answering does not act.** The weekly job restarts or closes the pod, once the answer
+   cannot change or the deadline arrives — so the last person to answer is never the one
+   who appears to have ended it.
+5. **There is no "your pod closed" notification.** Telling someone their pod wound down
+   because others declined is a statement about those others, and a push notification is
+   the worst place to make it. They find it when they open the app.
+
+**Consequences.**
+* The weekly job must not open a week that starts at or after the cycle's finish. It did,
+  once — graduating and opening a seventh week in the same tick, leaving a pod holding an
+  open week nobody could post to and nothing would close.
+* `ListActivePods` now means `state = 'active'`, not `state <> 'dissolved'`. A graduated
+  pod is neither, and under the old predicate it kept being handed new weeks.
+* The shared streak survives into the next cycle, because the streak belongs to the pod and
+  the pod did not stop (§2 rule 3).

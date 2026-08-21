@@ -10,6 +10,7 @@ import (
 
 	"github.com/omarharoun/pod/backend/internal/blob"
 	"github.com/omarharoun/pod/backend/internal/clock"
+	"github.com/omarharoun/pod/backend/internal/cycle"
 	"github.com/omarharoun/pod/backend/internal/notify"
 	"github.com/omarharoun/pod/backend/internal/push"
 	"github.com/omarharoun/pod/backend/internal/store"
@@ -32,6 +33,18 @@ func discardLogger() *slog.Logger {
 
 func newHarness(t *testing.T, zone string) *harness {
 	t.Helper()
+	return newHarnessOf(t, zone, 2)
+}
+
+// newTrio is the harness M6 needs: a quorum of two out of three is not observable in a
+// pod of two, where two continuing is everybody.
+func newTrio(t *testing.T, zone string) *harness {
+	t.Helper()
+	return newHarnessOf(t, zone, 3)
+}
+
+func newHarnessOf(t *testing.T, zone string, size int) *harness {
+	t.Helper()
 	memory := store.NewMemory()
 	// A Thursday, so the first week has days left in it.
 	fixed := clock.NewFixed(time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC))
@@ -42,10 +55,12 @@ func newHarness(t *testing.T, zone string) *harness {
 
 	ctx := context.Background()
 	var members []string
-	for _, person := range []struct{ email, name string }{
+	people := []struct{ email, name string }{
 		{"sam@example.com", "Sam"},
 		{"alex@example.com", "Alex"},
-	} {
+		{"remi@example.com", "Remi"},
+	}
+	for _, person := range people[:size] {
 		user, err := memory.UpsertUserByEmail(ctx, person.email, fixed.Now())
 		if err != nil {
 			t.Fatalf("UpsertUserByEmail: %v", err)
@@ -273,5 +288,67 @@ func TestUnknownPodTimezoneDoesNotStopTheWholeTick(t *testing.T) {
 	}
 	if result.WeeksOpened != 1 {
 		t.Fatalf("the healthy pod did not get its week: %+v", result)
+	}
+}
+
+// ---- M6 helpers -----------------------------------------------------------------
+
+// everyonePosts puts every member in for the current week.
+func (h *harness) everyonePosts() {
+	h.t.Helper()
+	week := h.currentWeek()
+	for _, member := range h.members {
+		h.post(week.ID, member)
+	}
+}
+
+// advanceOneWeek moves past the current week's close and runs the job.
+func (h *harness) advanceOneWeek() {
+	h.t.Helper()
+	week, err := h.service.Current(context.Background(), h.podID, h.members[0])
+	if err != nil {
+		// Once the pod has graduated there is no current week; move a week anyway.
+		h.clock.Advance(7 * 24 * time.Hour)
+	} else {
+		h.clock.Advance(week.ClosesAt.Sub(h.clock.Now()) + time.Hour)
+	}
+	h.tick()
+}
+
+func (h *harness) tick() {
+	h.t.Helper()
+	if _, err := h.job.Tick(context.Background()); err != nil {
+		h.t.Fatalf("Tick: %v", err)
+	}
+}
+
+func (h *harness) reloadPod() store.Pod {
+	h.t.Helper()
+	pod, err := h.store.GetPodForMember(context.Background(), h.podID, h.members[0])
+	if err != nil {
+		// GetPodForMember scopes to live membership, so a closed pod is invisible
+		// through it. Read it directly for the assertions that need the state.
+		pods, listErr := h.store.ListPodsAwaitingContinuation(context.Background())
+		if listErr == nil {
+			for _, candidate := range pods {
+				if candidate.ID == h.podID {
+					return candidate
+				}
+			}
+		}
+		h.t.Fatalf("GetPodForMember: %v", err)
+	}
+	return pod
+}
+
+// graduate runs a full cycle with everyone posting, leaving the pod at its choice.
+func (h *harness) graduate() {
+	h.t.Helper()
+	for week := 0; week < cycle.DefaultLengthWeeks; week++ {
+		h.everyonePosts()
+		h.advanceOneWeek()
+	}
+	if state := h.reloadPod().State; state != store.PodStateCompleted {
+		h.t.Fatalf("the pod is %q after a full cycle, want completed", state)
 	}
 }

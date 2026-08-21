@@ -21,6 +21,7 @@ import (
 
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/copy"
+	"github.com/omarharoun/pod/backend/internal/cycle"
 	"github.com/omarharoun/pod/backend/internal/ids"
 	"github.com/omarharoun/pod/backend/internal/push"
 	"github.com/omarharoun/pod/backend/internal/store"
@@ -43,6 +44,15 @@ const (
 	KindWeekClosing Kind = "week_closing"
 	// KindPodCompleted — everyone was in.
 	KindPodCompleted Kind = "pod_completed"
+	// KindCycleCompleted — the pod reached the end of its cycle. Sent to everyone,
+	// whatever their week history: graduation is the pod's, not any member's
+	// (CLAUDE.md §2 rule 3).
+	KindCycleCompleted Kind = "cycle_completed"
+	// KindCycleContinuing — enough people said yes, so the pod carries on. There is
+	// deliberately no counterpart for "the pod closed": telling someone their pod
+	// wound down because others declined is a statement about those others, and a
+	// notification is the worst place to make it. They find it when they open the app.
+	KindCycleContinuing Kind = "cycle_continuing"
 )
 
 // closingNotice is how far ahead of a week's close the whole pod is told.
@@ -108,6 +118,32 @@ func (s *Service) PodCompleted(ctx context.Context, week store.Week, streakWeeks
 		s.queue(ctx, KindPodCompleted, week.ID, member.UserID, copy.KeyPushPodCompletedTitle,
 			map[string]string{"count": itoa(streakWeeks)})
 	}
+}
+
+// CycleCompleted announces graduation to the whole pod.
+//
+// The same message to everyone, with no per-member number in it. Someone who posted twice
+// in six weeks reached the end of the cycle exactly as much as someone who posted six
+// times, and this notification is not the place to disagree.
+func (s *Service) CycleCompleted(ctx context.Context, pod store.Pod) {
+	for _, member := range pod.Members {
+		s.queue(ctx, KindCycleCompleted, pod.ID, member.UserID, copy.KeyPushCycleCompletedTitle,
+			map[string]string{"count": itoa(cycleLengthOf(pod))})
+	}
+}
+
+// CycleContinuing tells the pod it is carrying on.
+func (s *Service) CycleContinuing(ctx context.Context, pod store.Pod) {
+	for _, member := range pod.Members {
+		s.queue(ctx, KindCycleContinuing, pod.ID, member.UserID, copy.KeyPushCycleContinuingTitle, nil)
+	}
+}
+
+func cycleLengthOf(pod store.Pod) int {
+	if pod.CycleLengthWeeks > 0 {
+		return pod.CycleLengthWeeks
+	}
+	return cycle.DefaultLengthWeeks
 }
 
 // DueForClosingNotice reports whether a week has crossed into its last day.

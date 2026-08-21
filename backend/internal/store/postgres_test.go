@@ -854,3 +854,202 @@ func TestPostgresOutcomeLimitClampsDownNotBackToTheDefault(t *testing.T) {
 		t.Fatalf("an explicit limit of 5 returned %d weeks", len(capped))
 	}
 }
+
+// ---- M6: cycles -------------------------------------------------------------------
+
+// Graduating is not dissolving. The whole point of a separate method is that it touches
+// neither dissolved_pods nor recovery_offered_at (ADR-023).
+func TestPostgresCompleteCycleCostsNobodyAnything(t *testing.T) {
+	ctx := context.Background()
+	db := newPostgres(t)
+	sam, alex := seedUser(t, db), seedUser(t, db)
+	podID := seedPodWith(t, db, sam, alex)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	if err := db.CompleteCycle(ctx, podID, now, now.Add(7*24*time.Hour)); err != nil {
+		t.Fatalf("CompleteCycle: %v", err)
+	}
+
+	pod, err := db.GetPodForMember(ctx, podID, sam.ID)
+	if err != nil {
+		t.Fatalf("GetPodForMember: %v", err)
+	}
+	if pod.State != store.PodStateCompleted {
+		t.Errorf("state: got %q, want completed", pod.State)
+	}
+	if pod.CompletedAt == nil || pod.DecideBy == nil {
+		t.Errorf("completed_at %v, decide_by %v", pod.CompletedAt, pod.DecideBy)
+	}
+	if pod.DissolvedAt != nil {
+		t.Error("graduating set dissolved_at")
+	}
+	// Membership survives: the pod may carry on, and ending it here would free everyone
+	// from the one-active-pod index while the choice is still open.
+	if len(pod.Members) != 2 {
+		t.Errorf("a graduated pod has %d members, want 2", len(pod.Members))
+	}
+	for _, user := range []store.User{sam, alex} {
+		recovery, err := db.RecoveryFor(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("RecoveryFor: %v", err)
+		}
+		if recovery.OfferLowerIntensity || recovery.OfferAlternatePath {
+			t.Errorf("finishing a cycle left %s with a recovery offer: %+v", user.ID, recovery)
+		}
+	}
+}
+
+// The counts come out of SQL as counts. There is no point in the call stack where a list
+// of "who said no" exists to be logged, joined to a name, or serialised.
+func TestPostgresContinuationCountsWithoutNamingAnyone(t *testing.T) {
+	ctx := context.Background()
+	db := newPostgres(t)
+	sam, alex, remi := seedUser(t, db), seedUser(t, db), seedUser(t, db)
+	podID := seedPodWith(t, db, sam, alex, remi)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if err := db.CompleteCycle(ctx, podID, now, now.Add(7*24*time.Hour)); err != nil {
+		t.Fatalf("CompleteCycle: %v", err)
+	}
+
+	if err := db.AnswerContinuation(ctx, podID, sam.ID, true, now); err != nil {
+		t.Fatalf("AnswerContinuation: %v", err)
+	}
+	if err := db.AnswerContinuation(ctx, podID, alex.ID, false, now); err != nil {
+		t.Fatalf("AnswerContinuation: %v", err)
+	}
+
+	got, err := db.ContinuationFor(ctx, podID, sam.ID)
+	if err != nil {
+		t.Fatalf("ContinuationFor: %v", err)
+	}
+	if got.Continuing != 1 || got.Declined != 1 || got.Undecided != 1 {
+		t.Errorf("counts: got %+v, want 1/1/1", got)
+	}
+	if !got.YouAnswered || !got.YouAreContinuing {
+		t.Errorf("the caller's own answer: %+v", got)
+	}
+
+	// Read as the member who declined: their own answer, and still nobody else's.
+	asAlex, err := db.ContinuationFor(ctx, podID, alex.ID)
+	if err != nil {
+		t.Fatalf("ContinuationFor: %v", err)
+	}
+	if !asAlex.YouAnswered || asAlex.YouAreContinuing {
+		t.Errorf("the decliner's own answer: %+v", asAlex)
+	}
+
+	// Read as the member who has not answered.
+	asRemi, err := db.ContinuationFor(ctx, podID, remi.ID)
+	if err != nil {
+		t.Fatalf("ContinuationFor: %v", err)
+	}
+	if asRemi.YouAnswered {
+		t.Errorf("a member who has not answered was told they had: %+v", asRemi)
+	}
+}
+
+// Answering twice replaces the answer. Someone who said no and changed their mind is
+// exactly who this product is for.
+func TestPostgresAnsweringTwiceReplaces(t *testing.T) {
+	ctx := context.Background()
+	db := newPostgres(t)
+	sam, alex := seedUser(t, db), seedUser(t, db)
+	podID := seedPodWith(t, db, sam, alex)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	if err := db.AnswerContinuation(ctx, podID, sam.ID, false, now); err != nil {
+		t.Fatalf("AnswerContinuation: %v", err)
+	}
+	if err := db.AnswerContinuation(ctx, podID, sam.ID, true, now.Add(time.Minute)); err != nil {
+		t.Fatalf("AnswerContinuation again: %v", err)
+	}
+
+	got, err := db.ContinuationFor(ctx, podID, sam.ID)
+	if err != nil {
+		t.Fatalf("ContinuationFor: %v", err)
+	}
+	if got.Continuing != 1 || got.Declined != 0 {
+		t.Errorf("changing your mind left %+v", got)
+	}
+}
+
+// The next cycle keeps whoever said yes, keeps the shared streak, and clears the answers
+// so the following cycle starts from nobody having answered.
+func TestPostgresStartNextCycleKeepsTheYesesAndTheStreak(t *testing.T) {
+	ctx := context.Background()
+	db := newPostgres(t)
+	sam, alex, remi := seedUser(t, db), seedUser(t, db), seedUser(t, db)
+	podID := seedPodWith(t, db, sam, alex, remi)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if err := db.CompleteCycle(ctx, podID, now, now.Add(7*24*time.Hour)); err != nil {
+		t.Fatalf("CompleteCycle: %v", err)
+	}
+	for _, user := range []store.User{sam, alex} {
+		if err := db.AnswerContinuation(ctx, podID, user.ID, true, now); err != nil {
+			t.Fatalf("AnswerContinuation: %v", err)
+		}
+	}
+	if err := db.AnswerContinuation(ctx, podID, remi.ID, false, now); err != nil {
+		t.Fatalf("AnswerContinuation: %v", err)
+	}
+
+	if err := db.StartNextCycle(ctx, podID, now.Add(time.Hour)); err != nil {
+		t.Fatalf("StartNextCycle: %v", err)
+	}
+
+	pod, err := db.GetPodForMember(ctx, podID, sam.ID)
+	if err != nil {
+		t.Fatalf("GetPodForMember: %v", err)
+	}
+	if pod.State != store.PodStateActive {
+		t.Errorf("state: got %q, want active", pod.State)
+	}
+	if pod.CompletedAt != nil || pod.DecideBy != nil {
+		t.Error("the restarted pod still carries its completion")
+	}
+	if len(pod.Members) != 2 {
+		t.Errorf("the next cycle has %d members, want the 2 who said yes", len(pod.Members))
+	}
+	// The one who stopped is free to be matched again, and carries nothing.
+	if _, err := db.GetActivePod(ctx, remi.ID); err == nil {
+		t.Error("the member who stopped is still in the pod")
+	}
+	recovery, err := db.RecoveryFor(ctx, remi.ID)
+	if err != nil {
+		t.Fatalf("RecoveryFor: %v", err)
+	}
+	if recovery.OfferLowerIntensity {
+		t.Error("choosing not to do another cycle was treated as a pod dissolving")
+	}
+	// Answers are cleared, so the next cycle's choice starts from silence.
+	counts, err := db.ContinuationFor(ctx, podID, sam.ID)
+	if err != nil {
+		t.Fatalf("ContinuationFor: %v", err)
+	}
+	if counts.Continuing != 0 || counts.Undecided != 2 {
+		t.Errorf("the next cycle inherited answers: %+v", counts)
+	}
+}
+
+// A pod cannot be both graduated and dissolved. The constraint is in the schema because
+// the two render completely differently and a row that is both has no correct screen.
+func TestPostgresAPodCannotBeBothCompletedAndDissolved(t *testing.T) {
+	ctx := context.Background()
+	db := newPostgres(t)
+	sam, alex := seedUser(t, db), seedUser(t, db)
+	podID := seedPodWith(t, db, sam, alex)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	if err := db.CompleteCycle(ctx, podID, now, now.Add(7*24*time.Hour)); err != nil {
+		t.Fatalf("CompleteCycle: %v", err)
+	}
+	// DissolvePod only acts on a pod that is not already dissolved; a graduated pod
+	// reaching it would violate the check constraint, which is the point.
+	err := db.DissolvePod(ctx, podID, "inactive", []string{sam.ID}, now.Add(time.Hour))
+	if err == nil {
+		pod, readErr := db.GetPodForMember(ctx, podID, sam.ID)
+		if readErr == nil && pod.CompletedAt != nil && pod.DissolvedAt != nil {
+			t.Fatal("a pod is marked both completed and dissolved")
+		}
+	}
+}

@@ -25,6 +25,9 @@ const TickInterval = time.Hour
 type JobResult struct {
 	PodsSeen           int
 	PodsDissolved      int
+	PodsGraduated      int
+	PodsClosed         int
+	CyclesRestarted    int
 	WeeksOpened        int
 	WeeksClosed        int
 	ProofsDeleted      int
@@ -78,8 +81,27 @@ func (j *Job) Tick(ctx context.Context) (JobResult, error) {
 		}
 		if dissolved {
 			result.PodsDissolved++
+			continue
+		}
+
+		// Graduation comes after dissolution is ruled out. A pod that went quiet for its
+		// last two weeks dissolved; it did not graduate, and the two must not both fire.
+		graduated, err := j.completeIfCycleIsOver(ctx, pod, now)
+		if err != nil {
+			j.log.ErrorContext(ctx, "could not complete a cycle", slog.Any("error", err))
+			continue
+		}
+		if graduated {
+			result.PodsGraduated++
 		}
 	}
+
+	restarted, closedPods, err := j.settleContinuations(ctx, now)
+	if err != nil {
+		j.log.ErrorContext(ctx, "could not settle continuations", slog.Any("error", err))
+	}
+	result.CyclesRestarted = restarted
+	result.PodsClosed = closedPods
 
 	deleted, failures, err := j.Sweep(ctx, now)
 	if err != nil {
@@ -104,6 +126,9 @@ func (j *Job) Tick(ctx context.Context) (JobResult, error) {
 		slog.Int("weeks_opened", result.WeeksOpened),
 		slog.Int("weeks_closed", result.WeeksClosed),
 		slog.Int("pods_dissolved", result.PodsDissolved),
+		slog.Int("pods_graduated", result.PodsGraduated),
+		slog.Int("pods_closed", result.PodsClosed),
+		slog.Int("cycles_restarted", result.CyclesRestarted),
 		slog.Int("proofs_deleted", result.ProofsDeleted),
 		slog.Int("sweep_failures", result.SweepFailures),
 		slog.Int("notifications_sent", result.NotificationsSent),
@@ -152,6 +177,16 @@ func (j *Job) turnOver(ctx context.Context, pod store.Pod, now time.Time) (close
 		if week.OpensAt.Equal(current.OpensAt) {
 			existing = true
 		}
+	}
+	// A week that starts at or after the cycle's finish is a week past the end. Opening
+	// it and graduating in the same tick would leave a graduated pod holding an open
+	// seventh week that nobody can post to and nothing will close.
+	length := pod.CycleLengthWeeks
+	if length <= 0 {
+		length = cycle.DefaultLengthWeeks
+	}
+	if !current.OpensAt.Before(cycle.FinishesAt(pod.CreatedAt, length, location)) {
+		existing = true
 	}
 	if !existing {
 		fresh, err := j.service.open(ctx, pod, now)

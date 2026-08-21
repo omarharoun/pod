@@ -117,8 +117,12 @@ type PoolCandidate struct {
 type PodState string
 
 const (
-	PodStateForming   PodState = "forming"
-	PodStateActive    PodState = "active"
+	PodStateForming PodState = "forming"
+	PodStateActive  PodState = "active"
+	// PodStateCompleted is a pod that finished its cycle. It is not PodStateDissolved
+	// and must never be treated as one: graduation carries no reliability consequence
+	// and no dissolved-pod count (ADR-023).
+	PodStateCompleted PodState = "completed"
 	PodStateDissolved PodState = "dissolved"
 )
 
@@ -132,9 +136,31 @@ type Pod struct {
 	// StreakWeeks is pod-level. There is no per-member equivalent anywhere in this
 	// codebase, and adding one is a product bug (CLAUDE.md §2 rule 3).
 	StreakWeeks int
-	CreatedAt   time.Time
+	// CycleLengthWeeks is fixed when the pod forms, so changing the default never moves
+	// the finish line under a pod that is already running.
+	CycleLengthWeeks int
+	CreatedAt        time.Time
+	// CompletedAt is when the cycle finished. Graduation, not an ending.
+	CompletedAt *time.Time
+	// DecideBy is when an unanswered pod closes. Set at completion.
+	DecideBy    *time.Time
 	DissolvedAt *time.Time
 	Members     []PodMember
+}
+
+// Continuation is how many members are carrying on after graduation.
+//
+// Counts, not rows. There is no store method that returns who said no, because there is
+// no screen that may show it and no response that may carry it (CLAUDE.md §2 rule 1).
+// The caller's own answer is separate, because it is the one per-member fact the caller
+// is entitled to.
+type Continuation struct {
+	Continuing int
+	Declined   int
+	Undecided  int
+	// YouAnswered and YouAreContinuing describe the caller only.
+	YouAnswered      bool
+	YouAreContinuing bool
 }
 
 type PodMember struct {
@@ -270,6 +296,22 @@ type Store interface {
 	SetDisplayName(ctx context.Context, userID, displayName string) error
 
 	// UpsertIntent replaces the caller's intent.
+	// CompleteCycle moves a pod to completed and opens the choice. It is not
+	// DissolvePod: no member carries a count and no recovery offer is made.
+	CompleteCycle(ctx context.Context, podID string, at, decideBy time.Time) error
+	// AnswerContinuation records one member's answer, replacing any previous one.
+	AnswerContinuation(ctx context.Context, podID, userID string, continuing bool, at time.Time) error
+	// ContinuationFor returns the counts, plus the caller's own answer.
+	ContinuationFor(ctx context.Context, podID, userID string) (Continuation, error)
+	// ListPodsAwaitingContinuation returns completed pods whose choice is still open.
+	ListPodsAwaitingContinuation(ctx context.Context) ([]Pod, error)
+	// CloseCompletedPod ends a pod that graduated and is not carrying on. Members go
+	// back to the pool; nobody carries a count and nobody is offered "that pod wound
+	// down", because this one did not (ADR-023).
+	CloseCompletedPod(ctx context.Context, podID string, at time.Time) error
+	// StartNextCycle keeps the pod running with whoever said yes.
+	StartNextCycle(ctx context.Context, podID string, at time.Time) error
+
 	UpsertIntent(ctx context.Context, intent Intent) error
 	GetIntent(ctx context.Context, userID string) (Intent, error)
 

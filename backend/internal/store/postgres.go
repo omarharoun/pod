@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/omarharoun/pod/backend/internal/cycle"
 )
 
 // Postgres is the production Store. Postgres is the source of truth (CLAUDE.md §5).
@@ -359,9 +361,10 @@ func (p *Postgres) CreatePod(ctx context.Context, pod Pod, memberIDs []string, a
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO pods (id, state, goal_category, timezone, streak_weeks, created_at)
-		VALUES ($1, $2, $3, $4, 0, $5)`,
-		pod.ID, string(pod.State), pod.GoalCategory, pod.Timezone, pod.CreatedAt); err != nil {
+		INSERT INTO pods (id, state, goal_category, timezone, streak_weeks, cycle_length_weeks, created_at)
+		VALUES ($1, $2, $3, $4, 0, $5, $6)`,
+		pod.ID, string(pod.State), pod.GoalCategory, pod.Timezone,
+		podCycleLength(pod.CycleLengthWeeks), pod.CreatedAt); err != nil {
 		return wrap("insert pod", err)
 	}
 
@@ -383,7 +386,7 @@ func (p *Postgres) CreatePod(ctx context.Context, pod Pod, memberIDs []string, a
 
 func (p *Postgres) GetPodForMember(ctx context.Context, podID, userID string) (Pod, error) {
 	return p.loadPod(ctx, `
-		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.created_at, p.dissolved_at
+		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks, p.created_at, p.completed_at, p.decide_by, p.dissolved_at
 		FROM pods p
 		JOIN pod_members m ON m.pod_id = p.id AND m.user_id = $2 AND m.left_at IS NULL
 		WHERE p.id = $1`, podID, userID)
@@ -391,17 +394,27 @@ func (p *Postgres) GetPodForMember(ctx context.Context, podID, userID string) (P
 
 func (p *Postgres) GetActivePod(ctx context.Context, userID string) (Pod, error) {
 	return p.loadPod(ctx, `
-		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.created_at, p.dissolved_at
+		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks, p.created_at, p.completed_at, p.decide_by, p.dissolved_at
 		FROM pods p
 		JOIN pod_members m ON m.pod_id = p.id
 		WHERE m.user_id = $1 AND m.left_at IS NULL AND p.state <> 'dissolved'`, userID)
+}
+
+// podCycleLength defaults an unset length rather than writing a zero. A pod with a
+// zero-week cycle would finish before it started.
+func podCycleLength(weeks int) int {
+	if weeks <= 0 {
+		return cycle.DefaultLengthWeeks
+	}
+	return weeks
 }
 
 func (p *Postgres) loadPod(ctx context.Context, query string, args ...any) (Pod, error) {
 	var pod Pod
 	var state string
 	err := p.pool.QueryRow(ctx, query, args...).
-		Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks, &pod.CreatedAt, &pod.DissolvedAt)
+		Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks,
+			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt)
 	if err != nil {
 		return Pod{}, wrap("load pod", err)
 	}
@@ -431,8 +444,8 @@ func (p *Postgres) loadPod(ctx context.Context, query string, args ...any) (Pod,
 
 func (p *Postgres) ListActivePods(ctx context.Context) ([]Pod, error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT id, state, goal_category, timezone, streak_weeks, created_at, dissolved_at
-		FROM pods WHERE state <> 'dissolved' ORDER BY created_at, id`)
+		SELECT id, state, goal_category, timezone, streak_weeks, cycle_length_weeks, created_at, completed_at, decide_by, dissolved_at
+		FROM pods WHERE state = 'active' ORDER BY created_at, id`)
 	if err != nil {
 		return nil, wrap("list active pods", err)
 	}
@@ -442,7 +455,8 @@ func (p *Postgres) ListActivePods(ctx context.Context) ([]Pod, error) {
 	for rows.Next() {
 		var pod Pod
 		var state string
-		if err := rows.Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks, &pod.CreatedAt, &pod.DissolvedAt); err != nil {
+		if err := rows.Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks,
+			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt); err != nil {
 			return nil, wrap("scan pod", err)
 		}
 		pod.State = PodState(state)
@@ -1041,6 +1055,157 @@ func (p *Postgres) DissolvePod(ctx context.Context, podID, reason string, inacti
 		}
 	}
 	return wrap("commit dissolve", tx.Commit(ctx))
+}
+
+// CompleteCycle graduates a pod and opens the choice.
+//
+// It is deliberately not DissolvePod with a different reason string. Nobody's
+// dissolved_pods is incremented and nobody's recovery_offered_at is set: finishing six
+// weeks is not something to be offered a gentler restart after (ADR-023). Membership
+// stays open too — the pod may carry on, and ending memberships here would free everyone
+// from the one-active-pod index while the choice is still being made.
+func (p *Postgres) CompleteCycle(ctx context.Context, podID string, at, decideBy time.Time) error {
+	tag, err := p.pool.Exec(ctx, `
+		UPDATE pods
+		SET state = 'completed', completed_at = $2, decide_by = $3
+		WHERE id = $1 AND state = 'active'`, podID, at, decideBy)
+	if err != nil {
+		return wrap("complete cycle", err)
+	}
+	if tag.RowsAffected() == 0 {
+		// Already completed, or dissolved first. Both are fine to run into twice.
+		return nil
+	}
+	return nil
+}
+
+func (p *Postgres) AnswerContinuation(ctx context.Context, podID, userID string, continuing bool, at time.Time) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO pod_continuations (pod_id, user_id, continuing, answered_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (pod_id, user_id) DO UPDATE
+			SET continuing = EXCLUDED.continuing, answered_at = EXCLUDED.answered_at`,
+		podID, userID, continuing, at)
+	return wrap("answer continuation", err)
+}
+
+// ContinuationFor returns counts and the caller's own answer.
+//
+// The query aggregates in SQL rather than returning rows, so there is no point in the
+// call stack where a list of "who said no" exists to be logged, serialised, or joined to
+// a display name (CLAUDE.md §2 rule 1).
+func (p *Postgres) ContinuationFor(ctx context.Context, podID, userID string) (Continuation, error) {
+	var out Continuation
+	var members int
+	var youContinuing *bool
+	err := p.pool.QueryRow(ctx, `
+		SELECT
+			(SELECT count(*) FROM pod_members WHERE pod_id = $1 AND left_at IS NULL),
+			(SELECT count(*) FROM pod_continuations WHERE pod_id = $1 AND continuing),
+			(SELECT count(*) FROM pod_continuations WHERE pod_id = $1 AND NOT continuing),
+			(SELECT continuing FROM pod_continuations WHERE pod_id = $1 AND user_id = $2)`,
+		podID, userID).Scan(&members, &out.Continuing, &out.Declined, &youContinuing)
+	if err != nil {
+		return Continuation{}, wrap("read continuation", err)
+	}
+	out.Undecided = members - out.Continuing - out.Declined
+	if out.Undecided < 0 {
+		out.Undecided = 0
+	}
+	if youContinuing != nil {
+		out.YouAnswered = true
+		out.YouAreContinuing = *youContinuing
+	}
+	return out, nil
+}
+
+func (p *Postgres) ListPodsAwaitingContinuation(ctx context.Context) ([]Pod, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, state, goal_category, timezone, streak_weeks, cycle_length_weeks,
+		       created_at, completed_at, decide_by, dissolved_at
+		FROM pods WHERE state = 'completed'
+		ORDER BY completed_at`)
+	if err != nil {
+		return nil, wrap("list completed pods", err)
+	}
+	defer rows.Close()
+
+	var out []Pod
+	for rows.Next() {
+		var pod Pod
+		if err := rows.Scan(&pod.ID, &pod.State, &pod.GoalCategory, &pod.Timezone,
+			&pod.StreakWeeks, &pod.CycleLengthWeeks, &pod.CreatedAt,
+			&pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt); err != nil {
+			return nil, wrap("scan completed pod", err)
+		}
+		out = append(out, pod)
+	}
+	return out, wrap("list completed pods", rows.Err())
+}
+
+// CloseCompletedPod ends a pod that graduated and is not carrying on.
+//
+// The difference from DissolvePod is the whole point: no dissolved_pods, no
+// recovery_offered_at. Someone who finished a cycle and chose not to do another has
+// nothing to recover from, and offering them "that pod wound down" would be the product
+// telling them something went wrong when nothing did.
+func (p *Postgres) CloseCompletedPod(ctx context.Context, podID string, at time.Time) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return wrap("begin close", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT state FROM pods WHERE id = $1 FOR UPDATE`, podID).Scan(&state); err != nil {
+		return wrap("lock pod", err)
+	}
+	if state != string(PodStateCompleted) {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE pod_members SET left_at = $2 WHERE pod_id = $1 AND left_at IS NULL`, podID, at); err != nil {
+		return wrap("end memberships", err)
+	}
+	return wrap("commit close", tx.Commit(ctx))
+}
+
+// StartNextCycle keeps the pod running with whoever said yes.
+//
+// Members who declined leave; the rest carry on with the shared streak intact, because
+// the streak belongs to the pod and the pod did not stop (CLAUDE.md §2 rule 3).
+func (p *Postgres) StartNextCycle(ctx context.Context, podID string, at time.Time) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return wrap("begin next cycle", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT state FROM pods WHERE id = $1 FOR UPDATE`, podID).Scan(&state); err != nil {
+		return wrap("lock pod", err)
+	}
+	if state != string(PodStateCompleted) {
+		return nil
+	}
+	// Anyone who declined, or who said nothing, leaves. Silence is read as "no" only
+	// here, at the point the decision is actually made.
+	if _, err := tx.Exec(ctx, `
+		UPDATE pod_members SET left_at = $2
+		WHERE pod_id = $1 AND left_at IS NULL AND user_id NOT IN (
+			SELECT user_id FROM pod_continuations WHERE pod_id = $1 AND continuing
+		)`, podID, at); err != nil {
+		return wrap("end memberships", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE pods SET state = 'active', completed_at = NULL, decide_by = NULL WHERE id = $1`,
+		podID); err != nil {
+		return wrap("restart pod", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM pod_continuations WHERE pod_id = $1`, podID); err != nil {
+		return wrap("clear continuations", err)
+	}
+	return wrap("commit next cycle", tx.Commit(ctx))
 }
 
 func (p *Postgres) RecoveryFor(ctx context.Context, userID string) (Recovery, error) {

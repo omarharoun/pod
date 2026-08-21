@@ -39,6 +39,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}/commit", s.requireAuth(s.handleCommitProof))
 	mux.HandleFunc("GET /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}", s.requireAuth(s.handleGetProof))
 
+	// ---- M6: implemented ------------------------------------------------------
+	mux.HandleFunc("POST /v1/pods/{podId}/continue", s.requireAuth(s.handleContinueCycle))
+
 	// Every operation in the contract is now implemented, so the not-yet-built table
 	// from ADR-007 is empty and gone. handleNotImplementedYet stays for the next
 	// milestone that specifies ahead of building.

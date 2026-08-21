@@ -6,21 +6,26 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/omarharoun/pod/backend/internal/cycle"
 )
 
 // Memory is an in-process Store for tests. It is deliberately strict about the same
 // invariants Postgres enforces — atomic attempt counting, single-use rotation — so that a
 // test passing here means something.
 type Memory struct {
-	mu                sync.Mutex
-	users             map[string]User
-	usersByKey        map[string]string // normalised email -> user id
-	challenges        map[string]AuthChallenge
-	tokens            map[string]RefreshToken
-	intents           map[string]Intent
-	pool              map[string]PoolTicket
-	pods              map[string]Pod
-	podMembers        map[string][]PodMember
+	mu         sync.Mutex
+	users      map[string]User
+	usersByKey map[string]string // normalised email -> user id
+	challenges map[string]AuthChallenge
+	tokens     map[string]RefreshToken
+	intents    map[string]Intent
+	pool       map[string]PoolTicket
+	pods       map[string]Pod
+	podMembers map[string][]PodMember
+	// continuations is pod id -> user id -> carrying on. Counted, never listed: no
+	// method on this type returns who said no (CLAUDE.md §2 rule 1).
+	continuations     map[string]map[string]bool
 	weeks             map[string]Week
 	memberWeeks       map[string][]MemberWeek
 	proofs            map[string]Proof
@@ -338,6 +343,9 @@ func (m *Memory) CreatePod(_ context.Context, pod Pod, memberIDs []string, at ti
 		delete(m.pool, id)
 	}
 	pod.Members = members
+	if pod.CycleLengthWeeks <= 0 {
+		pod.CycleLengthWeeks = cycle.DefaultLengthWeeks
+	}
 	m.pods[pod.ID] = pod
 	m.podMembers[pod.ID] = members
 	return nil
@@ -402,7 +410,9 @@ func (m *Memory) ListActivePods(_ context.Context) ([]Pod, error) {
 	defer m.mu.Unlock()
 	var out []Pod
 	for id, pod := range m.pods {
-		if pod.State == PodStateDissolved {
+		// Only running pods. A graduated pod is not dissolved, but it must not be
+		// handed another week either.
+		if pod.State != PodStateActive {
 			continue
 		}
 		pod.Members = m.podMembers[id]
@@ -795,6 +805,122 @@ func (m *Memory) RecentOutcomes(_ context.Context, userID string, limit int) ([]
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+// CompleteCycle graduates a pod. Not DissolvePod with a different word: no member
+// carries a count and nobody is offered a gentler restart (ADR-023).
+func (m *Memory) CompleteCycle(_ context.Context, podID string, at, decideBy time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pod, ok := m.pods[podID]
+	if !ok {
+		return ErrNotFound
+	}
+	if pod.State != PodStateActive {
+		return nil
+	}
+	completed, deadline := at, decideBy
+	pod.State = PodStateCompleted
+	pod.CompletedAt = &completed
+	pod.DecideBy = &deadline
+	m.pods[podID] = pod
+	return nil
+}
+
+func (m *Memory) AnswerContinuation(_ context.Context, podID, userID string, continuing bool, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.continuations == nil {
+		m.continuations = map[string]map[string]bool{}
+	}
+	if m.continuations[podID] == nil {
+		m.continuations[podID] = map[string]bool{}
+	}
+	m.continuations[podID][userID] = continuing
+	return nil
+}
+
+func (m *Memory) ContinuationFor(_ context.Context, podID, userID string) (Continuation, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.pods[podID]; !ok {
+		return Continuation{}, ErrNotFound
+	}
+	var out Continuation
+	answers := m.continuations[podID]
+	for _, member := range m.podMembers[podID] {
+		answer, answered := answers[member.UserID]
+		switch {
+		case !answered:
+			out.Undecided++
+		case answer:
+			out.Continuing++
+		default:
+			out.Declined++
+		}
+		if member.UserID == userID && answered {
+			out.YouAnswered = true
+			out.YouAreContinuing = answer
+		}
+	}
+	return out, nil
+}
+
+func (m *Memory) ListPodsAwaitingContinuation(_ context.Context) ([]Pod, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Pod
+	for id, pod := range m.pods {
+		if pod.State != PodStateCompleted {
+			continue
+		}
+		pod.Members = m.podMembers[id]
+		out = append(out, pod)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (m *Memory) CloseCompletedPod(_ context.Context, podID string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pod, ok := m.pods[podID]
+	if !ok {
+		return ErrNotFound
+	}
+	if pod.State != PodStateCompleted {
+		return nil
+	}
+	// Memberships end; nobody's dissolved_pods moves and nobody is offered recovery.
+	m.podMembers[podID] = nil
+	return nil
+}
+
+func (m *Memory) StartNextCycle(_ context.Context, podID string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pod, ok := m.pods[podID]
+	if !ok {
+		return ErrNotFound
+	}
+	if pod.State != PodStateCompleted {
+		return nil
+	}
+	answers := m.continuations[podID]
+	staying := make([]PodMember, 0, len(m.podMembers[podID]))
+	for _, member := range m.podMembers[podID] {
+		if answers[member.UserID] {
+			staying = append(staying, member)
+		}
+	}
+	m.podMembers[podID] = staying
+	pod.State = PodStateActive
+	pod.CompletedAt = nil
+	pod.DecideBy = nil
+	pod.Members = staying
+	m.pods[podID] = pod
+	delete(m.continuations, podID)
+	return nil
 }
 
 func (m *Memory) DissolvePod(_ context.Context, podID, reason string, inactiveMemberIDs []string, at time.Time) error {
