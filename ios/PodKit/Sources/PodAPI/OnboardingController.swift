@@ -72,19 +72,26 @@ public final class OnboardingController {
     public private(set) var isWorking = false
     public var draft = IntentDraft()
 
+    /// Which lane this controller is for. `0` is the free one (ADR-026).
+    ///
+    /// One controller per lane rather than a switchable one: a half-answered draft belongs
+    /// to the thing it is about, and moving between lanes must not carry it across.
+    public let slot: Int
+
     private let client: APIClient
 
-    public init(client: APIClient) {
+    public init(client: APIClient, slot: Int = 0) {
         self.client = client
+        self.slot = slot
     }
 
     /// Reads where the server thinks this person is. Safe to call on every appearance.
     public func load() async {
         await perform {
-            let state = try await self.client.onboardingState()
+            let state = try await self.client.onboardingState(slot: self.slot)
             switch state.step {
             case "ready":
-                if let pod = try await self.client.currentPod() {
+                if let pod = try await self.client.currentPod(slot: self.slot) {
                     self.phase = .matched(pod)
                 } else {
                     // Ready but no pod readable: treat it as still waiting rather than
@@ -116,7 +123,7 @@ public final class OnboardingController {
     public func checkForPod() async {
         guard case .waiting = phase else { return }
         await perform {
-            if let pod = try await self.client.currentPod() {
+            if let pod = try await self.client.currentPod(slot: self.slot) {
                 self.phase = .matched(pod)
             }
         }
@@ -142,7 +149,7 @@ public final class OnboardingController {
     /// self-report is deliberately not sent — the server keeps the stored answer, and
     /// "how often do you keep commitments to yourself" is not a question to ask twice.
     private func resubmit(intensity: Int?) async throws {
-        guard let existing = try await client.intent() else {
+        guard let existing = try await client.intent(slot: slot) else {
             // Nothing on file, so there is nothing to re-offer. Ask the questions.
             phase = .questions(.goal)
             return
@@ -155,8 +162,8 @@ public final class OnboardingController {
             selfReportReliability: nil,
             availabilityWindows: existing.availabilityWindows,
             displayName: nil
-        ))
-        phase = .waiting(try await client.joinPool())
+        ), slot: slot)
+        phase = .waiting(try await client.joinPool(slot: slot))
     }
 
     public func advance() {
@@ -182,15 +189,15 @@ public final class OnboardingController {
     public func submit() async {
         guard let request = draft.request() else { return }
         await perform {
-            _ = try await self.client.saveIntent(request)
-            let ticket = try await self.client.joinPool()
+            _ = try await self.client.saveIntent(request, slot: self.slot)
+            let ticket = try await self.client.joinPool(slot: self.slot)
             self.phase = .waiting(ticket)
         }
     }
 
     public func leaveQueue() async {
         await perform {
-            try await self.client.leavePool()
+            try await self.client.leavePool(slot: self.slot)
             self.phase = .questions(.goal)
         }
     }

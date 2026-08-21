@@ -85,7 +85,16 @@ public sealed interface OnboardingPhase {
  * Separate from [SessionRepository] because they answer different questions — one owns
  * whether you are signed in, this one owns what you see once you are.
  */
-public class OnboardingRepository(private val client: PodApiClient) {
+public class OnboardingRepository(
+    private val client: PodApiClient,
+    /**
+     * Which lane this repository is for. 0 is the free one (ADR-026).
+     *
+     * One repository per lane rather than a switchable one: a half-answered draft belongs
+     * to the thing it is about, and moving between lanes must not carry it across.
+     */
+    public val slot: Int = 0,
+) {
 
     private val _phase = MutableStateFlow<OnboardingPhase>(OnboardingPhase.Loading)
     public val phase: StateFlow<OnboardingPhase> = _phase.asStateFlow()
@@ -106,9 +115,9 @@ public class OnboardingRepository(private val client: PodApiClient) {
     /** Reads where the server thinks this person is. Safe to call on every appearance. */
     public suspend fun load() {
         perform {
-            val state = client.onboardingState()
+            val state = client.onboardingState(slot)
             _phase.value = when (state.step) {
-                "ready" -> client.currentPod()
+                "ready" -> client.currentPod(slot)
                     ?.let { OnboardingPhase.Matched(it) }
                     // Ready but no pod readable: back to the questions rather than an
                     // empty pod screen.
@@ -159,7 +168,7 @@ public class OnboardingRepository(private val client: PodApiClient) {
      * often do you keep commitments to yourself" is not a question to ask twice.
      */
     private suspend fun resubmit(intensity: Int?) {
-        val existing = client.intent()
+        val existing = client.intent(slot)
         if (existing == null) {
             // Nothing on file, so there is nothing to re-offer. Ask the questions.
             _phase.value = OnboardingPhase.Questions(OnboardingQuestion.GOAL)
@@ -175,8 +184,9 @@ public class OnboardingRepository(private val client: PodApiClient) {
                 availabilityWindows = existing.availabilityWindows,
                 displayName = null,
             ),
+            slot = slot,
         )
-        _phase.value = OnboardingPhase.Waiting(client.joinPool())
+        _phase.value = OnboardingPhase.Waiting(client.joinPool(slot))
     }
 
     /**
@@ -186,7 +196,7 @@ public class OnboardingRepository(private val client: PodApiClient) {
     public suspend fun checkForPod() {
         if (_phase.value !is OnboardingPhase.Waiting) return
         perform {
-            client.currentPod()?.let { _phase.value = OnboardingPhase.Matched(it) }
+            client.currentPod(slot)?.let { _phase.value = OnboardingPhase.Matched(it) }
         }
     }
 
@@ -218,14 +228,14 @@ public class OnboardingRepository(private val client: PodApiClient) {
     public suspend fun submit() {
         val request = _draft.value.toRequest() ?: return
         perform {
-            client.saveIntent(request)
-            _phase.value = OnboardingPhase.Waiting(client.joinPool())
+            client.saveIntent(request, slot)
+            _phase.value = OnboardingPhase.Waiting(client.joinPool(slot))
         }
     }
 
     public suspend fun leaveQueue() {
         perform {
-            client.leavePool()
+            client.leavePool(slot)
             _phase.value = OnboardingPhase.Questions(OnboardingQuestion.GOAL)
         }
     }
@@ -244,5 +254,19 @@ public class OnboardingRepository(private val client: PodApiClient) {
         } finally {
             _isWorking.value = false
         }
+    }
+}
+
+/**
+ * One onboarding repository per lane, kept for the process.
+ *
+ * Per lane rather than one switchable repository: a half-answered draft belongs to the
+ * thing it is about, and moving between lanes must not carry it across (ADR-026).
+ */
+public class OnboardingRepositories(private val client: PodApiClient) {
+    private val byLane = mutableMapOf<Int, OnboardingRepository>()
+
+    public fun forLane(slot: Int): OnboardingRepository = synchronized(byLane) {
+        byLane.getOrPut(slot) { OnboardingRepository(client, slot) }
     }
 }

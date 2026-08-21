@@ -401,13 +401,23 @@ the real price lives.
 
 ### The lane list
 
-Once someone has more than one lane, the app needs a way between them. A segmented row
-above the week, showing each lane's **goal text**, never its number:
+Once someone has more than one lane, the app needs a way between them. A scrolling row
+above everything else, showing each lane's **goal text**, never its number:
 
 > [ sort out the spare room ] [ learn to make bread ]
 
 Numbers would put someone on a scale — the same reason intensity rungs are phrases
 (ADR-010). A lane with no goal yet reads "Something new".
+
+It appears **only once there is more than one lane**. A switcher over a single thing is a
+control that does nothing, sitting on the screen that should be the simplest in the
+product.
+
+Each lane keeps its own draft. Moving between them mid-answer must not carry a
+half-finished goal across — they are different things, which is the whole point.
+
+And buying a lane moves you to it. Someone who has just decided to start a second thing
+wants to name it, not to be returned to the one they finished.
 
 ### What the paywall may not do
 

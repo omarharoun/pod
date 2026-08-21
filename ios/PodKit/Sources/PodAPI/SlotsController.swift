@@ -56,10 +56,26 @@ public final class SlotsController {
         }
     }
 
+    /// The lane the caller is looking at. Every lane-aware screen reads this.
+    ///
+    /// Held here rather than in each screen because it is one fact about the whole
+    /// session — which thing you are currently looking at — and two screens disagreeing
+    /// about it is how someone posts proof against the wrong goal.
+    public private(set) var current = 0
+
+    /// Switches to a lane the caller actually has. A lane they do not is ignored rather
+    /// than refused: there is no state in which showing an error about it helps.
+    public func show(slot: Int) {
+        guard slots.contains(where: { $0.slot == slot && $0.entitled }) else { return }
+        current = slot
+    }
+
     /// Presents the purchase sheet and, if it completes, opens the lane.
     ///
     /// Returns the new lane, or `nil` when the person cancelled — which is a decision,
-    /// not a failure, and produces no error state.
+    /// not a failure, and produces no error state. On success the app moves to the new
+    /// lane: someone who has just bought a second thing wants to name it, not to be
+    /// returned to the one they finished.
     @discardableResult
     public func openAnotherLane() async -> Slot? {
         var opened: Slot?
@@ -67,6 +83,9 @@ public final class SlotsController {
             guard let receipt = try await self.broker.purchaseAdditionalLane() else { return }
             opened = try await self.client.claimSlot(source: self.source, receipt: receipt)
             await self.reload()
+            if let opened {
+                self.current = opened.slot
+            }
         }
         return opened
     }

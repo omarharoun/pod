@@ -10,6 +10,7 @@ public final class PodEnvironment {
     public let client: APIClient
     public let copy: Copywriter
     public let session: SessionController
+    /// The free lane's onboarding. Every other lane goes through ``onboarding(for:)``.
     public let onboarding: OnboardingController
     public let slots: SlotsController
 
@@ -35,6 +36,19 @@ public final class PodEnvironment {
         return controller
     }
 
+    /// One onboarding controller per lane, created once.
+    ///
+    /// Per lane rather than one switchable controller: a half-answered draft belongs to
+    /// the thing it is about, and moving between lanes must not carry it across.
+    public func onboarding(for slot: Int) -> OnboardingController {
+        if slot == 0 { return onboarding }
+        if let existing = onboardingControllers[slot] { return existing }
+        let controller = OnboardingController(client: client, slot: slot)
+        onboardingControllers[slot] = controller
+        return controller
+    }
+
+    private var onboardingControllers: [Int: OnboardingController] = [:]
     private var weekControllers: [UUID: WeekController] = [:]
     private var graduationControllers: [UUID: GraduationController] = [:]
 

@@ -232,3 +232,85 @@ class SlotsCopyTest {
         }
     }
 }
+
+/** Switching between things, once there is more than one. */
+class LaneSwitchingTest {
+    private val nowMillis = 1_800_000_000_000L
+    private val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
+
+    private val twoOpenLanes = """
+        {"max_slots":5,"slots":[
+          {"slot":0,"entitled":true,"has_intent":true,"in_pool":false,"has_pod":true,"goal_text":"sort out the spare room"},
+          {"slot":1,"entitled":true,"has_intent":true,"in_pool":false,"has_pod":true,"goal_text":"learn to make bread"},
+          {"slot":2,"entitled":false,"has_intent":false,"in_pool":false,"has_pod":false}
+        ]}
+    """.trimIndent()
+
+    private fun repository(): SlotsRepository {
+        val engine = MockEngine { respond(twoOpenLanes, HttpStatusCode.OK, jsonHeaders) }
+        val tokens = InMemoryTokenStore(
+            StoredSession("access-1", "refresh-1", nowMillis + 900_000, "user-1"),
+        )
+        return SlotsRepository(PodApiClient("https://api.test.invalid", tokens, engine) { nowMillis })
+    }
+
+    @Test
+    fun `the free lane is where you start`() = runTest {
+        val repository = repository()
+        repository.load()
+        assertEquals(0, repository.current.value)
+    }
+
+    @Test
+    fun `switching to a lane you have works`() = runTest {
+        val repository = repository()
+        repository.load()
+        repository.show(1)
+        assertEquals(1, repository.current.value)
+    }
+
+    /**
+     * A lane the caller does not have is ignored rather than refused. There is no state in
+     * which showing somebody an error about a lane they never bought helps them.
+     */
+    @Test
+    fun `switching to a lane you do not have is ignored`() = runTest {
+        val repository = repository()
+        repository.load()
+        repository.show(2)
+        assertEquals(0, repository.current.value)
+        assertNull(repository.failure.value)
+        repository.show(9)
+        assertEquals(0, repository.current.value)
+    }
+
+    /** Buying a second thing takes you to it — you want to name it, not to go back. */
+    @Test
+    fun `claiming a lane moves to it`() = runTest {
+        val engine = MockEngine { request ->
+            when {
+                request.method.value == "POST" ->
+                    respond(
+                        """{"slot":1,"entitled":true,"has_intent":false,"in_pool":false,"has_pod":false}""",
+                        HttpStatusCode.OK, jsonHeaders,
+                    )
+                else -> respond(twoOpenLanes, HttpStatusCode.OK, jsonHeaders)
+            }
+        }
+        val tokens = InMemoryTokenStore(
+            StoredSession("access-1", "refresh-1", nowMillis + 900_000, "user-1"),
+        )
+        val repository = SlotsRepository(
+            PodApiClient("https://api.test.invalid", tokens, engine) { nowMillis },
+            object : PurchaseBroker {
+                override suspend fun purchaseAdditionalLane(): String = "dev:order-1"
+            },
+        )
+        repository.load()
+
+        val opened = repository.openAnotherLane()
+
+        assertEquals(1, opened?.slot)
+        assertEquals(1, repository.current.value)
+    }
+}

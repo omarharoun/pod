@@ -50,6 +50,27 @@ public class SlotsRepository(
     private val _isWorking = MutableStateFlow(false)
     public val isWorking: StateFlow<Boolean> = _isWorking.asStateFlow()
 
+    private val _current = MutableStateFlow(0)
+
+    /**
+     * The lane the caller is looking at. Every lane-aware screen reads this.
+     *
+     * Held here rather than in each screen because it is one fact about the whole session
+     * — which thing you are currently looking at — and two screens disagreeing about it is
+     * how someone posts proof against the wrong goal.
+     */
+    public val current: StateFlow<Int> = _current.asStateFlow()
+
+    /**
+     * Switches to a lane the caller actually has. A lane they do not is ignored rather
+     * than refused: there is no state in which showing an error about it helps.
+     */
+    public fun show(slot: Int) {
+        if (_slots.value.any { it.slot == slot && it.entitled }) {
+            _current.value = slot
+        }
+    }
+
     /** The lanes that are actually usable, in order. Lane 0 is always among them. */
     public fun openLanes(): List<Slot> = _slots.value.filter { it.entitled }
 
@@ -81,6 +102,9 @@ public class SlotsRepository(
             val list = client.slots()
             _slots.value = list.slots
             _maxSlots.value = list.maxSlots
+            // Someone who has just bought a second thing wants to name it, not to be
+            // returned to the one they finished.
+            opened?.let { _current.value = it.slot }
         }
         return opened
     }

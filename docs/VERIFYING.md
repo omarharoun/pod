@@ -21,6 +21,7 @@ Last updated after ADR-027.
 | Matching | unit tests including the shared-frame availability arithmetic | green |
 | Android `:core:api` | `make android-core-test` — plain Kotlin/JVM, no SDK needed (ADR-009) | green, 73 tests |
 | Client symbols | `make clientlint` — copy keys and initialiser labels against the generated models | green |
+| End to end | five journeys against Postgres: a cycle, a dissolve, a carried pod, two lanes, a second cycle | green |
 
 `make verify` runs all of the above. It is what CI runs, and it passes.
 

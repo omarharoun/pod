@@ -3,7 +3,7 @@ package app.pod.di
 import android.content.Context
 import app.pod.BuildConfig
 import app.pod.api.Copywriter
-import app.pod.api.OnboardingRepository
+import app.pod.api.OnboardingRepositories
 import app.pod.api.PodApiClient
 import app.pod.api.PurchaseBroker
 import app.pod.api.SessionRepository
@@ -55,8 +55,8 @@ object AppModule {
      */
     @Provides
     @Singleton
-    fun onboardingRepository(client: PodApiClient): OnboardingRepository =
-        OnboardingRepository(client)
+    fun onboardingRepositories(client: PodApiClient): OnboardingRepositories =
+        OnboardingRepositories(client)
 
     /**
      * No FCM configuration ships in this repository, so the default source never yields a
