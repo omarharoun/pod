@@ -1321,6 +1321,12 @@ for that commit is green. Read the job log rather than reasoning about what Swif
   handed, so `"/v1/pool?slot=2"` went out as `/v1/pool%3Fslot=2`. Path and query are built
   through `URLComponents` now.
 * **Two main-actor properties.** `UIDevice.current` is isolated in the iOS 18 SDK.
+* **The plist check was reading the wrong plist.** With the app target finally building,
+  the step that guards ADR-025's usage descriptions ran for the first time — and looked at
+  `Pod.app/PodKit_PodAPI.bundle/Info.plist`, because `-path '*Pod.app*'` matches a resource
+  bundle nested inside the app and `head -1` picked it. It now matches
+  `*/Pod.app/Info.plist` exactly. A check that has never executed is not a check, whatever
+  it says it does.
 
 **The one worth keeping.** The lane 404 had a test — written the same day, asserting exactly
 the right thing — that had never run once, because the package it lives in did not compile.
