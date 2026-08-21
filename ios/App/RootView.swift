@@ -71,7 +71,11 @@ private struct SignedInView: View {
             // grid whose proof was deleted and an action nobody can post against, and
             // would leave the choice somewhere the person has to go looking for it.
             if pod.state == .completed {
-                GraduationView(pod: pod, controller: environment.graduationController(for: pod))
+                GraduationView(
+                    pod: pod,
+                    controller: environment.graduationController(for: pod),
+                    slots: environment.slots
+                )
             } else {
                 WeekView(
                     controller: environment.weekController(podID: pod.id),

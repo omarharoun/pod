@@ -5,9 +5,13 @@ import app.pod.BuildConfig
 import app.pod.api.Copywriter
 import app.pod.api.OnboardingRepository
 import app.pod.api.PodApiClient
-import app.pod.api.WeekRepositories
+import app.pod.api.PurchaseBroker
 import app.pod.api.SessionRepository
+import app.pod.api.SlotsRepository
 import app.pod.api.TokenStore
+import app.pod.api.UnavailablePurchaseBroker
+import app.pod.api.WeekRepositories
+import app.pod.api.generated.PurchaseSource
 import app.pod.data.EncryptedTokenStore
 import app.pod.data.NoPushTokenSource
 import app.pod.data.PushRegistrar
@@ -67,6 +71,21 @@ object AppModule {
     @Singleton
     fun pushRegistrar(client: PodApiClient, tokens: PushTokenSource): PushRegistrar =
         PushRegistrar(client, tokens)
+
+    /**
+     * No Play Billing configuration ships in this repository, so the default broker
+     * behaves like someone who cancelled — the product works without a paywall rather
+     * than breaking around one. Swap this binding per environment to wire billing in,
+     * the same seam the server has in selectReceiptVerifier.
+     */
+    @Provides
+    @Singleton
+    fun purchaseBroker(): PurchaseBroker = UnavailablePurchaseBroker()
+
+    @Provides
+    @Singleton
+    fun slotsRepository(client: PodApiClient, broker: PurchaseBroker): SlotsRepository =
+        SlotsRepository(client, broker, PurchaseSource.PLAY_STORE)
 
     /** One week repository per pod, kept for the process. */
     @Provides

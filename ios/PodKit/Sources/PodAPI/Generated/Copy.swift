@@ -271,6 +271,28 @@ public extension CopyKey {
     /// "Change my mind"
     static let graduationChange = CopyKey(rawValue: "graduation.change")
 
+    /// "Something else you've been putting off?"
+    static let slotsOfferTitle = CopyKey(rawValue: "slots.offer.title")
+
+    /// "You can run a second thing alongside this one. Same shape: one small action a week, a different pod."
+    static let slotsOfferBody = CopyKey(rawValue: "slots.offer.body")
+
+    /// "Start a second thing"
+    static let slotsOfferAction = CopyKey(rawValue: "slots.offer.action")
+
+    /// "Something new"
+    static let slotsEmpty = CopyKey(rawValue: "slots.empty")
+
+    /// "What's the second thing?"
+    static let slotsNewTitle = CopyKey(rawValue: "slots.new.title")
+
+    /// "Same as before — name it in your own words, and we'll find you a pod for it."
+    static let slotsNewBody = CopyKey(rawValue: "slots.new.body")
+
+    /// "Switch to {goal}"
+    /// Placeholders: goal
+    static let a11yLaneSwitch = CopyKey(rawValue: "a11y.laneSwitch")
+
     /// "{count} weeks, done"
     /// Placeholders: count
     static let pushCycleCompletedTitle = CopyKey(rawValue: "push.cycleCompleted.title")
@@ -707,6 +729,13 @@ public extension CopyKey {
         .graduationDeclinedTitle,
         .graduationDeclinedBody,
         .graduationChange,
+        .slotsOfferTitle,
+        .slotsOfferBody,
+        .slotsOfferAction,
+        .slotsEmpty,
+        .slotsNewTitle,
+        .slotsNewBody,
+        .a11yLaneSwitch,
         .pushCycleCompletedTitle,
         .pushCycleCompletedBody,
         .pushCycleContinuingTitle,

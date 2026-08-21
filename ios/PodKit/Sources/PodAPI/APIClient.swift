@@ -98,36 +98,55 @@ public actor APIClient {
 
     // MARK: - Onboarding
 
-    public func onboardingState() async throws -> OnboardingState {
-        try await send(Request(method: "GET", path: "/v1/onboarding/state"))
+    public func onboardingState(slot: Int = 0) async throws -> OnboardingState {
+        try await send(Request(method: "GET", path: "/v1/onboarding/state".withSlot(slot)))
+    }
+
+    // MARK: - Lanes
+
+    /// Every lane the caller has, and whether each may be used.
+    public func slots() async throws -> SlotList {
+        try await send(Request(method: "GET", path: "/v1/slots"))
+    }
+
+    /// Opens the next lane against a verified purchase.
+    ///
+    /// Idempotent on the store's transaction id, so the retries every store SDK performs
+    /// return the lane already opened rather than spending another purchase.
+    public func claimSlot(source: PurchaseSource, receipt: String) async throws -> Slot {
+        try await send(Request(
+            method: "POST",
+            path: "/v1/slots",
+            body: try encoder.encode(ClaimSlotRequest(source: source, receipt: receipt))
+        ))
     }
 
     /// The intent on file, or `nil` when nothing has been answered yet.
     ///
     /// Recovery re-offers a smaller intensity without re-asking the goal, the timezone or
     /// the availability windows, so it needs to read them back.
-    public func intent() async throws -> Intent? {
+    public func intent(slot: Int = 0) async throws -> Intent? {
         do {
-            return try await send(Request(method: "GET", path: "/v1/onboarding/intent"))
+            return try await send(Request(method: "GET", path: "/v1/onboarding/intent".withSlot(slot)))
         } catch APIError.api(let problem, _) where problem.code == .notFound {
             return nil
         }
     }
 
-    public func saveIntent(_ intent: IntentRequest) async throws -> Intent {
+    public func saveIntent(_ intent: IntentRequest, slot: Int = 0) async throws -> Intent {
         try await send(Request(
             method: "PUT",
-            path: "/v1/onboarding/intent",
+            path: "/v1/onboarding/intent".withSlot(slot),
             body: try encoder.encode(intent)
         ))
     }
 
-    public func joinPool() async throws -> PoolTicket {
-        try await send(Request(method: "POST", path: "/v1/pool"))
+    public func joinPool(slot: Int = 0) async throws -> PoolTicket {
+        try await send(Request(method: "POST", path: "/v1/pool".withSlot(slot)))
     }
 
-    public func leavePool() async throws {
-        let _: EmptyResponse = try await send(Request(method: "DELETE", path: "/v1/pool"))
+    public func leavePool(slot: Int = 0) async throws {
+        let _: EmptyResponse = try await send(Request(method: "DELETE", path: "/v1/pool".withSlot(slot)))
     }
 
     // MARK: - Pod
@@ -234,8 +253,8 @@ public actor APIClient {
     ///
     /// The server answers 204 rather than 404 for "no pod": not being matched yet is a
     /// state, not a failure, and the two should not look the same to the client.
-    public func currentPod() async throws -> Pod? {
-        let response: PodOrNothing = try await send(Request(method: "GET", path: "/v1/pods/current"))
+    public func currentPod(slot: Int = 0) async throws -> Pod? {
+        let response: PodOrNothing = try await send(Request(method: "GET", path: "/v1/pods/current".withSlot(slot)))
         return response.pod
     }
 
@@ -416,4 +435,14 @@ private extension ISO8601DateFormatter {
         plain.formatOptions = [.withInternetDateTime]
         return [withFraction, plain]
     }()
+}
+
+private extension String {
+    /// Appends the lane, and only when it is not the free one.
+    ///
+    /// Omitting it for lane 0 keeps every existing request byte-identical to what it was
+    /// before M7, so the free loop cannot be broken by a parameter (ADR-026).
+    func withSlot(_ slot: Int) -> String {
+        slot == 0 ? self : "\(self)?slot=\(slot)"
+    }
 }

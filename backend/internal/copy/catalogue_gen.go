@@ -266,6 +266,28 @@ const (
 	// "Change my mind"
 	KeyGraduationChange Key = "graduation.change"
 
+	// "Something else you've been putting off?"
+	KeySlotsOfferTitle Key = "slots.offer.title"
+
+	// "You can run a second thing alongside this one. Same shape: one small action a week, a different pod."
+	KeySlotsOfferBody Key = "slots.offer.body"
+
+	// "Start a second thing"
+	KeySlotsOfferAction Key = "slots.offer.action"
+
+	// "Something new"
+	KeySlotsEmpty Key = "slots.empty"
+
+	// "What's the second thing?"
+	KeySlotsNewTitle Key = "slots.new.title"
+
+	// "Same as before — name it in your own words, and we'll find you a pod for it."
+	KeySlotsNewBody Key = "slots.new.body"
+
+	// "Switch to {goal}"
+	// Placeholders: goal
+	KeyA11yLaneSwitch Key = "a11y.laneSwitch"
+
 	// "{count} weeks, done"
 	// Placeholders: count
 	KeyPushCycleCompletedTitle Key = "push.cycleCompleted.title"
@@ -703,6 +725,13 @@ var AllKeys = []Key{
 	KeyGraduationDeclinedTitle,
 	KeyGraduationDeclinedBody,
 	KeyGraduationChange,
+	KeySlotsOfferTitle,
+	KeySlotsOfferBody,
+	KeySlotsOfferAction,
+	KeySlotsEmpty,
+	KeySlotsNewTitle,
+	KeySlotsNewBody,
+	KeyA11yLaneSwitch,
 	KeyPushCycleCompletedTitle,
 	KeyPushCycleCompletedBody,
 	KeyPushCycleContinuingTitle,
@@ -900,6 +929,13 @@ var catalogue = map[Key]map[string]string{
 	KeyGraduationDeclinedTitle:        {"other": "That's the cycle, then"},
 	KeyGraduationDeclinedBody:         {"other": "Nothing more to do. If you want another pod later, it's here."},
 	KeyGraduationChange:               {"other": "Change my mind"},
+	KeySlotsOfferTitle:                {"other": "Something else you've been putting off?"},
+	KeySlotsOfferBody:                 {"other": "You can run a second thing alongside this one. Same shape: one small action a week, a different pod."},
+	KeySlotsOfferAction:               {"other": "Start a second thing"},
+	KeySlotsEmpty:                     {"other": "Something new"},
+	KeySlotsNewTitle:                  {"other": "What's the second thing?"},
+	KeySlotsNewBody:                   {"other": "Same as before — name it in your own words, and we'll find you a pod for it."},
+	KeyA11yLaneSwitch:                 {"other": "Switch to {goal}"},
 	KeyPushCycleCompletedTitle:        {"other": "{count} weeks, done"},
 	KeyPushCycleCompletedBody:         {"other": "Your pod got to the end of the cycle."},
 	KeyPushCycleContinuingTitle:       {"other": "Your pod is carrying on"},

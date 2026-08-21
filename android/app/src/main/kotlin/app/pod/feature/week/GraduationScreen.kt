@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,10 +16,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.hilt.navigation.compose.hiltViewModel
 import app.pod.api.generated.CopyKey
 import app.pod.api.generated.Pod
 import app.pod.api.generated.PodTokens
@@ -27,11 +28,11 @@ import app.pod.ui.components.PodPrimaryButton
 import app.pod.ui.components.PodSecondaryButton
 import app.pod.ui.theme.LocalCopywriter
 import app.pod.ui.theme.LocalPodColors
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toJavaInstant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toJavaInstant
 
 /**
  * The pod reached the end of its cycle.
@@ -123,7 +124,48 @@ fun GraduationScreen(
             )
         }
 
-        state.failure?.let { PodNotice(failure = it) }
+        // Below the choice and never above it. The offer belongs here because you just
+        // finished six weeks of something, which is when starting another thing is a real
+        // thought — not on a permanent "+" shown most often to the person who has not
+        // managed their first thing yet (docs/DESIGN.md, variant B).
+        if (state.canOpenAnotherLane) {
+            SecondThing(working = state.working, onStart = viewModel::openAnotherLane)
+        }
+
+        (state.failure ?: state.slotsFailure)?.let { PodNotice(failure = it) }
+    }
+}
+
+/**
+ * Nothing about the free pod is locked, so the offer never says "unlock". It does not name
+ * a price either — the button opens the platform sheet, where the real price is.
+ */
+@Composable
+private fun SecondThing(working: Boolean, onStart: () -> Unit, modifier: Modifier = Modifier) {
+    val copy = LocalCopywriter.current
+    val colors = LocalPodColors.current
+
+    OutlinedCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(PodTokens.Spacing.SM.dp),
+            modifier = Modifier.padding(PodTokens.Spacing.LG.dp),
+        ) {
+            Text(
+                copy(CopyKey.SLOTS_OFFER_TITLE),
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.contentPrimary,
+            )
+            Text(
+                copy(CopyKey.SLOTS_OFFER_BODY),
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.contentSecondary,
+            )
+            PodSecondaryButton(
+                title = copy(CopyKey.SLOTS_OFFER_ACTION),
+                onClick = onStart,
+                enabled = !working,
+            )
+        }
     }
 }
 

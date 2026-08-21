@@ -363,6 +363,70 @@ different emphasis". Same information, same order, native idiom each.
 
 ---
 
+## M7 — A second thing
+
+The paywall. `CLAUDE.md` §2 rule 6 is the whole brief: one free pod forever, and the
+paywall gates *additional* pods, never the core loop. A paid lane is a second **thing**,
+with its own goal (ADR-026).
+
+**Variant A — a "+" on the week screen.** Always visible, opens the store sheet. Puts the
+paid thing next to the free thing at all times.
+
+**Variant B — nowhere until you finish something.** The offer appears on the graduation
+screen, and in one line on the pod screen after a cycle has completed.
+
+**Picked: B.** A is what every app does and it is the wrong instinct here. A permanent "+"
+is a permanent advertisement in the middle of a product about not feeling bad, shown most
+often to the person who has not managed their first thing yet — the person §2 rule 6 exists
+to protect. It also implies that more lanes are the way to get better at this, which is the
+opposite of §1.
+
+B puts the offer exactly where it is true: you just finished six weeks of something, so
+starting another thing is a real thought you might be having. Someone who never finishes a
+cycle never sees a paywall, which is correct.
+
+### What it says
+
+On the graduation screen, below the continue-or-close choice and never above it:
+
+> **Something else you've been putting off?**
+> You can run a second thing alongside this one. Same shape: one small action a week,
+> a different pod.
+> [ Start a second thing ]
+
+It does not say "unlock", "upgrade", "pro", or "premium". Nothing about the free pod is
+locked, and calling it that would be a lie about the product's own shape. It also does not
+name a price — StoreKit and Play own that, and the button opens the platform sheet where
+the real price lives.
+
+### The lane list
+
+Once someone has more than one lane, the app needs a way between them. A segmented row
+above the week, showing each lane's **goal text**, never its number:
+
+> [ sort out the spare room ] [ learn to make bread ]
+
+Numbers would put someone on a scale — the same reason intensity rungs are phrases
+(ADR-010). A lane with no goal yet reads "Something new".
+
+### What the paywall may not do
+
+* It may not appear before a cycle has completed.
+* It may not interrupt a check-in. Nothing may stand between someone and their ten seconds.
+* It may not count what somebody has not bought — no "1 of 5 slots used".
+* A failed purchase says nothing was charged, and leaves the free lane untouched. The
+  server-side test for that is `TestTheFreeLaneSurvivesABrokenEntitlementsStore`; the
+  client's job is to never render a state where the free pod looks unavailable.
+
+### Divergence
+
+The purchase sheet is the platform's, so the two clients genuinely differ below the button:
+iOS gets StoreKit 2's `Product.purchase()`, Android gets Play Billing. Everything above the
+button is the same. Neither is implemented here — both need store credentials and a real
+app record, which is the same seam the server has (`selectReceiptVerifier`).
+
+---
+
 ## Errors
 
 Failures render as a calm block under the content: a title, a line of explanation, and a

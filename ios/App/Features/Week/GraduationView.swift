@@ -14,11 +14,38 @@ import PodAPI
 struct GraduationView: View {
     let pod: Pod
     let controller: GraduationController
+    let slots: SlotsController
 
     @Environment(\.palette) private var palette
     @Environment(\.copy) private var copy
 
     private var cycleLength: Int { pod.cycle?.lengthWeeks ?? 0 }
+
+    /// Nothing about the free pod is locked, so the offer never says "unlock". It does not
+    /// name a price either — the button opens the platform sheet, where the real price is.
+    private var secondThing: some View {
+        VStack(alignment: .leading, spacing: PodTokens.Spacing.sm) {
+            Text(copy(.slotsOfferTitle))
+                .podText(PodTokens.TypeScale.bodyStrong)
+                .foregroundStyle(palette(.contentPrimary))
+
+            Text(copy(.slotsOfferBody))
+                .podText(PodTokens.TypeScale.body)
+                .foregroundStyle(palette(.contentSecondary))
+
+            PodSecondaryButton(title: copy(.slotsOfferAction), isEnabled: !slots.isWorking) {
+                Task { await slots.openAnotherLane() }
+            }
+            .padding(.top, PodTokens.Spacing.xs)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(PodTokens.Spacing.lg)
+        .background(palette(.surfaceRaised), in: .rect(cornerRadius: PodTokens.Radius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: PodTokens.Radius.md)
+                .stroke(palette(.borderHairline), lineWidth: 1)
+        )
+    }
 
     private var deadline: String {
         guard let decideBy = pod.continuation?.decideBy else { return "" }
@@ -36,7 +63,16 @@ struct GraduationView: View {
                     choice
                 }
 
-                if let failure = controller.failure {
+                // Below the choice and never above it. The offer belongs here because
+                // you just finished six weeks of something, which is when starting
+                // another thing is a real thought — not on a permanent "+" shown most
+                // often to the person who has not managed their first thing yet
+                // (docs/DESIGN.md, variant B).
+                if slots.canOpenAnother {
+                    secondThing
+                }
+
+                if let failure = controller.failure ?? slots.failure {
                     PodNotice(error: failure)
                 }
             }
@@ -45,6 +81,7 @@ struct GraduationView: View {
             .padding(.vertical, PodTokens.Spacing.xxxl)
         }
         .background(palette(.surfaceCanvas))
+        .task { await slots.load() }
     }
 
     private var finished: some View {
@@ -143,7 +180,8 @@ struct GraduationView: View {
     let pod = Pod.previewGraduated(streakWeeks: 6, youAnswered: nil)
     return GraduationView(
         pod: pod,
-        controller: GraduationController(client: PodEnvironment.preview().client, pod: pod)
+        controller: GraduationController(client: PodEnvironment.preview().client, pod: pod),
+        slots: PodEnvironment.preview().slots
     )
     .environment(\.palette, PodPalette(.light))
     .environment(\.copy, Copywriter.bundled)
@@ -153,7 +191,8 @@ struct GraduationView: View {
     let pod = Pod.previewGraduated(streakWeeks: 0, youAnswered: nil)
     return GraduationView(
         pod: pod,
-        controller: GraduationController(client: PodEnvironment.preview().client, pod: pod)
+        controller: GraduationController(client: PodEnvironment.preview().client, pod: pod),
+        slots: PodEnvironment.preview().slots
     )
     .environment(\.palette, PodPalette(.light))
     .environment(\.copy, Copywriter.bundled)
@@ -163,7 +202,8 @@ struct GraduationView: View {
     let pod = Pod.previewGraduated(streakWeeks: 4, youAnswered: true)
     return GraduationView(
         pod: pod,
-        controller: GraduationController(client: PodEnvironment.preview().client, pod: pod)
+        controller: GraduationController(client: PodEnvironment.preview().client, pod: pod),
+        slots: PodEnvironment.preview().slots
     )
     .environment(\.palette, PodPalette(.dark))
     .environment(\.copy, Copywriter.bundled)
@@ -174,7 +214,8 @@ struct GraduationView: View {
     let pod = Pod.previewGraduated(streakWeeks: 2, youAnswered: false)
     return GraduationView(
         pod: pod,
-        controller: GraduationController(client: PodEnvironment.preview().client, pod: pod)
+        controller: GraduationController(client: PodEnvironment.preview().client, pod: pod),
+        slots: PodEnvironment.preview().slots
     )
     .environment(\.palette, PodPalette(.light))
     .environment(\.copy, Copywriter.bundled)

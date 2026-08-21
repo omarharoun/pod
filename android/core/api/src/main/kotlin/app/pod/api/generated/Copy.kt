@@ -428,6 +428,42 @@ public object CopyKey {
     public const val GRADUATION_CHANGE: String = "graduation.change"
 
     /**
+     * "Something else you've been putting off?"
+     */
+    public const val SLOTS_OFFER_TITLE: String = "slots.offer.title"
+
+    /**
+     * "You can run a second thing alongside this one. Same shape: one small action a week, a different pod."
+     */
+    public const val SLOTS_OFFER_BODY: String = "slots.offer.body"
+
+    /**
+     * "Start a second thing"
+     */
+    public const val SLOTS_OFFER_ACTION: String = "slots.offer.action"
+
+    /**
+     * "Something new"
+     */
+    public const val SLOTS_EMPTY: String = "slots.empty"
+
+    /**
+     * "What's the second thing?"
+     */
+    public const val SLOTS_NEW_TITLE: String = "slots.new.title"
+
+    /**
+     * "Same as before — name it in your own words, and we'll find you a pod for it."
+     */
+    public const val SLOTS_NEW_BODY: String = "slots.new.body"
+
+    /**
+     * "Switch to {goal}"
+     * Placeholders: goal
+     */
+    public const val A11Y_LANE_SWITCH: String = "a11y.laneSwitch"
+
+    /**
      * "{count} weeks, done"
      * Placeholders: count
      */
@@ -1085,6 +1121,13 @@ public object CopyKey {
         GRADUATION_DECLINED_TITLE,
         GRADUATION_DECLINED_BODY,
         GRADUATION_CHANGE,
+        SLOTS_OFFER_TITLE,
+        SLOTS_OFFER_BODY,
+        SLOTS_OFFER_ACTION,
+        SLOTS_EMPTY,
+        SLOTS_NEW_TITLE,
+        SLOTS_NEW_BODY,
+        A11Y_LANE_SWITCH,
         PUSH_CYCLE_COMPLETED_TITLE,
         PUSH_CYCLE_COMPLETED_BODY,
         PUSH_CYCLE_CONTINUING_TITLE,

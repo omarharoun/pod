@@ -6,9 +6,10 @@ import app.pod.api.generated.AuthSession
 import app.pod.api.generated.AuthStartRequest
 import app.pod.api.generated.AuthStartResponse
 import app.pod.api.generated.AuthVerifyRequest
+import app.pod.api.generated.ClaimSlotRequest
+import app.pod.api.generated.ContinueRequest
 import app.pod.api.generated.DevicePlatform
 import app.pod.api.generated.DeviceRequest
-import app.pod.api.generated.ContinueRequest
 import app.pod.api.generated.ErrorCode
 import app.pod.api.generated.Health
 import app.pod.api.generated.Intent
@@ -20,6 +21,9 @@ import app.pod.api.generated.Proof
 import app.pod.api.generated.ProofKind
 import app.pod.api.generated.ProofUpload
 import app.pod.api.generated.ProofUploadRequest
+import app.pod.api.generated.PurchaseSource
+import app.pod.api.generated.Slot
+import app.pod.api.generated.SlotList
 import app.pod.api.generated.User
 import app.pod.api.generated.Week
 import app.pod.api.generated.WeekActionRequest
@@ -39,10 +43,10 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import java.io.IOException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
-import java.io.IOException
 
 /**
  * The one way this app talks to Pod.
@@ -114,10 +118,24 @@ public class PodApiClient(
         sendUnit("/v1/devices", HttpMethod.Delete, DeviceRequest(token = token, platform = platform))
     }
 
+    // ---- Lanes -------------------------------------------------------------------
+
+    /** Every lane the caller has, and whether each may be used. */
+    public suspend fun slots(): SlotList = send("/v1/slots", HttpMethod.Get)
+
+    /**
+     * Opens the next lane against a verified purchase.
+     *
+     * Idempotent on the store's transaction id, so the retries every store SDK performs
+     * return the lane already opened rather than spending another purchase.
+     */
+    public suspend fun claimSlot(source: PurchaseSource, receipt: String): Slot =
+        send("/v1/slots", HttpMethod.Post, ClaimSlotRequest(source = source, receipt = receipt))
+
     // ---- Onboarding ------------------------------------------------------------
 
-    public suspend fun onboardingState(): OnboardingState =
-        send("/v1/onboarding/state", HttpMethod.Get)
+    public suspend fun onboardingState(slot: Int = 0): OnboardingState =
+        send(withSlot("/v1/onboarding/state", slot), HttpMethod.Get)
 
     /**
      * The intent on file, or null when nothing has been answered yet.
@@ -125,19 +143,20 @@ public class PodApiClient(
      * Recovery re-offers a smaller intensity without re-asking the goal, the timezone or
      * the availability windows, so it has to read them back (ADR-021).
      */
-    public suspend fun intent(): Intent? = try {
-        send("/v1/onboarding/intent", HttpMethod.Get)
+    public suspend fun intent(slot: Int = 0): Intent? = try {
+        send(withSlot("/v1/onboarding/intent", slot), HttpMethod.Get)
     } catch (failure: ApiException.Problem) {
         if (failure.error.code == ErrorCode.NOT_FOUND) null else throw failure
     }
 
-    public suspend fun saveIntent(intent: IntentRequest): Intent =
-        send("/v1/onboarding/intent", HttpMethod.Put, intent)
+    public suspend fun saveIntent(intent: IntentRequest, slot: Int = 0): Intent =
+        send(withSlot("/v1/onboarding/intent", slot), HttpMethod.Put, intent)
 
-    public suspend fun joinPool(): PoolTicket = send("/v1/pool", HttpMethod.Post)
+    public suspend fun joinPool(slot: Int = 0): PoolTicket =
+        send(withSlot("/v1/pool", slot), HttpMethod.Post)
 
-    public suspend fun leavePool() {
-        perform("/v1/pool", HttpMethod.Delete, body = null, accessToken = validAccessToken())
+    public suspend fun leavePool(slot: Int = 0) {
+        sendUnit(withSlot("/v1/pool", slot), HttpMethod.Delete, body = null)
     }
 
     // ---- Pod -------------------------------------------------------------------
@@ -148,7 +167,8 @@ public class PodApiClient(
      * The server answers 204 rather than 404 for "no pod": not being matched yet is a
      * state, not a failure, and the two must not look the same to the client.
      */
-    public suspend fun currentPod(): Pod? = sendOrNull("/v1/pods/current", HttpMethod.Get)
+    public suspend fun currentPod(slot: Int = 0): Pod? =
+        sendOrNull(withSlot("/v1/pods/current", slot), HttpMethod.Get)
 
     /**
      * Records whether the caller is carrying on after graduation.
@@ -321,6 +341,15 @@ public class PodApiClient(
         if (response.status == HttpStatusCode.NoContent) return null
         return decode(response)
     }
+
+    /**
+     * Appends the lane, and only when it is not the free one.
+     *
+     * Omitting it for lane 0 keeps every existing request byte-identical to what it was
+     * before M7, so the free loop cannot be broken by a parameter (ADR-026).
+     */
+    private fun withSlot(path: String, slot: Int): String =
+        if (slot == 0) path else "$path?slot=$slot"
 
     private suspend fun perform(
         path: String,

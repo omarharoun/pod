@@ -11,6 +11,7 @@ public final class PodEnvironment {
     public let copy: Copywriter
     public let session: SessionController
     public let onboarding: OnboardingController
+    public let slots: SlotsController
 
     /// Created per pod, because a week controller with no pod has nothing to show.
     public func weekController(podID: UUID) -> WeekController {
@@ -37,11 +38,20 @@ public final class PodEnvironment {
     private var weekControllers: [UUID: WeekController] = [:]
     private var graduationControllers: [UUID: GraduationController] = [:]
 
-    public init(client: APIClient, copy: Copywriter = .bundled, deviceName: String? = nil) {
+    public init(
+        client: APIClient,
+        copy: Copywriter = .bundled,
+        deviceName: String? = nil,
+        broker: PurchaseBroker = UnavailablePurchaseBroker()
+    ) {
         self.client = client
         self.copy = copy
         self.session = SessionController(client: client, deviceName: deviceName)
         self.onboarding = OnboardingController(client: client)
+        // The purchase broker is a seam: an app with no store configuration behaves like
+        // someone who cancelled, so the product works without a paywall rather than
+        // breaking around one.
+        self.slots = SlotsController(client: client, broker: broker)
     }
 
     /// The app's real environment.
