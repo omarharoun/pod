@@ -29,6 +29,10 @@ func (s *Server) handleOnboardingState(w http.ResponseWriter, r *http.Request) {
 			OfferLowerIntensity: state.Recovery.OfferLowerIntensity,
 			OfferAlternatePath:  state.Recovery.OfferAlternatePath,
 		}
+		if state.CurrentIntensity > 0 {
+			current := api.Intensity(state.CurrentIntensity)
+			recovery.CurrentIntensity = &current
+		}
 		if state.SuggestedIntensity > 0 {
 			suggested := api.Intensity(state.SuggestedIntensity)
 			recovery.SuggestedIntensity = &suggested

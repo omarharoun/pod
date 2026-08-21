@@ -262,3 +262,65 @@ func TestOmittingTheSelfReportKeepsTheStoredOne(t *testing.T) {
 		t.Errorf("self report: got %q, want the stored %q", candidate.SelfReport, api.SelfReportReliabilityRarely)
 	}
 }
+
+// After a pod ends, the offer names both rungs. Deriving "what they picked" from
+// "what we suggest" would put an invariant in a client comment (ADR-021).
+func TestRecoveryCarriesBothRungs(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", validIntent(), session.AccessToken), http.StatusOK, nil)
+
+	podID := h.seedPod(session.User.ID)
+	if err := h.store.DissolvePod(t.Context(), podID, "inactive", nil, h.clock.Now()); err != nil {
+		t.Fatalf("DissolvePod: %v", err)
+	}
+
+	var state api.OnboardingState
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/state", nil, session.AccessToken), http.StatusOK, &state)
+
+	recovery := state.Recovery
+	if recovery == nil {
+		t.Fatal("a pod ended and nothing was offered")
+	}
+	if !recovery.OfferLowerIntensity {
+		t.Error("offer_lower_intensity is false after a pod ended")
+	}
+	if recovery.CurrentIntensity == nil || *recovery.CurrentIntensity != 3 {
+		t.Errorf("current_intensity: got %v, want 3", recovery.CurrentIntensity)
+	}
+	if recovery.SuggestedIntensity == nil || *recovery.SuggestedIntensity != 2 {
+		t.Errorf("suggested_intensity: got %v, want 2", recovery.SuggestedIntensity)
+	}
+	if recovery.OfferAlternatePath {
+		t.Error("the alternate path was offered after one pod")
+	}
+}
+
+// Someone already on the smallest rung has nothing smaller to be offered. Suggesting
+// rung 0 — or rung 1 again — would be a question with one answer.
+func TestNothingSmallerIsOfferedOnTheSmallestRung(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+	intent := validIntent()
+	intent.Intensity = 1
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", intent, session.AccessToken), http.StatusOK, nil)
+
+	podID := h.seedPod(session.User.ID)
+	if err := h.store.DissolvePod(t.Context(), podID, "inactive", nil, h.clock.Now()); err != nil {
+		t.Fatalf("DissolvePod: %v", err)
+	}
+
+	var state api.OnboardingState
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/state", nil, session.AccessToken), http.StatusOK, &state)
+
+	recovery := state.Recovery
+	if recovery == nil {
+		t.Fatal("a pod ended and nothing was offered")
+	}
+	if recovery.SuggestedIntensity != nil {
+		t.Errorf("suggested_intensity: got %v, want nothing smaller", *recovery.SuggestedIntensity)
+	}
+	if recovery.CurrentIntensity == nil || *recovery.CurrentIntensity != 1 {
+		t.Errorf("current_intensity: got %v, want 1", recovery.CurrentIntensity)
+	}
+}

@@ -62,6 +62,9 @@ type State struct {
 	QueuedAt       time.Time
 	NextWindowAt   time.Time
 	Recovery       store.Recovery
+	// CurrentIntensity is what they picked, so the offer can name both rungs. Zero
+	// when nothing is being offered.
+	CurrentIntensity int
 	// SuggestedIntensity is one step gentler than what they last chose, when there is a
 	// gentler step. Zero when there is not, or when nothing is being offered.
 	SuggestedIntensity int
@@ -275,8 +278,11 @@ func (s *Service) State(ctx context.Context, userID string) (State, error) {
 		return State{}, fmt.Errorf("onboarding: read intent: %w", err)
 	}
 	state.IntentComplete = true
-	if recovery.OfferLowerIntensity && intent.Intensity > 1 {
-		state.SuggestedIntensity = intent.Intensity - 1
+	if recovery.OfferLowerIntensity {
+		state.CurrentIntensity = intent.Intensity
+		if intent.Intensity > 1 {
+			state.SuggestedIntensity = intent.Intensity - 1
+		}
 	}
 
 	if _, err := s.store.GetActivePod(ctx, userID); err == nil {

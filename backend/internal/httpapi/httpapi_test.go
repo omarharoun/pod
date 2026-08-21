@@ -123,8 +123,12 @@ func (h *harness) seedPod(userIDs ...string) string {
 		h.t.Fatalf("CreatePod: %v", err)
 	}
 	// Nobody reaches a pod without first writing an intent, so the fixture writes one
-	// too. Without it the seeded state is one production can never produce.
+	// too. Without it the seeded state is one production can never produce. It is a
+	// floor, not an override: a test that wrote its own intent keeps it.
 	for _, userID := range userIDs {
+		if _, err := h.store.GetIntent(context.Background(), userID); err == nil {
+			continue
+		}
 		if err := h.store.UpsertIntent(context.Background(), store.Intent{
 			UserID:       userID,
 			GoalText:     "clear the kitchen table",
