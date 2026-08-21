@@ -29,3 +29,11 @@ node_modules/
 
 # Kotlin compiler scratch, written by any gradle invocation.
 android/.kotlin/
+
+# Design
+# The seeded canvas is ~2 MB of editor payload built from the artboards beside it.
+# The .dc.html artboards are source and are kept — hence the exception, which has
+# to come second: a later negation is what un-ignores a match.
+design/mockups/*.html
+!design/mockups/*.dc.html
+design/mockups/__pycache__/

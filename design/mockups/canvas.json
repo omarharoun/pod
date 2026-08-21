@@ -1,0 +1,224 @@
+{
+  "artboards": [
+    {
+      "file": "SignIn.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Sign in"
+    },
+    {
+      "file": "VerifyCode.dc.html",
+      "x": 490,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Check your email"
+    },
+    {
+      "file": "Goal.dc.html",
+      "x": 0,
+      "y": 1004,
+      "w": 390,
+      "h": 844,
+      "title": "1 \u00b7 What have you been putting off?"
+    },
+    {
+      "file": "Category.dc.html",
+      "x": 490,
+      "y": 1004,
+      "w": 390,
+      "h": 844,
+      "title": "2 \u00b7 What kind of thing is it?"
+    },
+    {
+      "file": "Intensity.dc.html",
+      "x": 980,
+      "y": 1004,
+      "w": 390,
+      "h": 844,
+      "title": "3 \u00b7 How much can you give it?"
+    },
+    {
+      "file": "Reliability.dc.html",
+      "x": 1470,
+      "y": 1004,
+      "w": 390,
+      "h": 844,
+      "title": "5 \u00b7 One last thing"
+    },
+    {
+      "file": "Waiting.dc.html",
+      "x": 0,
+      "y": 2008,
+      "w": 390,
+      "h": 844,
+      "title": "Looking for your pod"
+    },
+    {
+      "file": "WeekNew.dc.html",
+      "x": 490,
+      "y": 2008,
+      "w": 390,
+      "h": 844,
+      "title": "Week 1 \u2014 you're matched"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 3012,
+      "w": 390,
+      "h": 844,
+      "title": "The week \u2014 two in, you still open"
+    },
+    {
+      "file": "ProofSheet.dc.html",
+      "x": 490,
+      "y": 3012,
+      "w": 390,
+      "h": 844,
+      "title": "Posting your 10 seconds"
+    },
+    {
+      "file": "WeekComplete.dc.html",
+      "x": 980,
+      "y": 3012,
+      "w": 390,
+      "h": 844,
+      "title": "Everyone was in"
+    },
+    {
+      "file": "WeekResting.dc.html",
+      "x": 1470,
+      "y": 3012,
+      "w": 390,
+      "h": 844,
+      "title": "Someone rested \u2014 never a verdict"
+    },
+    {
+      "file": "Lanes.dc.html",
+      "x": 1960,
+      "y": 3012,
+      "w": 390,
+      "h": 844,
+      "title": "Two lanes, switched by goal"
+    },
+    {
+      "file": "Recovery.dc.html",
+      "x": 0,
+      "y": 4016,
+      "w": 390,
+      "h": 844,
+      "title": "Pod wound down + a smaller rung"
+    },
+    {
+      "file": "RecoveryAlternate.dc.html",
+      "x": 490,
+      "y": 4016,
+      "w": 390,
+      "h": 844,
+      "title": "After three pods \u2014 the other way"
+    },
+    {
+      "file": "Graduation.dc.html",
+      "x": 0,
+      "y": 5020,
+      "w": 390,
+      "h": 844,
+      "title": "6 weeks, done"
+    },
+    {
+      "file": "GraduationNone.dc.html",
+      "x": 490,
+      "y": 5020,
+      "w": 390,
+      "h": 844,
+      "title": "\u2026when not every week landed"
+    },
+    {
+      "file": "GraduationWaiting.dc.html",
+      "x": 980,
+      "y": 5020,
+      "w": 390,
+      "h": 844,
+      "title": "Waiting on the others"
+    },
+    {
+      "file": "SecondThing.dc.html",
+      "x": 0,
+      "y": 6024,
+      "w": 390,
+      "h": 844,
+      "title": "A second thing"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "row-1",
+      "x": -520,
+      "y": 24,
+      "w": 420,
+      "text": "1. Getting in"
+    },
+    {
+      "id": "row-2",
+      "x": -520,
+      "y": 1028,
+      "w": 420,
+      "text": "2. Naming the thing \u2014 five questions, one per screen, selecting advances the flow"
+    },
+    {
+      "id": "row-3",
+      "x": -520,
+      "y": 2032,
+      "w": 420,
+      "text": "3. Waiting for the window, and landing in a pod"
+    },
+    {
+      "id": "row-4",
+      "x": -520,
+      "y": 3036,
+      "w": 420,
+      "text": "4. The week loop \u2014 this is the product"
+    },
+    {
+      "id": "row-5",
+      "x": -520,
+      "y": 4040,
+      "w": 420,
+      "text": "5. When a pod winds down"
+    },
+    {
+      "id": "row-6",
+      "x": -520,
+      "y": 5044,
+      "w": 420,
+      "text": "6. The end of a six-week cycle"
+    },
+    {
+      "id": "row-7",
+      "x": -520,
+      "y": 6048,
+      "w": 420,
+      "text": "7. The only thing behind the paywall"
+    },
+    {
+      "id": "tokens",
+      "x": -520,
+      "y": 3312,
+      "w": 420,
+      "text": "Every colour, size and type step here comes from design/tokens.json.\nEvery string is the literal value from content/microcopy.json \u2014 no\ninvented copy anywhere on this canvas.\n\nNames (Priya, Marcus), dates and counts are sample data."
+    },
+    {
+      "id": "ring",
+      "x": -520,
+      "y": 3572,
+      "w": 420,
+      "text": "One ring, one arc per member \u2014 never one ring each. Three rings side by\nside are three individual scores however carefully they are drawn, and\nthe streak is the pod's (CLAUDE.md \u00a72 rule 3).\n\nGrey-brown is 'not yet', not 'failed'. Blue-grey is 'resting'. Nothing\non this canvas is red."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
