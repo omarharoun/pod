@@ -267,7 +267,7 @@ func newJourney(t *testing.T, pairsOnly ...bool) *journey {
 	return &journey{
 		server: httpapi.New(
 			auth.NewService(db, mailer, fixed, cfg),
-			onboarding.NewService(db, embed.Hashing{}, fixed, entitlement.DevVerifier{}),
+			onboarding.NewService(db, embed.Lexical{}, fixed, entitlement.DevVerifier{}),
 			weekService, db, fixed, cfg, log, blobs,
 		),
 		blobRoot: blobRoot,

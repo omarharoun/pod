@@ -70,7 +70,7 @@ func newHarness(t testing.TB) *harness {
 	h.blobs = blobs
 	h.server = New(
 		auth.NewService(h.store, h.mailer, h.clock, cfg),
-		onboarding.NewService(h.store, embed.Hashing{}, h.clock, entitlement.DevVerifier{}),
+		onboarding.NewService(h.store, embed.Lexical{}, h.clock, entitlement.DevVerifier{}),
 		week.NewService(h.store, blobs, h.clock, notify.NewService(h.store, h.clock, log)),
 		h.store, h.clock, cfg, log, blobs,
 	)

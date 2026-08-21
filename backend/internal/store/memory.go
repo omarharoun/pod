@@ -279,6 +279,51 @@ func (m *Memory) GetIntent(_ context.Context, userID string, slot int) (Intent, 
 	return intent, nil
 }
 
+func (m *Memory) ListIntents(_ context.Context, after IntentKey, limit int) ([]Intent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if limit <= 0 {
+		return nil, nil
+	}
+	out := make([]Intent, 0, len(m.intents))
+	for _, intent := range m.intents {
+		if intentAfter(IntentKey{UserID: intent.UserID, Slot: intent.Slot}, after) {
+			out = append(out, intent)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].UserID != out[j].UserID {
+			return out[i].UserID < out[j].UserID
+		}
+		return out[i].Slot < out[j].Slot
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// intentAfter is the keyset comparison, spelled out once so the two stores cannot drift
+// on the boundary — the row equal to the cursor is the one already handled.
+func intentAfter(key, after IntentKey) bool {
+	if key.UserID != after.UserID {
+		return key.UserID > after.UserID
+	}
+	return key.Slot > after.Slot
+}
+
+func (m *Memory) ReplaceEmbedding(_ context.Context, key IntentKey, embedding []float32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	intent, ok := m.intents[laneKey(key.UserID, key.Slot)]
+	if !ok {
+		return ErrNotFound
+	}
+	intent.Embedding = append([]float32(nil), embedding...)
+	m.intents[laneKey(key.UserID, key.Slot)] = intent
+	return nil
+}
+
 func (m *Memory) JoinPool(_ context.Context, userID string, slot int, at time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

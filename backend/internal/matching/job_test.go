@@ -46,13 +46,13 @@ func (h *jobHarness) queue(p person) string {
 	if err != nil {
 		h.t.Fatalf("UpsertUserByEmail: %v", err)
 	}
-	vectors, err := embed.Hashing{}.Embed(ctx, []string{p.goal})
-	if err != nil {
-		h.t.Fatalf("Embed: %v", err)
-	}
 	category := p.category
 	if category == "" {
 		category = "home"
+	}
+	vectors, err := embed.Lexical{}.Embed(ctx, []embed.Goal{{Text: p.goal, Category: category}})
+	if err != nil {
+		h.t.Fatalf("Embed: %v", err)
 	}
 	intensity := p.intensity
 	if intensity == 0 {

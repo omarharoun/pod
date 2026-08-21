@@ -254,6 +254,54 @@ func (p *Postgres) UpsertIntent(ctx context.Context, intent Intent) error {
 	return wrap("commit intent upsert", tx.Commit(ctx))
 }
 
+func (p *Postgres) ListIntents(ctx context.Context, after IntentKey, limit int) ([]Intent, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	// The row-value comparison is the keyset: it is one index-ordered seek, and it gets
+	// the boundary right without the two-branch OR that is easy to write inside out.
+	rows, err := p.pool.Query(ctx, `
+		SELECT user_id, slot, goal_text, goal_category, intensity, timezone,
+		       self_report_reliability, availability_windows, embedding, updated_at
+		FROM intents
+		WHERE (user_id, slot) > ($1, $2)
+		ORDER BY user_id, slot
+		LIMIT $3`, after.UserID, after.Slot, limit)
+	if err != nil {
+		return nil, wrap("list intents", err)
+	}
+	defer rows.Close()
+
+	var out []Intent
+	for rows.Next() {
+		var intent Intent
+		var windows []byte
+		if err := rows.Scan(&intent.UserID, &intent.Slot, &intent.GoalText, &intent.GoalCategory,
+			&intent.Intensity, &intent.Timezone, &intent.SelfReport, &windows,
+			&intent.Embedding, &intent.UpdatedAt); err != nil {
+			return nil, wrap("scan intent", err)
+		}
+		if err := json.Unmarshal(windows, &intent.AvailabilityWindows); err != nil {
+			return nil, wrap("decode availability windows", err)
+		}
+		out = append(out, intent)
+	}
+	return out, wrap("list intents", rows.Err())
+}
+
+func (p *Postgres) ReplaceEmbedding(ctx context.Context, key IntentKey, embedding []float32) error {
+	tag, err := p.pool.Exec(ctx,
+		`UPDATE intents SET embedding = $3 WHERE user_id = $1 AND slot = $2`,
+		key.UserID, key.Slot, embedding)
+	if err != nil {
+		return wrap("replace embedding", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (p *Postgres) GetIntent(ctx context.Context, userID string, slot int) (Intent, error) {
 	var intent Intent
 	var windows []byte

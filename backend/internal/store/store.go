@@ -93,6 +93,12 @@ type Intent struct {
 	UpdatedAt           time.Time
 }
 
+// IntentKey identifies one intent: a person and a lane.
+type IntentKey struct {
+	UserID string
+	Slot   int
+}
+
 // PoolTicket is a place in the queue for the next matching window.
 type PoolTicket struct {
 	UserID   string
@@ -350,6 +356,19 @@ type Store interface {
 	// UpsertIntent replaces the caller's intent for one lane.
 	UpsertIntent(ctx context.Context, intent Intent) error
 	GetIntent(ctx context.Context, userID string, slot int) (Intent, error)
+
+	// ListIntents walks every intent, ordered by (user_id, slot), for the one caller that
+	// needs to: `cmd/reembed`, when the embedder has changed under stored vectors.
+	//
+	// Keyset-paged rather than offset-paged because somebody saving a goal mid-backfill
+	// must not shuffle a page and hide a row. Pass a zero After to start.
+	ListIntents(ctx context.Context, after IntentKey, limit int) ([]Intent, error)
+	// ReplaceEmbedding writes one intent's vector and touches nothing else.
+	//
+	// Deliberately not UpsertIntent with the embedding swapped: a backfill that can
+	// rewrite a goal, a timezone or `updated_at` is a backfill that can quietly tell
+	// somebody they edited their intent when they did not (ADR-021).
+	ReplaceEmbedding(ctx context.Context, key IntentKey, embedding []float32) error
 
 	// ListEntitlements returns which additional lanes the caller has opened.
 	//

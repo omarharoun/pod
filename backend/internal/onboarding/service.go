@@ -236,7 +236,7 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, slot int, in In
 		return Intent{}, err
 	}
 
-	vectors, err := s.embedder.Embed(ctx, []string{goal})
+	vectors, err := s.embedder.Embed(ctx, []embed.Goal{{Text: goal, Category: in.GoalCategory}})
 	if err != nil {
 		return Intent{}, fmt.Errorf("onboarding: embed goal: %w", err)
 	}

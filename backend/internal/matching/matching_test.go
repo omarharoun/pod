@@ -12,7 +12,7 @@ import (
 
 func vector(t *testing.T, text string) embed.Vector {
 	t.Helper()
-	vectors, err := embed.Hashing{}.Embed(context.Background(), []string{text})
+	vectors, err := embed.Lexical{}.Embed(context.Background(), []embed.Goal{{Text: text}})
 	if err != nil {
 		t.Fatalf("Embed: %v", err)
 	}
