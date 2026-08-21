@@ -20,6 +20,7 @@ Last updated after ADR-027.
 | Reliability | every one of the 4^8 histories × 3 self-reports, by enumeration | green |
 | Matching | unit tests including the shared-frame availability arithmetic | green |
 | Android `:core:api` | `make android-core-test` — plain Kotlin/JVM, no SDK needed (ADR-009) | green, 73 tests |
+| Client symbols | `make clientlint` — copy keys and initialiser labels against the generated models | green |
 
 `make verify` runs all of the above. It is what CI runs, and it passes.
 
@@ -52,6 +53,13 @@ Note what the last two have in common with each other and not with the first two
 No amount of server-side testing would have found them.
 
 Assume there are more.
+
+`make clientlint` closes a narrow slice of this. It is not a type checker and does not
+pretend to be one: it checks that every copy key and every initialiser label the
+hand-written client code uses actually exists in the generated models. That is the mistake
+writing against generated code by hand actually produces, and it is the only compiler
+substitute available without a Mac. It will not catch a concurrency error, a missing
+`@OptIn`, or a view that reads state outside composition.
 
 ---
 

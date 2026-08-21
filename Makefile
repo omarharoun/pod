@@ -4,7 +4,7 @@
 SHELL := /bin/bash
 ROOT  := $(shell pwd)
 
-.PHONY: help generate verify copylint spec backend-test backend-run migrate clean
+.PHONY: help generate verify copylint clientlint spec backend-test backend-run migrate clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -18,6 +18,9 @@ spec: ## Validate openapi.yaml without writing anything
 copylint: ## Enforce CLAUDE.md §2 rule 1 over content/microcopy.json
 	@python3 tools/copylint/copylint.py --root "$(ROOT)"
 
+clientlint: ## Check hand-written client code against the generated models
+	@python3 tools/clientlint/clientlint.py --root "$(ROOT)"
+
 backend-test: ## Backend unit + integration tests
 	@cd backend && go test ./...
 
@@ -30,7 +33,7 @@ migrate: ## Apply pending migrations to $$DATABASE_URL
 android-core-test: ## Kotlin core tests — plain JVM, no Android SDK needed (ADR-009)
 	@cd android && ./gradlew :core:api:test --configure-on-demand
 
-verify: spec copylint backend-test android-core-test ## Everything that runs without macOS or the Android SDK
+verify: spec copylint clientlint backend-test android-core-test ## Everything that runs without macOS or the Android SDK
 	@echo "verify: ok — the iOS build needs Xcode; :app needs the Android SDK"
 
 clean:

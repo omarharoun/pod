@@ -48,6 +48,12 @@ jobs:
       - name: Copy passes the never-shame rule
         run: make copylint
 
+      # Not a type checker. It catches the narrow class of mistake that comes from
+      # writing against generated code by hand, which is the only compiler substitute
+      # available on a runner with neither Xcode nor the Android SDK.
+      - name: Client code matches the generated models
+        run: make clientlint
+
       - name: Backend is formatted
         run: |
           unformatted=$(gofmt -l backend tools)
