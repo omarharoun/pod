@@ -4,7 +4,7 @@ Everything in this repository has been written against `CLAUDE.md`, but not ever
 been *run*. This file says exactly which is which, so nobody has to guess — and so the
 first person with a Mac knows what to do and what to expect.
 
-Last updated at M7.
+Last updated after ADR-027.
 
 ---
 
@@ -14,11 +14,12 @@ Last updated at M7.
 |---|---|---|
 | The contract | `make spec` — regenerates and diffs all 11 generated files | green |
 | Copy | `make copylint` — 202 strings, banned vocabulary, rung ordering, iOS plist drift | green |
+| Lanes | entitlement unit tests, plus the free lane surviving a broken entitlements store | green |
 | Backend | `go test ./...` with `TEST_DATABASE_URL` set — unit + Postgres integration | green |
 | Migrations | applied to a throwaway empty database on every run, then re-applied | green |
 | Reliability | every one of the 4^8 histories × 3 self-reports, by enumeration | green |
 | Matching | unit tests including the shared-frame availability arithmetic | green |
-| Android `:core:api` | `make android-core-test` — plain Kotlin/JVM, no SDK needed (ADR-009) | green, 71 tests |
+| Android `:core:api` | `make android-core-test` — plain Kotlin/JVM, no SDK needed (ADR-009) | green, 73 tests |
 
 `make verify` runs all of the above. It is what CI runs, and it passes.
 
@@ -33,13 +34,22 @@ Last updated at M7.
 repositories, the API client, the copy catalogue and their tests can be verified without
 the SDK. Everything above that line — the Compose screens, the view models, Hilt — cannot.
 
-**This gap has already produced two blocking bugs**, both caught by review rather than by
-a compiler, and both of which would have shipped:
+**This gap has already produced four bugs**, none caught by a compiler and all of which
+would have shipped:
 
 * iOS declared no `NSCameraUsageDescription` or `NSMicrophoneUsageDescription`, so the OS
   terminated the app the instant proof capture was tapped — M3's central action (ADR-025).
 * Android declared `POST_NOTIFICATIONS` and never requested it, so push was dead on API
   33+ while a manifest comment claimed otherwise (ADR-025).
+* Both clients decided the recovery phase on a flag that is never cleared, so anyone with
+  three prior dissolves was shown "That pod has wound down" every time they were between
+  pods — including straight after graduating (ADR-027).
+* Both graduation screens bound their count to the trailing streak, handing a five-of-six
+  pod the copy written for a pod that managed none (ADR-027).
+
+Note what the last two have in common with each other and not with the first two: the
+*backend was correct in both cases*. The rule was kept in the store and broken in the view.
+No amount of server-side testing would have found them.
 
 Assume there are more.
 
