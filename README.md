@@ -16,6 +16,7 @@ are written down in [`CLAUDE.md`](CLAUDE.md) §2.
 ```
 CLAUDE.md            the brief — product rules, workflow, the two algorithms
 docs/DECISIONS.md    ADR log, append-only. Read before any architectural change.
+docs/VERIFYING.md    what is verified and what is not, and how to check the rest
 docs/API.md          generated from the spec
 content/microcopy.json   every user-facing string, on every platform
 design/tokens.json   colour, type, spacing — platform-agnostic
