@@ -189,8 +189,17 @@ func wrap(what string, err error) error {
 		return ErrNotFound
 	}
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
-		return ErrConflict
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505": // unique_violation
+			return ErrConflict
+		case "22P02": // invalid_text_representation — a path id that is not a uuid
+			// The same answer as an id that is well-formed and unknown. A 500 here
+			// would distinguish "no such pod" from "not a pod id at all", and a 500 is
+			// also the wrong thing to log: the request is the client's mistake, not the
+			// server's.
+			return ErrNotFound
+		}
 	}
 	return fmt.Errorf("store: %s: %w", what, err)
 }
@@ -577,9 +586,37 @@ func (p *Postgres) GetCurrentWeek(ctx context.Context, podID, userID string, at 
 	return p.withMembers(ctx, week)
 }
 
+// requireMembership answers ErrNotFound for a pod the caller is not in, which is the same
+// answer as a pod that does not exist. Pod ids must not be probeable (CLAUDE.md §2 rule 5).
+func (p *Postgres) requireMembership(ctx context.Context, podID, userID string) error {
+	var exists bool
+	err := p.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM pod_members
+			WHERE pod_id = $1 AND user_id = $2 AND left_at IS NULL
+		)`, podID, userID).Scan(&exists)
+	if err != nil {
+		return wrap("check membership", err)
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (p *Postgres) ListWeeksForMember(ctx context.Context, podID, userID string, limit int) ([]Week, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 52
+	}
+	// Membership is checked explicitly, not left to the JOIN.
+	//
+	// A JOIN enforces membership only where there is a row to drop. This query returns a
+	// list, so a stranger simply matched nothing and got an empty one — 200 with
+	// `{"weeks":[]}`, which is a working existence oracle for pod ids and a hole in
+	// CLAUDE.md §2 rule 5. It is also indistinguishable from a member of a pod that has
+	// no weeks yet, which is a real and different state.
+	if err := p.requireMembership(ctx, podID, userID); err != nil {
+		return nil, err
 	}
 	rows, err := p.pool.Query(ctx, `
 		SELECT w.id, w.pod_id, w.index, w.action_text, w.action_is_default, w.opens_at, w.closes_at, w.pod_completed, w.closed_at

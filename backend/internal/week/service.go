@@ -235,7 +235,15 @@ func (s *Service) StartProof(ctx context.Context, weekID, userID, kind, contentT
 	if err != nil {
 		return Upload{}, err
 	}
-	upload, err := s.blobs.SignUpload(ctx, blob.Key(weekID, proofID), contentType, byteSize, uploadTTL)
+	// Never outlive the week, exactly as ViewProof never outlives the proof. A slot
+	// signed a minute before close was writable for nine minutes after it, so bytes
+	// could land after the sweep had already passed over the row — and once
+	// MarkProofDeleted has run, no sweep will ever return that row again.
+	ttl := uploadTTL
+	if remaining := week.ClosesAt.Sub(s.clock.Now()); remaining < ttl {
+		ttl = remaining
+	}
+	upload, err := s.blobs.SignUpload(ctx, blob.Key(weekID, proofID), contentType, byteSize, ttl)
 	if err != nil {
 		return Upload{}, fmt.Errorf("week: sign upload: %w", err)
 	}

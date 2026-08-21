@@ -137,17 +137,10 @@ func availabilityOverlap(a, b Candidate) float64 {
 	}
 	shared := 0
 	for _, x := range a.Availability {
+		xs, xe := x.sharedFrame(a.TimezoneOffsetMinutes)
 		for _, y := range b.Availability {
-			if x.DayOfWeek != y.DayOfWeek {
-				continue
-			}
-			// Both windows are in their owner's local time, so compare them in a shared
-			// frame before intersecting.
-			start := max(x.StartMinute+a.TimezoneOffsetMinutes, y.StartMinute+b.TimezoneOffsetMinutes)
-			end := min(x.EndMinute+a.TimezoneOffsetMinutes, y.EndMinute+b.TimezoneOffsetMinutes)
-			if end > start {
-				shared += end - start
-			}
+			ys, ye := y.sharedFrame(b.TimezoneOffsetMinutes)
+			shared += overlapMinutes(xs, xe, ys, ye)
 		}
 	}
 	smaller := min(totalMinutes(a.Availability), totalMinutes(b.Availability))
@@ -155,6 +148,43 @@ func availabilityOverlap(a, b Candidate) float64 {
 		return 0.5
 	}
 	return clamp01(float64(shared) / float64(smaller))
+}
+
+// minutesPerWeek is the shared frame: minutes since Monday 00:00 UTC.
+const minutesPerWeek = 7 * 24 * 60
+
+// sharedFrame places a window on the week in UTC.
+//
+// Two corrections live here, and both were invisible to a symmetric fixture. A window is
+// stated in its owner's local calendar, so reaching UTC means **subtracting** the offset
+// east of UTC — adding it shifts the wrong way and reports a perfect overlap between two
+// people who cannot meet. And the day is folded into the position rather than compared
+// separately: 23:00 Tuesday in UTC+2 is Tuesday 21:00 UTC, and matching on the stated day
+// first would have thrown those minutes away.
+//
+// The returned end may run past the end of the week. That is deliberate — overlapMinutes
+// compares shifted copies, so a window straddling Sunday midnight keeps its minutes
+// instead of being truncated at the boundary.
+func (w Window) sharedFrame(offsetMinutes int) (start, end int) {
+	start = w.DayOfWeek*24*60 + w.StartMinute - offsetMinutes
+	start = ((start % minutesPerWeek) + minutesPerWeek) % minutesPerWeek
+	return start, start + w.minutes()
+}
+
+// overlapMinutes intersects two windows on a circular week.
+//
+// Both are at most a day long and the week is seven, so at most one of the three
+// alignments can contribute and nothing is counted twice.
+func overlapMinutes(startA, endA, startB, endB int) int {
+	shared := 0
+	for _, shift := range []int{-minutesPerWeek, 0, minutesPerWeek} {
+		lo := max(startA, startB+shift)
+		hi := min(endA, endB+shift)
+		if hi > lo {
+			shared += hi - lo
+		}
+	}
+	return shared
 }
 
 func totalMinutes(windows []Window) int {

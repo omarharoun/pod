@@ -889,3 +889,72 @@ different events and the schema, the API and the copy all keep them apart:
   pod is neither, and under the old predicate it kept being handed new weeks.
 * The shared streak survives into the next cycle, because the streak belongs to the pod and
   the pod did not stop (§2 rule 3).
+
+---
+
+## ADR-024 — What a 16-agent audit found, and what it says about the tests
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M6
+
+**Context.** A background workflow audited the codebase against `CLAUDE.md` §2 and §6,
+with every candidate finding put to independent agents told to refute it. 53 candidates,
+18 survived. The backend ones are fixed here. What matters is not the count but that
+**every one of them passed the existing test suite**.
+
+**The four that were product-rule violations, and why nothing caught them.**
+
+1. **`availabilityOverlap` added the timezone offset instead of subtracting it.**
+   `Zone()` returns seconds *east* of UTC, so local → UTC subtracts. Adding it inverted the
+   0.20-weight availability signal: two people whose local hours look identical but whose
+   zones differ scored a *perfect* overlap, and two people genuinely free at the same
+   instant scored zero. The existing test passed because its fixture was symmetric — both
+   candidates shifted the same wrong way, and the error cancelled. The fix folds the day
+   into a shared minutes-since-Monday-UTC frame, which also stops a window that crosses
+   midnight once shifted from silently losing its minutes.
+
+2. **The sweep skipped the bytes of an upload that was never committed** (§2 rule 4). It
+   deleted only when `blob_key` was set, and `blob_key` is written by `commitProof` — so a
+   client that PUT its bytes and then lost the network left a real photo in storage
+   forever, while `MarkProofDeleted` marked the row gone and made it unlistable. Nothing
+   else scans by prefix; there was no second chance. The key is derivable, so it is now
+   used whether or not the proof was committed.
+
+3. **The upload slot outlived its week** (§2 rule 4). `ViewProof` clamps its link to the
+   proof's expiry; `StartProof` did not clamp to the week's close, so a slot signed a
+   minute before close was writable for nine minutes after — long enough for bytes to land
+   after the sweep had passed. The same clamp now applies to both.
+
+4. **`ListWeeksForMember` failed open on Postgres** (§2 rule 5). Membership was enforced by
+   a `JOIN`, which enforces nothing on a query that returns a list: a stranger matched no
+   rows and got `200 {"weeks":[]}` — a working existence oracle for pod ids, and
+   indistinguishable from a member of a pod with no weeks yet. `Memory` checked membership
+   explicitly and returned `ErrNotFound`, so **every test that ran against `Memory` said
+   the rule was held.**
+
+**The lesson, which is the reason this ADR exists.**
+
+Three of the four were invisible to the tests for the same reason: the test and the bug
+shared an assumption. A symmetric fixture cancels a sign error. A fixture that always
+commits never reaches the uncommitted branch. A test double that is stricter than
+production proves the rule about the double.
+
+The countermeasures now in the tree:
+
+* `TestMemoryAndPostgresAgree` covers **refusal**, not only success. A store double that
+  refuses where production permits is worse than no double, because it makes the suite
+  lie. Every rule enforced in one implementation belongs in this table.
+* The reliability invariants are checked by enumeration over all 4^8 histories (ADR-022),
+  not by fixtures.
+* The availability tests are now deliberately asymmetric: one candidate in a positive
+  offset, one in a negative, different local hours, same instant.
+
+**Also fixed.** A path id that is not a uuid returned 500 (Postgres `22P02` reaching the
+default branch) where a well-formed unknown one returned 404 — an existence oracle again,
+and a server error logged for a client typo. `wrap` maps it to `ErrNotFound`.
+
+**Still open, on the clients** (they need a Mac and an Android SDK to verify, per the
+standing decision to defer client builds): iOS declares no `NSCameraUsageDescription`,
+`NSMicrophoneUsageDescription` or `NSPhotoLibraryUsageDescription`, so both proof-capture
+paths terminate the app on a real device — M3's central action; Android never requests
+`POST_NOTIFICATIONS`, so push is dead on Android 13+; the Android camera path leaves its
+temp file on cancel; and several smaller parity gaps in auth and locale formatting.

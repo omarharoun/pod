@@ -2,6 +2,7 @@ package week
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -350,5 +351,61 @@ func (h *harness) graduate() {
 	}
 	if state := h.reloadPod().State; state != store.PodStateCompleted {
 		h.t.Fatalf("the pod is %q after a full cycle, want completed", state)
+	}
+}
+
+// An upload that reached storage but never reached commitProof — the client PUT the bytes
+// and then lost the network — must still have its bytes deleted at cycle end.
+//
+// This is CLAUDE.md §2 rule 4 at its sharpest. The sweep used to skip such a proof because
+// its blob_key was null, and then mark the row deleted anyway: a real photo left in
+// storage forever, with the database asserting it was gone and no row any sweep would ever
+// return again.
+func TestSweepDeletesBytesOfAnUploadThatWasNeverCommitted(t *testing.T) {
+	h := newHarness(t, "Europe/Lisbon")
+	ctx := context.Background()
+	week := h.currentWeek()
+
+	slot, err := h.service.StartProof(ctx, week.ID, h.members[0], "photo", "image/jpeg", 2048, nil)
+	if err != nil {
+		t.Fatalf("StartProof: %v", err)
+	}
+	// The bytes land at the derivable key, exactly as a real PUT would put them.
+	key := blob.Key(week.ID, slot.ProofID)
+	if err := h.blobs.Put(key, strings.NewReader("ten seconds of proof")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	// ...and commitProof never arrives.
+
+	h.clock.Advance(week.ClosesAt.Sub(h.clock.Now()) + time.Hour)
+	if _, _, err := h.job.Sweep(ctx, h.clock.Now()); err != nil {
+		t.Fatalf("Sweep: %v", err)
+	}
+
+	if _, err := h.blobs.Open(key); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("the bytes of an uncommitted upload survived the sweep: %v", err)
+	}
+}
+
+// A slot signed just before the week closes must not stay writable after it.
+//
+// The view path already clamped its link to the proof's expiry; the upload path did not,
+// so a slot signed a minute before close was writable for nine minutes after — long
+// enough for bytes to land after the sweep had passed over the row, and once that row is
+// marked deleted no sweep will ever return it again (CLAUDE.md §2 rule 4).
+func TestAnUploadSlotNeverOutlivesItsWeek(t *testing.T) {
+	h := newHarness(t, "Europe/Lisbon")
+	ctx := context.Background()
+	week := h.currentWeek()
+
+	// One minute before the week closes.
+	h.clock.Advance(week.ClosesAt.Sub(h.clock.Now()) - time.Minute)
+
+	slot, err := h.service.StartProof(ctx, week.ID, h.members[0], "photo", "image/jpeg", 2048, nil)
+	if err != nil {
+		t.Fatalf("StartProof: %v", err)
+	}
+	if slot.ExpiresAt.After(week.ClosesAt) {
+		t.Errorf("the upload slot expires at %v, after the week closes at %v", slot.ExpiresAt, week.ClosesAt)
 	}
 }

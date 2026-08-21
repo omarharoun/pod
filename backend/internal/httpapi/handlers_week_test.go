@@ -372,3 +372,36 @@ func TestPostingToAClosedWeekIsRefused(t *testing.T) {
 		t.Errorf("copy_key = %q", body.CopyKey)
 	}
 }
+
+// Pod-only visibility, always (CLAUDE.md §2 rule 5). A pod id belonging to someone else
+// must answer exactly as a pod id that does not exist.
+//
+// The week list used to fail open: its membership check was a JOIN, and a stranger simply
+// matched no rows, so they got 200 with an empty list — a working existence oracle for pod
+// ids, and the one endpoint where the check was structural rather than explicit.
+func TestListingSomebodyElsesWeeksIsNotFound(t *testing.T) {
+	h := newHarness(t)
+	sam := h.signIn("sam@example.com")
+	stranger := h.signIn("stranger@example.com")
+	ids := h.seedWeekWithProof(sam.User.ID)
+
+	rec := h.do(http.MethodGet, "/v1/pods/"+ids.pod+"/weeks", nil, stranger.AccessToken)
+	if rec.Code == http.StatusOK {
+		t.Fatalf("a stranger listed a pod's weeks: %s", rec.Body.String())
+	}
+	decodeError(t, rec, http.StatusNotFound)
+}
+
+// And a member of a pod that has no weeks yet gets an empty list, not a 404. The two
+// cases are different and were previously the same.
+func TestAMemberOfAPodWithNoWeeksGetsAnEmptyList(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+	podID := h.seedPod(session.User.ID)
+
+	var body api.WeekList
+	decode(t, h.do(http.MethodGet, "/v1/pods/"+podID+"/weeks", nil, session.AccessToken), http.StatusOK, &body)
+	if len(body.Weeks) != 0 {
+		t.Errorf("a pod with no weeks listed %d", len(body.Weeks))
+	}
+}

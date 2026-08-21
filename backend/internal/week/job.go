@@ -219,14 +219,21 @@ func (j *Job) Sweep(ctx context.Context, now time.Time) (deleted, failures int, 
 	}
 
 	for _, proof := range expired {
+		// The key is derivable, so it is used whether or not the proof was ever
+		// committed. An upload that reached storage and then lost the network has a null
+		// blob_key and real bytes; skipping it because the column is null left a photo in
+		// storage forever while the row was marked deleted and became unlistable. There
+		// is no second chance to find those bytes — nothing else scans by prefix.
+		key := blob.Key(proof.WeekID, proof.ID)
 		if proof.BlobKey != nil {
-			if err := j.blobs.Delete(ctx, *proof.BlobKey); err != nil && !errors.Is(err, blob.ErrNotFound) {
-				// Leave the row undeleted so the next tick tries again. A proof whose
-				// bytes we failed to remove must not look like one we removed.
-				j.log.ErrorContext(ctx, "could not delete proof bytes", slog.Any("error", err))
-				failures++
-				continue
-			}
+			key = *proof.BlobKey
+		}
+		if err := j.blobs.Delete(ctx, key); err != nil && !errors.Is(err, blob.ErrNotFound) {
+			// Leave the row undeleted so the next tick tries again. A proof whose bytes
+			// we failed to remove must not look like one we removed.
+			j.log.ErrorContext(ctx, "could not delete proof bytes", slog.Any("error", err))
+			failures++
+			continue
 		}
 		if err := j.store.MarkProofDeleted(ctx, proof.ID, now); err != nil {
 			j.log.ErrorContext(ctx, "could not mark proof deleted", slog.Any("error", err))

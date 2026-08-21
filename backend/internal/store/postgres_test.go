@@ -283,6 +283,44 @@ func TestMemoryAndPostgresAgree(t *testing.T) {
 				t.Errorf("got %v, want ErrNotFound", err)
 			}
 		}},
+		// The two implementations must agree on *refusal*, not only on success. This
+		// one diverged: Memory checked membership explicitly and Postgres left it to a
+		// JOIN, which enforces nothing on a query that returns a list — so a stranger
+		// got an empty list from Postgres and ErrNotFound from Memory, and every test
+		// that ran against Memory said the rule was held (CLAUDE.md §2 rule 5).
+		{"listing a pod you are not in", func(t *testing.T, s store.Store) {
+			ctx := context.Background()
+			owner, err := s.UpsertUserByEmail(ctx, uniqueEmail(t), time.Now().UTC())
+			if err != nil {
+				t.Fatalf("owner: %v", err)
+			}
+			stranger, err := s.UpsertUserByEmail(ctx, uniqueEmail(t), time.Now().UTC())
+			if err != nil {
+				t.Fatalf("stranger: %v", err)
+			}
+			podID, err := ids.NewUUID()
+			if err != nil {
+				t.Fatalf("ids.NewUUID: %v", err)
+			}
+			pod := store.Pod{
+				ID: podID, State: store.PodStateActive, GoalCategory: "home",
+				Timezone: "UTC", CreatedAt: time.Now().UTC(),
+			}
+			if err := s.CreatePod(ctx, pod, []string{owner.ID}, time.Now().UTC()); err != nil {
+				t.Fatalf("CreatePod: %v", err)
+			}
+			if _, err := s.ListWeeksForMember(ctx, podID, stranger.ID, 0); err != store.ErrNotFound {
+				t.Errorf("got %v, want ErrNotFound — an empty list is an existence oracle", err)
+			}
+			// And a real member of a pod with no weeks gets an empty list, not a 404.
+			weeks, err := s.ListWeeksForMember(ctx, podID, owner.ID, 0)
+			if err != nil {
+				t.Errorf("a member of a pod with no weeks got %v", err)
+			}
+			if len(weeks) != 0 {
+				t.Errorf("a pod with no weeks listed %d", len(weeks))
+			}
+		}},
 		{"missing refresh token", func(t *testing.T, s store.Store) {
 			if _, err := s.GetRefreshToken(context.Background(), "nope"); err != store.ErrNotFound {
 				t.Errorf("got %v, want ErrNotFound", err)
@@ -1051,5 +1089,21 @@ func TestPostgresAPodCannotBeBothCompletedAndDissolved(t *testing.T) {
 		if readErr == nil && pod.CompletedAt != nil && pod.DissolvedAt != nil {
 			t.Fatal("a pod is marked both completed and dissolved")
 		}
+	}
+}
+
+// A path id that is not a uuid must answer as an id that is well-formed and unknown.
+// Anything else is both an existence oracle and a 500 logged against the server for what
+// is really a client typo.
+func TestPostgresAMalformedIDIsNotFoundRatherThanAnError(t *testing.T) {
+	ctx := context.Background()
+	db := newPostgres(t)
+	user := seedUser(t, db)
+
+	if _, err := db.GetPodForMember(ctx, "not-a-uuid", user.ID); err != store.ErrNotFound {
+		t.Errorf("GetPodForMember: got %v, want ErrNotFound", err)
+	}
+	if _, err := db.ListWeeksForMember(ctx, "not-a-uuid", user.ID, 0); err != store.ErrNotFound {
+		t.Errorf("ListWeeksForMember: got %v, want ErrNotFound", err)
 	}
 }

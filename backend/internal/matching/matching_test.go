@@ -372,3 +372,77 @@ func equal(a, b []int) bool {
 	}
 	return true
 }
+
+// Two people whose local hours look identical but whose zones differ share no time at
+// all. The availability signal carries 0.20 of the score, so getting the direction of the
+// shift wrong does not fail loudly — it quietly recommends pods that cannot meet.
+func TestIdenticalLocalHoursInDifferentZonesDoNotOverlap(t *testing.T) {
+	// Sam is UTC+1 and free 10:00–12:00 local, which is 09:00–11:00 UTC.
+	sam := Candidate{
+		TimezoneOffsetMinutes: 60,
+		Availability:          []Window{{DayOfWeek: 2, StartMinute: 600, EndMinute: 720}},
+	}
+	// Alex is UTC+0 and free 11:00–13:00 local, which is 11:00–13:00 UTC.
+	alex := Candidate{
+		TimezoneOffsetMinutes: 0,
+		Availability:          []Window{{DayOfWeek: 2, StartMinute: 660, EndMinute: 780}},
+	}
+
+	if got := availabilityOverlap(sam, alex); got != 0 {
+		t.Errorf("overlap = %v, want 0 — 09:00-11:00 UTC and 11:00-13:00 UTC do not meet", got)
+	}
+}
+
+// And the converse: different local hours that are the same hours in UTC overlap fully.
+func TestDifferentLocalHoursCanBeTheSameHours(t *testing.T) {
+	// Both free 10:00–12:00 UTC, stated in their own zones.
+	sam := Candidate{
+		TimezoneOffsetMinutes: 60,
+		Availability:          []Window{{DayOfWeek: 2, StartMinute: 660, EndMinute: 780}},
+	}
+	alex := Candidate{
+		TimezoneOffsetMinutes: -60,
+		Availability:          []Window{{DayOfWeek: 2, StartMinute: 540, EndMinute: 660}},
+	}
+
+	if got := availabilityOverlap(sam, alex); got != 1 {
+		t.Errorf("overlap = %v, want 1 — both are free 10:00-12:00 UTC", got)
+	}
+}
+
+// A window that crosses midnight once shifted into the shared frame keeps its minutes.
+// Filtering on the stated day and then shifting silently dropped them.
+func TestAWindowThatCrossesMidnightWhenShiftedKeepsItsMinutes(t *testing.T) {
+	// Sam is UTC+2, free 23:00–24:00 on Tuesday local = 21:00–22:00 Tuesday UTC.
+	sam := Candidate{
+		TimezoneOffsetMinutes: 120,
+		Availability:          []Window{{DayOfWeek: 1, StartMinute: 1380, EndMinute: 1440}},
+	}
+	// Alex is UTC+0, free 21:00–22:00 Tuesday. Same hour, same day, in UTC.
+	alex := Candidate{
+		TimezoneOffsetMinutes: 0,
+		Availability:          []Window{{DayOfWeek: 1, StartMinute: 1260, EndMinute: 1320}},
+	}
+
+	if got := availabilityOverlap(sam, alex); got != 1 {
+		t.Errorf("overlap = %v, want 1 — both are free 21:00-22:00 Tuesday UTC", got)
+	}
+}
+
+// Sunday night in a positive zone is Monday morning in the shared frame, and must not
+// wrap to nothing.
+func TestTheWeekWrapsRatherThanTruncating(t *testing.T) {
+	// Sam is UTC-2, free 00:00–01:00 Monday local = 02:00–03:00 Monday UTC.
+	sam := Candidate{
+		TimezoneOffsetMinutes: -120,
+		Availability:          []Window{{DayOfWeek: 0, StartMinute: 0, EndMinute: 60}},
+	}
+	alex := Candidate{
+		TimezoneOffsetMinutes: 0,
+		Availability:          []Window{{DayOfWeek: 0, StartMinute: 120, EndMinute: 180}},
+	}
+
+	if got := availabilityOverlap(sam, alex); got != 1 {
+		t.Errorf("overlap = %v, want 1 — both are free 02:00-03:00 Monday UTC", got)
+	}
+}
