@@ -277,17 +277,20 @@ public struct OnboardingState: Codable, Hashable, Sendable {
     public let intentComplete: Bool
     public let inPool: Bool
     public let poolTicket: PoolTicket?
+    public let recovery: Recovery?
 
     public init(
         step: String,
         intentComplete: Bool,
         inPool: Bool,
-        poolTicket: PoolTicket? = nil
+        poolTicket: PoolTicket? = nil,
+        recovery: Recovery? = nil
     ) {
         self.step = step
         self.intentComplete = intentComplete
         self.inPool = inPool
         self.poolTicket = poolTicket
+        self.recovery = recovery
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -295,6 +298,42 @@ public struct OnboardingState: Codable, Hashable, Sendable {
         case intentComplete = "intent_complete"
         case inPool = "in_pool"
         case poolTicket = "pool_ticket"
+        case recovery
+    }
+}
+
+/// What someone is offered after a pod ends. Both fields describe an **offer**, and
+/// neither carries a reason: the client is never told, and must never imply, that a
+/// pod ended because of anything the person did.
+///
+/// Nothing here exposes the reliability score, the number of pods that have ended, or
+/// any per-member history. See ADR-018.
+public struct Recovery: Codable, Hashable, Sendable {
+    /// Offer to drop their intensity by one before re-matching. Accepting is an
+    /// ordinary `putIntent` with a lower value — there is no separate endpoint,
+    /// because it is not a separate kind of change.
+    public let offerLowerIntensity: Bool
+    public let suggestedIntensity: Intensity?
+
+    /// Offer the one-to-one path. CLAUDE.md §6: some people need less social
+    /// pressure, not more. Set after three pods have ended under them; what it opens
+    /// is not built yet, so the client shows the offer and nothing else.
+    public let offerAlternatePath: Bool
+
+    public init(
+        offerLowerIntensity: Bool,
+        suggestedIntensity: Intensity? = nil,
+        offerAlternatePath: Bool
+    ) {
+        self.offerLowerIntensity = offerLowerIntensity
+        self.suggestedIntensity = suggestedIntensity
+        self.offerAlternatePath = offerAlternatePath
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case offerLowerIntensity = "offer_lower_intensity"
+        case suggestedIntensity = "suggested_intensity"
+        case offerAlternatePath = "offer_alternate_path"
     }
 }
 

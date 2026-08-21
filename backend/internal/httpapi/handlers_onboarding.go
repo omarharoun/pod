@@ -24,6 +24,17 @@ func (s *Server) handleOnboardingState(w http.ResponseWriter, r *http.Request) {
 	if state.InPool {
 		body.PoolTicket = &api.PoolTicket{QueuedAt: state.QueuedAt, NextWindowAt: state.NextWindowAt}
 	}
+	if state.Recovery.OfferLowerIntensity || state.Recovery.OfferAlternatePath {
+		recovery := api.Recovery{
+			OfferLowerIntensity: state.Recovery.OfferLowerIntensity,
+			OfferAlternatePath:  state.Recovery.OfferAlternatePath,
+		}
+		if state.SuggestedIntensity > 0 {
+			suggested := api.Intensity(state.SuggestedIntensity)
+			recovery.SuggestedIntensity = &suggested
+		}
+		body.Recovery = &recovery
+	}
 	s.writeJSON(w, r, http.StatusOK, body)
 }
 

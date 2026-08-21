@@ -96,9 +96,9 @@ func (p *Postgres) UpsertUserByEmail(ctx context.Context, email string, now time
 		INSERT INTO users (id, email, created_at)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
-		RETURNING id, email, display_name, created_at, onboarding_complete`,
+		RETURNING id, email, display_name, created_at, onboarding_complete, dissolved_pods, recovery_offered_at`,
 		id, NormaliseEmail(email), now).
-		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.OnboardingComplete)
+		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.OnboardingComplete, &u.DissolvedPods, &u.RecoveryOfferedAt)
 	if err != nil {
 		return User{}, wrap("upsert user", err)
 	}
@@ -108,8 +108,9 @@ func (p *Postgres) UpsertUserByEmail(ctx context.Context, email string, now time
 func (p *Postgres) GetUser(ctx context.Context, id string) (User, error) {
 	var u User
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, email, display_name, created_at, onboarding_complete FROM users WHERE id = $1`, id).
-		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.OnboardingComplete)
+		SELECT id, email, display_name, created_at, onboarding_complete, dissolved_pods, recovery_offered_at
+		FROM users WHERE id = $1`, id).
+		Scan(&u.ID, &u.Email, &u.DisplayName, &u.CreatedAt, &u.OnboardingComplete, &u.DissolvedPods, &u.RecoveryOfferedAt)
 	if err != nil {
 		return User{}, wrap("get user", err)
 	}
@@ -952,4 +953,98 @@ func (p *Postgres) MarkNotificationSent(ctx context.Context, id string, at time.
 	_, err := p.pool.Exec(ctx,
 		fmt.Sprintf(`UPDATE notifications SET %s = $2 WHERE id = $1`, column), id, at)
 	return wrap("mark notification sent", err)
+}
+
+// ---------------------------------------------------------------- M5: recovery
+
+func (p *Postgres) RecentOutcomes(ctx context.Context, userID string, limit int) ([]WeekOutcome, error) {
+	if limit <= 0 || limit > 52 {
+		limit = 8
+	}
+	rows, err := p.pool.Query(ctx, `
+		SELECT w.id, mw.state = 'posted', w.pod_completed, w.closes_at
+		FROM member_weeks mw
+		JOIN weeks w ON w.id = mw.week_id
+		WHERE mw.user_id = $1 AND w.closed_at IS NOT NULL
+		ORDER BY w.closes_at DESC, w.id DESC
+		LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, wrap("recent outcomes", err)
+	}
+	defer rows.Close()
+
+	var out []WeekOutcome
+	for rows.Next() {
+		var outcome WeekOutcome
+		if err := rows.Scan(&outcome.WeekID, &outcome.Posted, &outcome.PodCompleted, &outcome.ClosesAt); err != nil {
+			return nil, wrap("scan outcome", err)
+		}
+		out = append(out, outcome)
+	}
+	return out, wrap("recent outcomes", rows.Err())
+}
+
+func (p *Postgres) DissolvePod(ctx context.Context, podID, reason string, inactiveMemberIDs []string, at time.Time) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return wrap("begin dissolve", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT state FROM pods WHERE id = $1 FOR UPDATE`, podID).Scan(&state); err != nil {
+		return wrap("lock pod", err)
+	}
+	if state == string(PodStateDissolved) {
+		return nil
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE pods SET state = 'dissolved', dissolved_at = $2, dissolved_reason = $3 WHERE id = $1`,
+		podID, at, reason); err != nil {
+		return wrap("dissolve pod", err)
+	}
+
+	// Membership ends with the pod, which is also what frees everyone from the partial
+	// unique index so they can be matched again.
+	if _, err := tx.Exec(ctx, `
+		UPDATE pod_members SET left_at = $2 WHERE pod_id = $1 AND left_at IS NULL`, podID, at); err != nil {
+		return wrap("end memberships", err)
+	}
+
+	// Everyone gets the offer to lower the bar; only inactive members carry the count
+	// (CLAUDE.md §6).
+	if _, err := tx.Exec(ctx, `
+		UPDATE users SET recovery_offered_at = $2
+		WHERE id IN (SELECT user_id FROM pod_members WHERE pod_id = $1)`, podID, at); err != nil {
+		return wrap("offer recovery", err)
+	}
+	if len(inactiveMemberIDs) > 0 {
+		if _, err := tx.Exec(ctx, `
+			UPDATE users SET dissolved_pods = dissolved_pods + 1 WHERE id = ANY($1)`,
+			inactiveMemberIDs); err != nil {
+			return wrap("count dissolved pod", err)
+		}
+	}
+	return wrap("commit dissolve", tx.Commit(ctx))
+}
+
+func (p *Postgres) RecoveryFor(ctx context.Context, userID string) (Recovery, error) {
+	var dissolved int
+	var offeredAt *time.Time
+	err := p.pool.QueryRow(ctx, `
+		SELECT dissolved_pods, recovery_offered_at FROM users WHERE id = $1`, userID).
+		Scan(&dissolved, &offeredAt)
+	if err != nil {
+		return Recovery{}, wrap("recovery for", err)
+	}
+	return Recovery{
+		OfferLowerIntensity: offeredAt != nil,
+		OfferAlternatePath:  dissolved >= AlternatePathAfter,
+	}, nil
+}
+
+func (p *Postgres) ClearRecoveryOffer(ctx context.Context, userID string) error {
+	_, err := p.pool.Exec(ctx, `UPDATE users SET recovery_offered_at = NULL WHERE id = $1`, userID)
+	return wrap("clear recovery offer", err)
 }

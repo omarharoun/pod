@@ -591,6 +591,7 @@ One of: `posted`, `open`, `resting`
 | `intent_complete` | `boolean` | yes |  |
 | `in_pool` | `boolean` | yes |  |
 | `pool_ticket` | [`PoolTicket`](#poolticket) |  |  |
+| `recovery` | [`Recovery`](#recovery) |  |  |
 
 ### Pod
 
@@ -664,6 +665,21 @@ One of: `photo`, `voice`
 | `content_type` | `string` | yes |  |
 | `byte_size` | `integer` | yes |  |
 | `duration_ms` | `integer` |  | Voice proofs only. Ten seconds, with a little slack. |
+
+### Recovery
+
+What someone is offered after a pod ends. Both fields describe an **offer**, and
+neither carries a reason: the client is never told, and must never imply, that a
+pod ended because of anything the person did.
+
+Nothing here exposes the reliability score, the number of pods that have ended, or
+any per-member history. See ADR-018.
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `offer_lower_intensity` | `boolean` | yes | Offer to drop their intensity by one before re-matching. Accepting is an ordinary `putIntent` with a lower value — there is no separate endpoint, because it is not a separate kind of change. |
+| `suggested_intensity` | [`Intensity`](#intensity) |  |  |
+| `offer_alternate_path` | `boolean` | yes | Offer the one-to-one path. CLAUDE.md §6: some people need less social pressure, not more. Set after three pods have ended under them; what it opens is not built yet, so the client shows the offer and nothing else. |
 
 ### SelfReportReliability
 

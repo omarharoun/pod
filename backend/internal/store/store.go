@@ -24,7 +24,17 @@ type User struct {
 	DisplayName        string
 	CreatedAt          time.Time
 	OnboardingComplete bool
+	// DissolvedPods counts pods that ended under this person while they were inactive.
+	// Never returned by the API — it is an input to what they are offered, not a mark.
+	DissolvedPods int
+	// RecoveryOfferedAt is set when a pod they were in dissolved.
+	RecoveryOfferedAt *time.Time
 }
+
+// AlternatePathAfter is how many dissolved pods it takes before someone is offered the
+// one-to-one path. CLAUDE.md §6: "After 3 failed pods, flag the user for the alternate
+// path — some people need less social pressure, not more."
+const AlternatePathAfter = 3
 
 // AuthChallenge is one outstanding login code. The code itself is never stored — only a
 // peppered hash of it (ADR-002).
@@ -208,6 +218,25 @@ type Notification struct {
 	CreatedAt time.Time
 }
 
+// WeekOutcome is one week of somebody's history, as the reliability calculation needs
+// it. Nothing identifying, and no score — the score is derived from these, never stored.
+type WeekOutcome struct {
+	WeekID       string
+	Posted       bool
+	PodCompleted bool
+	ClosesAt     time.Time
+}
+
+// Recovery is what a person is offered after a pod ends. Both fields describe an offer,
+// never a judgement, and neither exposes anything about why (CLAUDE.md §6).
+type Recovery struct {
+	// OfferLowerIntensity is set after a pod dissolves under them.
+	OfferLowerIntensity bool
+	// OfferAlternatePath is set after three. Some people need less social pressure, not
+	// more.
+	OfferAlternatePath bool
+}
+
 // Store is everything the service needs from persistence. It grows a method per
 // milestone; it does not grow a generic query escape hatch.
 type Store interface {
@@ -313,4 +342,15 @@ type Store interface {
 	PendingNotifications(ctx context.Context, limit int) ([]Notification, error)
 	// MarkNotificationSent records delivery, or a permanent failure.
 	MarkNotificationSent(ctx context.Context, id string, at time.Time, failed bool) error
+
+	// RecentOutcomes returns a person's last `limit` closed weeks, newest first. The
+	// only input the reliability calculation has.
+	RecentOutcomes(ctx context.Context, userID string, limit int) ([]WeekOutcome, error)
+	// DissolvePod ends a pod, records why, and counts it against the members who were
+	// inactive in it. Idempotent.
+	DissolvePod(ctx context.Context, podID, reason string, inactiveMemberIDs []string, at time.Time) error
+	// RecoveryFor reports what a person should be offered after a pod ended.
+	RecoveryFor(ctx context.Context, userID string) (Recovery, error)
+	// ClearRecoveryOffer is called when someone acts on the offer, or joins a new pod.
+	ClearRecoveryOffer(ctx context.Context, userID string) error
 }

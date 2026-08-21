@@ -135,6 +135,26 @@ type OnboardingState struct {
 	IntentComplete bool        `json:"intent_complete"`
 	InPool         bool        `json:"in_pool"`
 	PoolTicket     *PoolTicket `json:"pool_ticket,omitempty"`
+	Recovery       *Recovery   `json:"recovery,omitempty"`
+}
+
+// What someone is offered after a pod ends. Both fields describe an **offer**, and
+// neither carries a reason: the client is never told, and must never imply, that a
+// pod ended because of anything the person did.
+//
+// Nothing here exposes the reliability score, the number of pods that have ended, or
+// any per-member history. See ADR-018.
+type Recovery struct {
+	// Offer to drop their intensity by one before re-matching. Accepting is an
+	// ordinary `putIntent` with a lower value — there is no separate endpoint,
+	// because it is not a separate kind of change.
+	OfferLowerIntensity bool       `json:"offer_lower_intensity"`
+	SuggestedIntensity  *Intensity `json:"suggested_intensity,omitempty"`
+
+	// Offer the one-to-one path. CLAUDE.md §6: some people need less social
+	// pressure, not more. Set after three pods have ended under them; what it opens
+	// is not built yet, so the client shows the offer and nothing else.
+	OfferAlternatePath bool `json:"offer_alternate_path"`
 }
 
 // The hard filter — a pod is always same-category.

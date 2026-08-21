@@ -200,6 +200,36 @@ public data class OnboardingState(
     val inPool: Boolean,
     @SerialName("pool_ticket")
     val poolTicket: PoolTicket? = null,
+    val recovery: Recovery? = null,
+)
+
+/**
+ * What someone is offered after a pod ends. Both fields describe an **offer**, and
+ * neither carries a reason: the client is never told, and must never imply, that a
+ * pod ended because of anything the person did.
+ *
+ * Nothing here exposes the reliability score, the number of pods that have ended, or
+ * any per-member history. See ADR-018.
+ */
+@Serializable
+public data class Recovery(
+    /**
+     * Offer to drop their intensity by one before re-matching. Accepting is an
+     * ordinary `putIntent` with a lower value — there is no separate endpoint,
+     * because it is not a separate kind of change.
+     */
+    @SerialName("offer_lower_intensity")
+    val offerLowerIntensity: Boolean,
+    @SerialName("suggested_intensity")
+    val suggestedIntensity: Intensity? = null,
+
+    /**
+     * Offer the one-to-one path. CLAUDE.md §6: some people need less social
+     * pressure, not more. Set after three pods have ended under them; what it opens
+     * is not built yet, so the client shows the offer and nothing else.
+     */
+    @SerialName("offer_alternate_path")
+    val offerAlternatePath: Boolean,
 )
 
 /**

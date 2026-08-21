@@ -68,6 +68,17 @@
   "pool.waiting.nextWindow": "Next match at {time}",
   "pool.waiting.leave": "Leave the queue",
 
+  "recovery.podEnded.title": "That pod has wound down",
+  "recovery.podEnded.body": "It happens. We'll find you another one whenever you're ready.",
+  "recovery.lowerBar.title": "Want to make it smaller?",
+  "recovery.lowerBar.body": "You picked {current}. {suggested} is also a real week.",
+  "recovery.lowerBar.accept": "Make it {suggested}",
+  "recovery.lowerBar.keep": "Keep it as it is",
+  "recovery.findAnother": "Find me another pod",
+  "recovery.alternate.title": "There's another way to do this",
+  "recovery.alternate.body": "Some people do better one-to-one than in a group. We can set that up when it's ready.",
+  "recovery.alternate.notYet": "We'll let you know",
+
   "pod.you": "You",
   "pod.someone": "Someone in your pod",
 

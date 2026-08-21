@@ -184,6 +184,38 @@ const (
 	// "Leave the queue"
 	KeyPoolWaitingLeave Key = "pool.waiting.leave"
 
+	// "That pod has wound down"
+	KeyRecoveryPodEndedTitle Key = "recovery.podEnded.title"
+
+	// "It happens. We'll find you another one whenever you're ready."
+	KeyRecoveryPodEndedBody Key = "recovery.podEnded.body"
+
+	// "Want to make it smaller?"
+	KeyRecoveryLowerBarTitle Key = "recovery.lowerBar.title"
+
+	// "You picked {current}. {suggested} is also a real week."
+	// Placeholders: current, suggested
+	KeyRecoveryLowerBarBody Key = "recovery.lowerBar.body"
+
+	// "Make it {suggested}"
+	// Placeholders: suggested
+	KeyRecoveryLowerBarAccept Key = "recovery.lowerBar.accept"
+
+	// "Keep it as it is"
+	KeyRecoveryLowerBarKeep Key = "recovery.lowerBar.keep"
+
+	// "Find me another pod"
+	KeyRecoveryFindAnother Key = "recovery.findAnother"
+
+	// "There's another way to do this"
+	KeyRecoveryAlternateTitle Key = "recovery.alternate.title"
+
+	// "Some people do better one-to-one than in a group. We can set that up when it's ready."
+	KeyRecoveryAlternateBody Key = "recovery.alternate.body"
+
+	// "We'll let you know"
+	KeyRecoveryAlternateNotYet Key = "recovery.alternate.notYet"
+
 	// "You"
 	KeyPodYou Key = "pod.you"
 
@@ -553,6 +585,16 @@ var AllKeys = []Key{
 	KeyPoolWaitingBody,
 	KeyPoolWaitingNextWindow,
 	KeyPoolWaitingLeave,
+	KeyRecoveryPodEndedTitle,
+	KeyRecoveryPodEndedBody,
+	KeyRecoveryLowerBarTitle,
+	KeyRecoveryLowerBarBody,
+	KeyRecoveryLowerBarAccept,
+	KeyRecoveryLowerBarKeep,
+	KeyRecoveryFindAnother,
+	KeyRecoveryAlternateTitle,
+	KeyRecoveryAlternateBody,
+	KeyRecoveryAlternateNotYet,
 	KeyPodYou,
 	KeyPodSomeone,
 	KeyPushPodFormedTitle,
@@ -711,6 +753,16 @@ var catalogue = map[Key]map[string]string{
 	KeyPoolWaitingBody:                {"other": "We match every hour, so you're not waiting long. We'll let you know."},
 	KeyPoolWaitingNextWindow:          {"other": "Next match at {time}"},
 	KeyPoolWaitingLeave:               {"other": "Leave the queue"},
+	KeyRecoveryPodEndedTitle:          {"other": "That pod has wound down"},
+	KeyRecoveryPodEndedBody:           {"other": "It happens. We'll find you another one whenever you're ready."},
+	KeyRecoveryLowerBarTitle:          {"other": "Want to make it smaller?"},
+	KeyRecoveryLowerBarBody:           {"other": "You picked {current}. {suggested} is also a real week."},
+	KeyRecoveryLowerBarAccept:         {"other": "Make it {suggested}"},
+	KeyRecoveryLowerBarKeep:           {"other": "Keep it as it is"},
+	KeyRecoveryFindAnother:            {"other": "Find me another pod"},
+	KeyRecoveryAlternateTitle:         {"other": "There's another way to do this"},
+	KeyRecoveryAlternateBody:          {"other": "Some people do better one-to-one than in a group. We can set that up when it's ready."},
+	KeyRecoveryAlternateNotYet:        {"other": "We'll let you know"},
 	KeyPodYou:                         {"other": "You"},
 	KeyPodSomeone:                     {"other": "Someone in your pod"},
 	KeyPushPodFormedTitle:             {"other": "You've got a pod"},

@@ -296,6 +296,58 @@ public object CopyKey {
     public const val POOL_WAITING_LEAVE: String = "pool.waiting.leave"
 
     /**
+     * "That pod has wound down"
+     */
+    public const val RECOVERY_POD_ENDED_TITLE: String = "recovery.podEnded.title"
+
+    /**
+     * "It happens. We'll find you another one whenever you're ready."
+     */
+    public const val RECOVERY_POD_ENDED_BODY: String = "recovery.podEnded.body"
+
+    /**
+     * "Want to make it smaller?"
+     */
+    public const val RECOVERY_LOWER_BAR_TITLE: String = "recovery.lowerBar.title"
+
+    /**
+     * "You picked {current}. {suggested} is also a real week."
+     * Placeholders: current, suggested
+     */
+    public const val RECOVERY_LOWER_BAR_BODY: String = "recovery.lowerBar.body"
+
+    /**
+     * "Make it {suggested}"
+     * Placeholders: suggested
+     */
+    public const val RECOVERY_LOWER_BAR_ACCEPT: String = "recovery.lowerBar.accept"
+
+    /**
+     * "Keep it as it is"
+     */
+    public const val RECOVERY_LOWER_BAR_KEEP: String = "recovery.lowerBar.keep"
+
+    /**
+     * "Find me another pod"
+     */
+    public const val RECOVERY_FIND_ANOTHER: String = "recovery.findAnother"
+
+    /**
+     * "There's another way to do this"
+     */
+    public const val RECOVERY_ALTERNATE_TITLE: String = "recovery.alternate.title"
+
+    /**
+     * "Some people do better one-to-one than in a group. We can set that up when it's ready."
+     */
+    public const val RECOVERY_ALTERNATE_BODY: String = "recovery.alternate.body"
+
+    /**
+     * "We'll let you know"
+     */
+    public const val RECOVERY_ALTERNATE_NOT_YET: String = "recovery.alternate.notYet"
+
+    /**
      * "You"
      */
     public const val POD_YOU: String = "pod.you"
@@ -857,6 +909,16 @@ public object CopyKey {
         POOL_WAITING_BODY,
         POOL_WAITING_NEXT_WINDOW,
         POOL_WAITING_LEAVE,
+        RECOVERY_POD_ENDED_TITLE,
+        RECOVERY_POD_ENDED_BODY,
+        RECOVERY_LOWER_BAR_TITLE,
+        RECOVERY_LOWER_BAR_BODY,
+        RECOVERY_LOWER_BAR_ACCEPT,
+        RECOVERY_LOWER_BAR_KEEP,
+        RECOVERY_FIND_ANOTHER,
+        RECOVERY_ALTERNATE_TITLE,
+        RECOVERY_ALTERNATE_BODY,
+        RECOVERY_ALTERNATE_NOT_YET,
         POD_YOU,
         POD_SOMEONE,
         PUSH_POD_FORMED_TITLE,

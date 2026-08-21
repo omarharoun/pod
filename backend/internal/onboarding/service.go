@@ -61,6 +61,10 @@ type State struct {
 	InPool         bool
 	QueuedAt       time.Time
 	NextWindowAt   time.Time
+	Recovery       store.Recovery
+	// SuggestedIntensity is one step gentler than what they last chose, when there is a
+	// gentler step. Zero when there is not, or when nothing is being offered.
+	SuggestedIntensity int
 }
 
 // Intent is a validated, stored intent.
@@ -155,6 +159,12 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, in Input) (Inte
 		return Intent{}, fmt.Errorf("onboarding: save intent: %w", err)
 	}
 
+	// Setting an intent is acting on the offer, whichever way they went. Leaving it
+	// standing would put the same prompt in front of somebody who has already answered it.
+	if err := s.store.ClearRecoveryOffer(ctx, userID); err != nil {
+		return Intent{}, fmt.Errorf("onboarding: clear recovery offer: %w", err)
+	}
+
 	if name := strings.TrimSpace(in.DisplayName); name != "" {
 		if err := s.store.SetDisplayName(ctx, userID, name); err != nil {
 			return Intent{}, fmt.Errorf("onboarding: save display name: %w", err)
@@ -216,13 +226,23 @@ func (s *Service) State(ctx context.Context, userID string) (State, error) {
 	now := s.clock.Now()
 	state := State{Step: StepIntent}
 
-	if _, err := s.store.GetIntent(ctx, userID); err != nil {
+	recovery, err := s.store.RecoveryFor(ctx, userID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return State{}, fmt.Errorf("onboarding: read recovery: %w", err)
+	}
+	state.Recovery = recovery
+
+	intent, err := s.store.GetIntent(ctx, userID)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return state, nil
 		}
 		return State{}, fmt.Errorf("onboarding: read intent: %w", err)
 	}
 	state.IntentComplete = true
+	if recovery.OfferLowerIntensity && intent.Intensity > 1 {
+		state.SuggestedIntensity = intent.Intensity - 1
+	}
 
 	if _, err := s.store.GetActivePod(ctx, userID); err == nil {
 		state.Step = StepReady

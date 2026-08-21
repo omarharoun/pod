@@ -24,6 +24,7 @@ const TickInterval = time.Hour
 // JobResult is what one tick did. Counts only: a job log line must never carry a user id.
 type JobResult struct {
 	PodsSeen           int
+	PodsDissolved      int
 	WeeksOpened        int
 	WeeksClosed        int
 	ProofsDeleted      int
@@ -59,6 +60,8 @@ func (j *Job) Tick(ctx context.Context) (JobResult, error) {
 	result.PodsSeen = len(pods)
 
 	for _, pod := range pods {
+		// Closing comes first, so a pod's second quiet week is settled before we ask
+		// whether it has had two.
 		closed, opened, err := j.turnOver(ctx, pod, now)
 		if err != nil {
 			// One pod failing must not stop the rest. Its week turns over next tick.
@@ -67,6 +70,15 @@ func (j *Job) Tick(ctx context.Context) (JobResult, error) {
 		}
 		result.WeeksClosed += closed
 		result.WeeksOpened += opened
+
+		dissolved, err := j.dissolveIfInactive(ctx, pod, now)
+		if err != nil {
+			j.log.ErrorContext(ctx, "could not dissolve a pod", slog.Any("error", err))
+			continue
+		}
+		if dissolved {
+			result.PodsDissolved++
+		}
 	}
 
 	deleted, failures, err := j.Sweep(ctx, now)
@@ -91,6 +103,7 @@ func (j *Job) Tick(ctx context.Context) (JobResult, error) {
 		slog.Int("pods_seen", result.PodsSeen),
 		slog.Int("weeks_opened", result.WeeksOpened),
 		slog.Int("weeks_closed", result.WeeksClosed),
+		slog.Int("pods_dissolved", result.PodsDissolved),
 		slog.Int("proofs_deleted", result.ProofsDeleted),
 		slog.Int("sweep_failures", result.SweepFailures),
 		slog.Int("notifications_sent", result.NotificationsSent),

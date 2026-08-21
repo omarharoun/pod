@@ -189,6 +189,38 @@ public extension CopyKey {
     /// "Leave the queue"
     static let poolWaitingLeave = CopyKey(rawValue: "pool.waiting.leave")
 
+    /// "That pod has wound down"
+    static let recoveryPodEndedTitle = CopyKey(rawValue: "recovery.podEnded.title")
+
+    /// "It happens. We'll find you another one whenever you're ready."
+    static let recoveryPodEndedBody = CopyKey(rawValue: "recovery.podEnded.body")
+
+    /// "Want to make it smaller?"
+    static let recoveryLowerBarTitle = CopyKey(rawValue: "recovery.lowerBar.title")
+
+    /// "You picked {current}. {suggested} is also a real week."
+    /// Placeholders: current, suggested
+    static let recoveryLowerBarBody = CopyKey(rawValue: "recovery.lowerBar.body")
+
+    /// "Make it {suggested}"
+    /// Placeholders: suggested
+    static let recoveryLowerBarAccept = CopyKey(rawValue: "recovery.lowerBar.accept")
+
+    /// "Keep it as it is"
+    static let recoveryLowerBarKeep = CopyKey(rawValue: "recovery.lowerBar.keep")
+
+    /// "Find me another pod"
+    static let recoveryFindAnother = CopyKey(rawValue: "recovery.findAnother")
+
+    /// "There's another way to do this"
+    static let recoveryAlternateTitle = CopyKey(rawValue: "recovery.alternate.title")
+
+    /// "Some people do better one-to-one than in a group. We can set that up when it's ready."
+    static let recoveryAlternateBody = CopyKey(rawValue: "recovery.alternate.body")
+
+    /// "We'll let you know"
+    static let recoveryAlternateNotYet = CopyKey(rawValue: "recovery.alternate.notYet")
+
     /// "You"
     static let podYou = CopyKey(rawValue: "pod.you")
 
@@ -557,6 +589,16 @@ public extension CopyKey {
         .poolWaitingBody,
         .poolWaitingNextWindow,
         .poolWaitingLeave,
+        .recoveryPodEndedTitle,
+        .recoveryPodEndedBody,
+        .recoveryLowerBarTitle,
+        .recoveryLowerBarBody,
+        .recoveryLowerBarAccept,
+        .recoveryLowerBarKeep,
+        .recoveryFindAnother,
+        .recoveryAlternateTitle,
+        .recoveryAlternateBody,
+        .recoveryAlternateNotYet,
         .podYou,
         .podSomeone,
         .pushPodFormedTitle,

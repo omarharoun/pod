@@ -759,3 +759,100 @@ func (m *Memory) MarkNotificationSent(_ context.Context, id string, at time.Time
 	m.notificationsSent[id] = at
 	return nil
 }
+
+// ---------------------------------------------------------------- M5: recovery
+
+func (m *Memory) RecentOutcomes(_ context.Context, userID string, limit int) ([]WeekOutcome, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []WeekOutcome
+	for weekID, members := range m.memberWeeks {
+		week := m.weeks[weekID]
+		if week.ClosedAt == nil {
+			// An open week is not history yet.
+			continue
+		}
+		for _, member := range members {
+			if member.UserID != userID {
+				continue
+			}
+			out = append(out, WeekOutcome{
+				WeekID:       weekID,
+				Posted:       member.State == MemberWeekPosted,
+				PodCompleted: week.PodCompleted,
+				ClosesAt:     week.ClosesAt,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].ClosesAt.Equal(out[j].ClosesAt) {
+			return out[i].ClosesAt.After(out[j].ClosesAt)
+		}
+		return out[i].WeekID > out[j].WeekID
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *Memory) DissolvePod(_ context.Context, podID, reason string, inactiveMemberIDs []string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	pod, ok := m.pods[podID]
+	if !ok {
+		return ErrNotFound
+	}
+	if pod.State == PodStateDissolved {
+		return nil
+	}
+	pod.State = PodStateDissolved
+	dissolvedAt := at
+	pod.DissolvedAt = &dissolvedAt
+	m.pods[podID] = pod
+
+	inactive := map[string]bool{}
+	for _, id := range inactiveMemberIDs {
+		inactive[id] = true
+	}
+	for _, member := range m.podMembers[podID] {
+		user := m.users[member.UserID]
+		if inactive[member.UserID] {
+			// Only inactive members carry the count (CLAUDE.md §6).
+			user.DissolvedPods++
+		}
+		offered := at
+		user.RecoveryOfferedAt = &offered
+		m.users[member.UserID] = user
+	}
+	// Membership ends with the pod, so everyone is free to be matched again.
+	m.podMembers[podID] = nil
+	return nil
+}
+
+func (m *Memory) RecoveryFor(_ context.Context, userID string) (Recovery, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, ok := m.users[userID]
+	if !ok {
+		return Recovery{}, ErrNotFound
+	}
+	return Recovery{
+		OfferLowerIntensity: user.RecoveryOfferedAt != nil,
+		OfferAlternatePath:  user.DissolvedPods >= AlternatePathAfter,
+	}, nil
+}
+
+func (m *Memory) ClearRecoveryOffer(_ context.Context, userID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, ok := m.users[userID]
+	if !ok {
+		return ErrNotFound
+	}
+	user.RecoveryOfferedAt = nil
+	m.users[userID] = user
+	return nil
+}

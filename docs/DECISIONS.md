@@ -569,3 +569,111 @@ every other. A wording fix reaches everything not yet sent.
 * The outbox's `subject_id` is text, not a uuid, because `member_posted` is about a pair
   of things. Keying on the week alone would collapse two pod-mates' posts into one; keying
   on the poster alone would suppress their post in every week after the first.
+
+---
+
+## ADR-017 — What `pod_impact` means
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M5
+
+**Context.** `CLAUDE.md` §6 weights the reliability score at
+`0.15 × pod_impact // did their presence correlate with pod completion`. The weight is
+fixed and out of bounds under §8. The *definition* is a comment.
+
+**Decision.** Among the rolling eight weeks:
+
+```
+pod_impact = ( P(pod completed | they posted) − P(pod completed | they did not) + 1 ) / 2
+```
+
+mapped from [−1, 1] onto [0, 1]. Someone with no weeks on one side of that comparison —
+they never missed, or they never posted — scores the neutral **0.5**. There is nothing to
+compare and guessing would be worse than abstaining.
+
+Why a difference of conditional rates rather than, say, the share of completed weeks they
+were present for: the latter rewards being in a pod that completes, which is mostly a fact
+about the other people. The difference measures what the brief actually asks — whether
+their presence *made a difference* — and it lands at 0.5 for someone whose pod completes
+regardless of them, which is the honest answer.
+
+**Consequences.**
+* It is noisy at small n. That is why it carries 0.15 and not more, and why the neutral
+  case is common early on.
+* It can be gamed by not posting in weeks the pod will fail anyway. Nobody has that
+  information — a week's outcome is not knowable until it closes — so the attack requires
+  predicting your pod-mates.
+
+---
+
+## ADR-018 — Recovery is an offer with no reason attached
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M5
+
+**Context.** When a pod dissolves, the product has to say something. Everything true about
+*why* it dissolved is a statement about people not showing up, and there is no wording of
+that which does not land as a verdict on somebody.
+
+**Decision.** `Recovery` carries two booleans and nothing else: `offer_lower_intensity` and
+`offer_alternate_path`, plus a `suggested_intensity` when there is a gentler rung.
+
+The copy never says why. "That pod has wound down. It happens. We'll find you another one
+whenever you're ready." — no cause, no count, no reference to anyone's behaviour, and it
+reads identically to the person who posted every week and the person who never did.
+
+Accepting the lower-intensity offer is an ordinary `putIntent` with a smaller number. There
+is no dedicated endpoint, because it is not a special kind of change — it is the same
+change anyone can make at any time, surfaced at the moment it is most useful.
+
+**What is deliberately absent from the wire:** the reliability score, the count of pods
+that have ended, which members were inactive, and the reason string on the pod. The reason
+is stored (`pods.dissolved_reason`) for operators and never returned.
+
+**Consequences.**
+* Somebody who was carrying a quiet pod gets the same message as the person who went
+  quiet. That is a real cost, and it is the correct one: the alternative is telling
+  somebody the machine noticed.
+* The alternate-path offer appears after three (§6) and currently opens nothing — the
+  one-to-one product does not exist. The client shows the offer and says it will be in
+  touch, which is honest.
+
+---
+
+## ADR-019 — "Inactive" means two different things, and the gentler reading wins twice
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M5
+
+**Context.** `CLAUDE.md` §6: *"pod inactive 2 consecutive weeks → dissolve → members
+re-enter pool. Only inactive members take the small reliability penalty."*
+
+Two words are doing a lot of work and they are not the same word twice.
+
+**An inactive pod** could mean (a) no member posted, or (b) the pod did not complete.
+**An inactive member** could mean (a) they did not post in the weeks that triggered it, or
+(b) they never posted in that pod at all.
+
+The readings interact. Under pod-(a) + member-(a), the penalty clause is vacuous: if nobody
+posted for two weeks then everybody is inactive by definition, and "only inactive members"
+excludes nobody. A sentence in the brief that excludes nobody is a sentence being read
+wrong.
+
+**Decision.** Pod-(a) and member-(b).
+
+* **An inactive pod is one where nobody posted for two consecutive weeks.** A pod where one
+  person keeps showing up is not inactive — it is a pod carrying someone, which is what
+  pods are for. Dissolving that would end it *because* somebody kept turning up.
+* **An inactive member is one who posted in none of that pod's weeks, ever.** Somebody who
+  posted in week one and then went quiet is not the same as somebody who was never there,
+  and the score should not treat them the same.
+
+Each choice is the gentler of the two available, and together they make the penalty clause
+mean something: the pod that dissolves is one nobody was posting to recently, and the
+people who carry it are the ones who never posted at all.
+
+**Consequences.**
+* A half-active pod — one member posting every week, the other never — is never dissolved
+  by this rule. The active member stays in a pod that does not complete, which is arguably
+  worse for them than being re-matched. If that turns out to be the common failure, the
+  fix is a *separate* rule about half-active pods, not a re-reading of this one.
+* `dissolveIfInactive` reads the pod's whole history to decide who carries the count, not
+  just the trigger weeks. That is a longer query for a rarer event, which is the right way
+  round.

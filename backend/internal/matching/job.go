@@ -67,7 +67,14 @@ func (j *Job) RunWindow(ctx context.Context) (Result, error) {
 
 	candidates := make([]Candidate, 0, len(waiting))
 	for _, w := range waiting {
-		candidates = append(candidates, toCandidate(w, now))
+		// History is read per candidate rather than joined in, because the reliability
+		// score is derived and never stored — there is no column to select
+		// (CLAUDE.md §6). The pool is bounded and the job is hourly, so this is cheap.
+		outcomes, err := j.store.RecentOutcomes(ctx, w.UserID, reliability.Window)
+		if err != nil {
+			return result, fmt.Errorf("matching: read history: %w", err)
+		}
+		candidates = append(candidates, toCandidate(w, outcomes, now))
 	}
 
 	for _, pod := range Assemble(candidates, j.opts) {
@@ -124,6 +131,14 @@ func (j *Job) persist(ctx context.Context, pod Pod, waiting []store.PoolCandidat
 		return false, err
 	}
 
+	// The offer to lower the bar was about the pod that ended. Being in a new one
+	// answers it.
+	for _, userID := range memberIDs {
+		if err := j.store.ClearRecoveryOffer(ctx, userID); err != nil {
+			j.log.ErrorContext(ctx, "could not clear a recovery offer", slog.Any("error", err))
+		}
+	}
+
 	if j.notifier != nil {
 		// Read the pod back so the notification can name people, which needs the
 		// display names the matcher deliberately never sees.
@@ -159,7 +174,7 @@ func podTimezone(pod Pod, waiting []store.PoolCandidate) string {
 	return earliest
 }
 
-func toCandidate(w store.PoolCandidate, now time.Time) Candidate {
+func toCandidate(w store.PoolCandidate, outcomes []store.WeekOutcome, now time.Time) Candidate {
 	windows := make([]Window, 0, len(w.Availability))
 	for _, a := range w.Availability {
 		windows = append(windows, Window{DayOfWeek: a.DayOfWeek, StartMinute: a.StartMinute, EndMinute: a.EndMinute})
@@ -170,12 +185,19 @@ func toCandidate(w store.PoolCandidate, now time.Time) Candidate {
 		Intensity:             w.Intensity,
 		TimezoneOffsetMinutes: OffsetMinutes(w.Timezone, now),
 		Embedding:             w.Embedding,
-		// M2 has no week history, so every score is a cold start. When history exists,
-		// this is the one line that changes (CLAUDE.md §6).
-		Reliability:  reliability.ColdStart(reliability.SelfReport(w.SelfReport)),
+		// Derived from history, falling back to the cold start for a new account.
+		Reliability:  reliability.Compute(toOutcomes(outcomes), reliability.SelfReport(w.SelfReport)),
 		Availability: windows,
 		TenureWeeks:  w.TenureWeeks,
 	}
+}
+
+func toOutcomes(outcomes []store.WeekOutcome) []reliability.Outcome {
+	out := make([]reliability.Outcome, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		out = append(out, reliability.Outcome{Posted: outcome.Posted, PodCompleted: outcome.PodCompleted})
+	}
+	return out
 }
 
 // OffsetMinutes is the zone's offset from UTC at now, which is what the ±3 hour filter
