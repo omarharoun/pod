@@ -120,6 +120,243 @@ public object CopyKey {
     public const val AUTH_SIGN_OUT_ACTION: String = "auth.signOut.action"
 
     /**
+     * "What have you been putting off?"
+     */
+    public const val ONBOARDING_INTENT_TITLE: String = "onboarding.intent.title"
+
+    /**
+     * "One thing. The one that's been sitting there."
+     */
+    public const val ONBOARDING_INTENT_BODY: String = "onboarding.intent.body"
+
+    /**
+     * "In your words"
+     */
+    public const val ONBOARDING_GOAL_LABEL: String = "onboarding.goal.label"
+
+    /**
+     * "Finally sort out the spare room"
+     */
+    public const val ONBOARDING_GOAL_PLACEHOLDER: String = "onboarding.goal.placeholder"
+
+    /**
+     * "Only your pod will see this."
+     */
+    public const val ONBOARDING_GOAL_HINT: String = "onboarding.goal.hint"
+
+    /**
+     * "What kind of thing is it?"
+     */
+    public const val ONBOARDING_CATEGORY_TITLE: String = "onboarding.category.title"
+
+    /**
+     * "Moving my body"
+     */
+    public const val ONBOARDING_CATEGORY_MOVEMENT: String = "onboarding.category.movement"
+
+    /**
+     * "Making something"
+     */
+    public const val ONBOARDING_CATEGORY_CREATIVE: String = "onboarding.category.creative"
+
+    /**
+     * "Admin and paperwork"
+     */
+    public const val ONBOARDING_CATEGORY_ADMIN: String = "onboarding.category.admin"
+
+    /**
+     * "Learning something"
+     */
+    public const val ONBOARDING_CATEGORY_LEARNING: String = "onboarding.category.learning"
+
+    /**
+     * "Work and career"
+     */
+    public const val ONBOARDING_CATEGORY_CAREER: String = "onboarding.category.career"
+
+    /**
+     * "Home and space"
+     */
+    public const val ONBOARDING_CATEGORY_HOME: String = "onboarding.category.home"
+
+    /**
+     * "Health and looking after myself"
+     */
+    public const val ONBOARDING_CATEGORY_HEALTH: String = "onboarding.category.health"
+
+    /**
+     * "People I've lost touch with"
+     */
+    public const val ONBOARDING_CATEGORY_CONNECTION: String = "onboarding.category.connection"
+
+    /**
+     * "Money things"
+     */
+    public const val ONBOARDING_CATEGORY_MONEY: String = "onboarding.category.money"
+
+    /**
+     * "How much can you give it in a week?"
+     */
+    public const val ONBOARDING_INTENSITY_TITLE: String = "onboarding.intensity.title"
+
+    /**
+     * "Pick what's realistic on a normal week, not a good one. You can change it later."
+     */
+    public const val ONBOARDING_INTENSITY_BODY: String = "onboarding.intensity.body"
+
+    /**
+     * "A few minutes"
+     */
+    public const val ONBOARDING_INTENSITY_1: String = "onboarding.intensity.1"
+
+    /**
+     * "Half an hour"
+     */
+    public const val ONBOARDING_INTENSITY_2: String = "onboarding.intensity.2"
+
+    /**
+     * "An hour or two"
+     */
+    public const val ONBOARDING_INTENSITY_3: String = "onboarding.intensity.3"
+
+    /**
+     * "Half a day"
+     */
+    public const val ONBOARDING_INTENSITY_4: String = "onboarding.intensity.4"
+
+    /**
+     * "Several hours"
+     */
+    public const val ONBOARDING_INTENSITY_5: String = "onboarding.intensity.5"
+
+    /**
+     * "One last thing"
+     */
+    public const val ONBOARDING_RELIABILITY_TITLE: String = "onboarding.reliability.title"
+
+    /**
+     * "How often do you keep commitments you make to yourself? There's no right answer — it only helps us pick who you'd get on with."
+     */
+    public const val ONBOARDING_RELIABILITY_BODY: String = "onboarding.reliability.body"
+
+    /**
+     * "Not as often as I'd like"
+     */
+    public const val ONBOARDING_RELIABILITY_RARELY: String = "onboarding.reliability.rarely"
+
+    /**
+     * "Some of the time"
+     */
+    public const val ONBOARDING_RELIABILITY_SOMETIMES: String = "onboarding.reliability.sometimes"
+
+    /**
+     * "Most of the time"
+     */
+    public const val ONBOARDING_RELIABILITY_USUALLY: String = "onboarding.reliability.usually"
+
+    /**
+     * "Your timezone"
+     */
+    public const val ONBOARDING_TIMEZONE_LABEL: String = "onboarding.timezone.label"
+
+    /**
+     * "So your pod's week lines up with yours."
+     */
+    public const val ONBOARDING_TIMEZONE_BODY: String = "onboarding.timezone.body"
+
+    /**
+     * "Find me a pod"
+     */
+    public const val ONBOARDING_SUBMIT: String = "onboarding.submit"
+
+    /**
+     * "Continue"
+     */
+    public const val ONBOARDING_CONTINUE: String = "onboarding.continue"
+
+    /**
+     * "Looking for your pod"
+     */
+    public const val POOL_WAITING_TITLE: String = "pool.waiting.title"
+
+    /**
+     * "We match every hour, so you're not waiting long. We'll let you know."
+     */
+    public const val POOL_WAITING_BODY: String = "pool.waiting.body"
+
+    /**
+     * "Next match at {time}"
+     * Placeholders: time
+     */
+    public const val POOL_WAITING_NEXT_WINDOW: String = "pool.waiting.nextWindow"
+
+    /**
+     * "Leave the queue"
+     */
+    public const val POOL_WAITING_LEAVE: String = "pool.waiting.leave"
+
+    /**
+     * "Your pod"
+     */
+    public const val POD_TITLE: String = "pod.title"
+
+    /**
+     * "The two of you."
+     */
+    public const val POD_MEMBERS_TWO: String = "pod.members.two"
+
+    /**
+     * "The three of you."
+     */
+    public const val POD_MEMBERS_THREE: String = "pod.members.three"
+
+    /**
+     * "You"
+     */
+    public const val POD_YOU: String = "pod.you"
+
+    /**
+     * "You're matched"
+     */
+    public const val POD_NEWLY_FORMED_TITLE: String = "pod.newlyFormed.title"
+
+    /**
+     * "Same goal, same kind of week. Your first action lands soon."
+     */
+    public const val POD_NEWLY_FORMED_BODY: String = "pod.newlyFormed.body"
+
+    /**
+     * "You're already in a pod"
+     */
+    public const val ERROR_ALREADY_IN_POD_TITLE: String = "error.alreadyInPod.title"
+
+    /**
+     * "One pod at a time, and yours is waiting for you."
+     */
+    public const val ERROR_ALREADY_IN_POD_BODY: String = "error.alreadyInPod.body"
+
+    /**
+     * "A few more words"
+     */
+    public const val ERROR_GOAL_TOO_SHORT_TITLE: String = "error.goalTooShort.title"
+
+    /**
+     * "Tell us a little more so we can match you well."
+     */
+    public const val ERROR_GOAL_TOO_SHORT_BODY: String = "error.goalTooShort.body"
+
+    /**
+     * "{label}, option {index} of 5"
+     * Placeholders: label, index
+     */
+    public const val A11Y_INTENSITY_OPTION: String = "a11y.intensityOption"
+
+    /**
+     * "Selected"
+     */
+    public const val A11Y_SELECTED: String = "a11y.selected"
+
+    /**
      * "Your Pod code: {code}"
      * Placeholders: code
      */
@@ -330,6 +567,53 @@ public object CopyKey {
         AUTH_SIGNED_OUT_TITLE,
         AUTH_SIGNED_OUT_BODY,
         AUTH_SIGN_OUT_ACTION,
+        ONBOARDING_INTENT_TITLE,
+        ONBOARDING_INTENT_BODY,
+        ONBOARDING_GOAL_LABEL,
+        ONBOARDING_GOAL_PLACEHOLDER,
+        ONBOARDING_GOAL_HINT,
+        ONBOARDING_CATEGORY_TITLE,
+        ONBOARDING_CATEGORY_MOVEMENT,
+        ONBOARDING_CATEGORY_CREATIVE,
+        ONBOARDING_CATEGORY_ADMIN,
+        ONBOARDING_CATEGORY_LEARNING,
+        ONBOARDING_CATEGORY_CAREER,
+        ONBOARDING_CATEGORY_HOME,
+        ONBOARDING_CATEGORY_HEALTH,
+        ONBOARDING_CATEGORY_CONNECTION,
+        ONBOARDING_CATEGORY_MONEY,
+        ONBOARDING_INTENSITY_TITLE,
+        ONBOARDING_INTENSITY_BODY,
+        ONBOARDING_INTENSITY_1,
+        ONBOARDING_INTENSITY_2,
+        ONBOARDING_INTENSITY_3,
+        ONBOARDING_INTENSITY_4,
+        ONBOARDING_INTENSITY_5,
+        ONBOARDING_RELIABILITY_TITLE,
+        ONBOARDING_RELIABILITY_BODY,
+        ONBOARDING_RELIABILITY_RARELY,
+        ONBOARDING_RELIABILITY_SOMETIMES,
+        ONBOARDING_RELIABILITY_USUALLY,
+        ONBOARDING_TIMEZONE_LABEL,
+        ONBOARDING_TIMEZONE_BODY,
+        ONBOARDING_SUBMIT,
+        ONBOARDING_CONTINUE,
+        POOL_WAITING_TITLE,
+        POOL_WAITING_BODY,
+        POOL_WAITING_NEXT_WINDOW,
+        POOL_WAITING_LEAVE,
+        POD_TITLE,
+        POD_MEMBERS_TWO,
+        POD_MEMBERS_THREE,
+        POD_YOU,
+        POD_NEWLY_FORMED_TITLE,
+        POD_NEWLY_FORMED_BODY,
+        ERROR_ALREADY_IN_POD_TITLE,
+        ERROR_ALREADY_IN_POD_BODY,
+        ERROR_GOAL_TOO_SHORT_TITLE,
+        ERROR_GOAL_TOO_SHORT_BODY,
+        A11Y_INTENSITY_OPTION,
+        A11Y_SELECTED,
         EMAIL_LOGIN_CODE_SUBJECT,
         EMAIL_LOGIN_CODE_PREHEADER,
         EMAIL_LOGIN_CODE_BODY,

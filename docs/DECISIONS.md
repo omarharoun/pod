@@ -299,3 +299,45 @@ configured and tested on a machine with no Android SDK at all:
   which do need the SDK.
 * If a second consumer ever appears — a desktop tool, a test harness — it can use
   `:core:api` unchanged.
+
+---
+
+## ADR-010 — The five intensity rungs, and a correction to ADR-005
+
+**Date:** 2026-08-21 · **Status:** accepted · **Supersedes part of ADR-005** · **Milestone:** M2
+
+**Context.** ADR-005 chose a 1–5 intensity scale and then never said what the five rungs
+*were*. The spec carried `minimum: 1, maximum: 5` and a parenthetical, `microcopy.json`
+had nothing, and so `intensity: 3` meant nothing to a user, to a reviewer, or to anyone
+reasoning about whether the hard filter was doing useful work.
+
+**Decision.** The rungs are time per week, because that is the only axis someone can
+answer honestly in two seconds about a week they haven't had yet:
+
+| | | filter admits |
+|---|---|---|
+| 1 | A few minutes | 1, 2 |
+| 2 | Half an hour | 1, 2, 3 |
+| 3 | An hour or two | 2, 3, 4 |
+| 4 | Half a day | 3, 4, 5 |
+| 5 | Several hours | 4, 5 |
+
+They are named in `content/microcopy.json` under `onboarding.intensity.*`. The integer is
+the matching filter's business and is never displayed — a person picks a phrase, not a
+number, and never sees where they sit on a scale relative to anyone else.
+
+The onboarding question is worded "what's realistic on a normal week, not a good one."
+Optimism here produces a pod where someone quietly can't keep up, which is the exact
+failure §2 rule 1 exists to prevent.
+
+**Correction to ADR-005.** Its fallback clause said that if five rungs don't test as
+distinguishable, collapse to three and keep the ±1 filter. That is wrong: on a 3-point
+scale ±1 means level 2 matches everyone and levels 1 and 3 fail to exclude anything but
+each other — the filter stops filtering. **The correct fallback is three rungs with exact
+match.** Everything else in ADR-005 stands.
+
+**Consequences.**
+* Changing the number of rungs now means changing the filter arithmetic with it. The two
+  are one decision, not two, and ADR-005 is the proof of how easily they come apart.
+* The rungs are copy, so they are covered by `tools/copylint` and by both clients'
+  catalogue tests.

@@ -324,9 +324,24 @@ public struct GoalCategory: RawRepresentable, Codable, Hashable, Sendable {
     public var isKnown: Bool { Self.knownCases.contains(self) }
 }
 
-/// How much the person can realistically give in a week, 1 (a few minutes) to 5
-/// (several hours). The matching hard filter is ±1 (`CLAUDE.md` §6); see ADR-005 for
-/// why the scale has five points rather than three.
+/// How much the person can realistically give in a week:
+///
+/// | | roughly |
+/// |---|---|
+/// | 1 | a few minutes |
+/// | 2 | half an hour |
+/// | 3 | an hour or two |
+/// | 4 | half a day |
+/// | 5 | several hours |
+///
+/// The rungs are named for the client under `onboarding.intensity.*` in
+/// `content/microcopy.json`; the numbers here are the matching filter's business and
+/// are never shown to anyone.
+///
+/// The hard filter is ±1 (`CLAUDE.md` §6), so 1 matches {1,2} and 3 matches {2,3,4}.
+/// Someone giving fifteen minutes a week is never podded with someone giving five
+/// hours — that pairing is the one most likely to make the smaller contributor feel
+/// like the weak link. See ADR-005 for why the scale has five points, not three.
 public typealias Intensity = Int
 
 /// Cold-start only — the answer to "how often do you keep commitments to yourself".

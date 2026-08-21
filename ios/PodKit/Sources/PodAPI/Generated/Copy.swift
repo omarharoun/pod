@@ -83,6 +83,149 @@ public extension CopyKey {
     /// "Sign out"
     static let authSignOutAction = CopyKey(rawValue: "auth.signOut.action")
 
+    /// "What have you been putting off?"
+    static let onboardingIntentTitle = CopyKey(rawValue: "onboarding.intent.title")
+
+    /// "One thing. The one that's been sitting there."
+    static let onboardingIntentBody = CopyKey(rawValue: "onboarding.intent.body")
+
+    /// "In your words"
+    static let onboardingGoalLabel = CopyKey(rawValue: "onboarding.goal.label")
+
+    /// "Finally sort out the spare room"
+    static let onboardingGoalPlaceholder = CopyKey(rawValue: "onboarding.goal.placeholder")
+
+    /// "Only your pod will see this."
+    static let onboardingGoalHint = CopyKey(rawValue: "onboarding.goal.hint")
+
+    /// "What kind of thing is it?"
+    static let onboardingCategoryTitle = CopyKey(rawValue: "onboarding.category.title")
+
+    /// "Moving my body"
+    static let onboardingCategoryMovement = CopyKey(rawValue: "onboarding.category.movement")
+
+    /// "Making something"
+    static let onboardingCategoryCreative = CopyKey(rawValue: "onboarding.category.creative")
+
+    /// "Admin and paperwork"
+    static let onboardingCategoryAdmin = CopyKey(rawValue: "onboarding.category.admin")
+
+    /// "Learning something"
+    static let onboardingCategoryLearning = CopyKey(rawValue: "onboarding.category.learning")
+
+    /// "Work and career"
+    static let onboardingCategoryCareer = CopyKey(rawValue: "onboarding.category.career")
+
+    /// "Home and space"
+    static let onboardingCategoryHome = CopyKey(rawValue: "onboarding.category.home")
+
+    /// "Health and looking after myself"
+    static let onboardingCategoryHealth = CopyKey(rawValue: "onboarding.category.health")
+
+    /// "People I've lost touch with"
+    static let onboardingCategoryConnection = CopyKey(rawValue: "onboarding.category.connection")
+
+    /// "Money things"
+    static let onboardingCategoryMoney = CopyKey(rawValue: "onboarding.category.money")
+
+    /// "How much can you give it in a week?"
+    static let onboardingIntensityTitle = CopyKey(rawValue: "onboarding.intensity.title")
+
+    /// "Pick what's realistic on a normal week, not a good one. You can change it later."
+    static let onboardingIntensityBody = CopyKey(rawValue: "onboarding.intensity.body")
+
+    /// "A few minutes"
+    static let onboardingIntensity1 = CopyKey(rawValue: "onboarding.intensity.1")
+
+    /// "Half an hour"
+    static let onboardingIntensity2 = CopyKey(rawValue: "onboarding.intensity.2")
+
+    /// "An hour or two"
+    static let onboardingIntensity3 = CopyKey(rawValue: "onboarding.intensity.3")
+
+    /// "Half a day"
+    static let onboardingIntensity4 = CopyKey(rawValue: "onboarding.intensity.4")
+
+    /// "Several hours"
+    static let onboardingIntensity5 = CopyKey(rawValue: "onboarding.intensity.5")
+
+    /// "One last thing"
+    static let onboardingReliabilityTitle = CopyKey(rawValue: "onboarding.reliability.title")
+
+    /// "How often do you keep commitments you make to yourself? There's no right answer — it only helps us pick who you'd get on with."
+    static let onboardingReliabilityBody = CopyKey(rawValue: "onboarding.reliability.body")
+
+    /// "Not as often as I'd like"
+    static let onboardingReliabilityRarely = CopyKey(rawValue: "onboarding.reliability.rarely")
+
+    /// "Some of the time"
+    static let onboardingReliabilitySometimes = CopyKey(rawValue: "onboarding.reliability.sometimes")
+
+    /// "Most of the time"
+    static let onboardingReliabilityUsually = CopyKey(rawValue: "onboarding.reliability.usually")
+
+    /// "Your timezone"
+    static let onboardingTimezoneLabel = CopyKey(rawValue: "onboarding.timezone.label")
+
+    /// "So your pod's week lines up with yours."
+    static let onboardingTimezoneBody = CopyKey(rawValue: "onboarding.timezone.body")
+
+    /// "Find me a pod"
+    static let onboardingSubmit = CopyKey(rawValue: "onboarding.submit")
+
+    /// "Continue"
+    static let onboardingContinue = CopyKey(rawValue: "onboarding.continue")
+
+    /// "Looking for your pod"
+    static let poolWaitingTitle = CopyKey(rawValue: "pool.waiting.title")
+
+    /// "We match every hour, so you're not waiting long. We'll let you know."
+    static let poolWaitingBody = CopyKey(rawValue: "pool.waiting.body")
+
+    /// "Next match at {time}"
+    /// Placeholders: time
+    static let poolWaitingNextWindow = CopyKey(rawValue: "pool.waiting.nextWindow")
+
+    /// "Leave the queue"
+    static let poolWaitingLeave = CopyKey(rawValue: "pool.waiting.leave")
+
+    /// "Your pod"
+    static let podTitle = CopyKey(rawValue: "pod.title")
+
+    /// "The two of you."
+    static let podMembersTwo = CopyKey(rawValue: "pod.members.two")
+
+    /// "The three of you."
+    static let podMembersThree = CopyKey(rawValue: "pod.members.three")
+
+    /// "You"
+    static let podYou = CopyKey(rawValue: "pod.you")
+
+    /// "You're matched"
+    static let podNewlyFormedTitle = CopyKey(rawValue: "pod.newlyFormed.title")
+
+    /// "Same goal, same kind of week. Your first action lands soon."
+    static let podNewlyFormedBody = CopyKey(rawValue: "pod.newlyFormed.body")
+
+    /// "You're already in a pod"
+    static let errorAlreadyInPodTitle = CopyKey(rawValue: "error.alreadyInPod.title")
+
+    /// "One pod at a time, and yours is waiting for you."
+    static let errorAlreadyInPodBody = CopyKey(rawValue: "error.alreadyInPod.body")
+
+    /// "A few more words"
+    static let errorGoalTooShortTitle = CopyKey(rawValue: "error.goalTooShort.title")
+
+    /// "Tell us a little more so we can match you well."
+    static let errorGoalTooShortBody = CopyKey(rawValue: "error.goalTooShort.body")
+
+    /// "{label}, option {index} of 5"
+    /// Placeholders: label, index
+    static let a11yIntensityOption = CopyKey(rawValue: "a11y.intensityOption")
+
+    /// "Selected"
+    static let a11ySelected = CopyKey(rawValue: "a11y.selected")
+
     /// "Your Pod code: {code}"
     /// Placeholders: code
     static let emailLoginCodeSubject = CopyKey(rawValue: "email.loginCode.subject")
@@ -224,6 +367,53 @@ public extension CopyKey {
         .authSignedOutTitle,
         .authSignedOutBody,
         .authSignOutAction,
+        .onboardingIntentTitle,
+        .onboardingIntentBody,
+        .onboardingGoalLabel,
+        .onboardingGoalPlaceholder,
+        .onboardingGoalHint,
+        .onboardingCategoryTitle,
+        .onboardingCategoryMovement,
+        .onboardingCategoryCreative,
+        .onboardingCategoryAdmin,
+        .onboardingCategoryLearning,
+        .onboardingCategoryCareer,
+        .onboardingCategoryHome,
+        .onboardingCategoryHealth,
+        .onboardingCategoryConnection,
+        .onboardingCategoryMoney,
+        .onboardingIntensityTitle,
+        .onboardingIntensityBody,
+        .onboardingIntensity1,
+        .onboardingIntensity2,
+        .onboardingIntensity3,
+        .onboardingIntensity4,
+        .onboardingIntensity5,
+        .onboardingReliabilityTitle,
+        .onboardingReliabilityBody,
+        .onboardingReliabilityRarely,
+        .onboardingReliabilitySometimes,
+        .onboardingReliabilityUsually,
+        .onboardingTimezoneLabel,
+        .onboardingTimezoneBody,
+        .onboardingSubmit,
+        .onboardingContinue,
+        .poolWaitingTitle,
+        .poolWaitingBody,
+        .poolWaitingNextWindow,
+        .poolWaitingLeave,
+        .podTitle,
+        .podMembersTwo,
+        .podMembersThree,
+        .podYou,
+        .podNewlyFormedTitle,
+        .podNewlyFormedBody,
+        .errorAlreadyInPodTitle,
+        .errorAlreadyInPodBody,
+        .errorGoalTooShortTitle,
+        .errorGoalTooShortBody,
+        .a11yIntensityOption,
+        .a11ySelected,
         .emailLoginCodeSubject,
         .emailLoginCodePreheader,
         .emailLoginCodeBody,

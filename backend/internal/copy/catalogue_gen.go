@@ -78,6 +78,149 @@ const (
 	// "Sign out"
 	KeyAuthSignOutAction Key = "auth.signOut.action"
 
+	// "What have you been putting off?"
+	KeyOnboardingIntentTitle Key = "onboarding.intent.title"
+
+	// "One thing. The one that's been sitting there."
+	KeyOnboardingIntentBody Key = "onboarding.intent.body"
+
+	// "In your words"
+	KeyOnboardingGoalLabel Key = "onboarding.goal.label"
+
+	// "Finally sort out the spare room"
+	KeyOnboardingGoalPlaceholder Key = "onboarding.goal.placeholder"
+
+	// "Only your pod will see this."
+	KeyOnboardingGoalHint Key = "onboarding.goal.hint"
+
+	// "What kind of thing is it?"
+	KeyOnboardingCategoryTitle Key = "onboarding.category.title"
+
+	// "Moving my body"
+	KeyOnboardingCategoryMovement Key = "onboarding.category.movement"
+
+	// "Making something"
+	KeyOnboardingCategoryCreative Key = "onboarding.category.creative"
+
+	// "Admin and paperwork"
+	KeyOnboardingCategoryAdmin Key = "onboarding.category.admin"
+
+	// "Learning something"
+	KeyOnboardingCategoryLearning Key = "onboarding.category.learning"
+
+	// "Work and career"
+	KeyOnboardingCategoryCareer Key = "onboarding.category.career"
+
+	// "Home and space"
+	KeyOnboardingCategoryHome Key = "onboarding.category.home"
+
+	// "Health and looking after myself"
+	KeyOnboardingCategoryHealth Key = "onboarding.category.health"
+
+	// "People I've lost touch with"
+	KeyOnboardingCategoryConnection Key = "onboarding.category.connection"
+
+	// "Money things"
+	KeyOnboardingCategoryMoney Key = "onboarding.category.money"
+
+	// "How much can you give it in a week?"
+	KeyOnboardingIntensityTitle Key = "onboarding.intensity.title"
+
+	// "Pick what's realistic on a normal week, not a good one. You can change it later."
+	KeyOnboardingIntensityBody Key = "onboarding.intensity.body"
+
+	// "A few minutes"
+	KeyOnboardingIntensity1 Key = "onboarding.intensity.1"
+
+	// "Half an hour"
+	KeyOnboardingIntensity2 Key = "onboarding.intensity.2"
+
+	// "An hour or two"
+	KeyOnboardingIntensity3 Key = "onboarding.intensity.3"
+
+	// "Half a day"
+	KeyOnboardingIntensity4 Key = "onboarding.intensity.4"
+
+	// "Several hours"
+	KeyOnboardingIntensity5 Key = "onboarding.intensity.5"
+
+	// "One last thing"
+	KeyOnboardingReliabilityTitle Key = "onboarding.reliability.title"
+
+	// "How often do you keep commitments you make to yourself? There's no right answer — it only helps us pick who you'd get on with."
+	KeyOnboardingReliabilityBody Key = "onboarding.reliability.body"
+
+	// "Not as often as I'd like"
+	KeyOnboardingReliabilityRarely Key = "onboarding.reliability.rarely"
+
+	// "Some of the time"
+	KeyOnboardingReliabilitySometimes Key = "onboarding.reliability.sometimes"
+
+	// "Most of the time"
+	KeyOnboardingReliabilityUsually Key = "onboarding.reliability.usually"
+
+	// "Your timezone"
+	KeyOnboardingTimezoneLabel Key = "onboarding.timezone.label"
+
+	// "So your pod's week lines up with yours."
+	KeyOnboardingTimezoneBody Key = "onboarding.timezone.body"
+
+	// "Find me a pod"
+	KeyOnboardingSubmit Key = "onboarding.submit"
+
+	// "Continue"
+	KeyOnboardingContinue Key = "onboarding.continue"
+
+	// "Looking for your pod"
+	KeyPoolWaitingTitle Key = "pool.waiting.title"
+
+	// "We match every hour, so you're not waiting long. We'll let you know."
+	KeyPoolWaitingBody Key = "pool.waiting.body"
+
+	// "Next match at {time}"
+	// Placeholders: time
+	KeyPoolWaitingNextWindow Key = "pool.waiting.nextWindow"
+
+	// "Leave the queue"
+	KeyPoolWaitingLeave Key = "pool.waiting.leave"
+
+	// "Your pod"
+	KeyPodTitle Key = "pod.title"
+
+	// "The two of you."
+	KeyPodMembersTwo Key = "pod.members.two"
+
+	// "The three of you."
+	KeyPodMembersThree Key = "pod.members.three"
+
+	// "You"
+	KeyPodYou Key = "pod.you"
+
+	// "You're matched"
+	KeyPodNewlyFormedTitle Key = "pod.newlyFormed.title"
+
+	// "Same goal, same kind of week. Your first action lands soon."
+	KeyPodNewlyFormedBody Key = "pod.newlyFormed.body"
+
+	// "You're already in a pod"
+	KeyErrorAlreadyInPodTitle Key = "error.alreadyInPod.title"
+
+	// "One pod at a time, and yours is waiting for you."
+	KeyErrorAlreadyInPodBody Key = "error.alreadyInPod.body"
+
+	// "A few more words"
+	KeyErrorGoalTooShortTitle Key = "error.goalTooShort.title"
+
+	// "Tell us a little more so we can match you well."
+	KeyErrorGoalTooShortBody Key = "error.goalTooShort.body"
+
+	// "{label}, option {index} of 5"
+	// Placeholders: label, index
+	KeyA11yIntensityOption Key = "a11y.intensityOption"
+
+	// "Selected"
+	KeyA11ySelected Key = "a11y.selected"
+
 	// "Your Pod code: {code}"
 	// Placeholders: code
 	KeyEmailLoginCodeSubject Key = "email.loginCode.subject"
@@ -220,6 +363,53 @@ var AllKeys = []Key{
 	KeyAuthSignedOutTitle,
 	KeyAuthSignedOutBody,
 	KeyAuthSignOutAction,
+	KeyOnboardingIntentTitle,
+	KeyOnboardingIntentBody,
+	KeyOnboardingGoalLabel,
+	KeyOnboardingGoalPlaceholder,
+	KeyOnboardingGoalHint,
+	KeyOnboardingCategoryTitle,
+	KeyOnboardingCategoryMovement,
+	KeyOnboardingCategoryCreative,
+	KeyOnboardingCategoryAdmin,
+	KeyOnboardingCategoryLearning,
+	KeyOnboardingCategoryCareer,
+	KeyOnboardingCategoryHome,
+	KeyOnboardingCategoryHealth,
+	KeyOnboardingCategoryConnection,
+	KeyOnboardingCategoryMoney,
+	KeyOnboardingIntensityTitle,
+	KeyOnboardingIntensityBody,
+	KeyOnboardingIntensity1,
+	KeyOnboardingIntensity2,
+	KeyOnboardingIntensity3,
+	KeyOnboardingIntensity4,
+	KeyOnboardingIntensity5,
+	KeyOnboardingReliabilityTitle,
+	KeyOnboardingReliabilityBody,
+	KeyOnboardingReliabilityRarely,
+	KeyOnboardingReliabilitySometimes,
+	KeyOnboardingReliabilityUsually,
+	KeyOnboardingTimezoneLabel,
+	KeyOnboardingTimezoneBody,
+	KeyOnboardingSubmit,
+	KeyOnboardingContinue,
+	KeyPoolWaitingTitle,
+	KeyPoolWaitingBody,
+	KeyPoolWaitingNextWindow,
+	KeyPoolWaitingLeave,
+	KeyPodTitle,
+	KeyPodMembersTwo,
+	KeyPodMembersThree,
+	KeyPodYou,
+	KeyPodNewlyFormedTitle,
+	KeyPodNewlyFormedBody,
+	KeyErrorAlreadyInPodTitle,
+	KeyErrorAlreadyInPodBody,
+	KeyErrorGoalTooShortTitle,
+	KeyErrorGoalTooShortBody,
+	KeyA11yIntensityOption,
+	KeyA11ySelected,
 	KeyEmailLoginCodeSubject,
 	KeyEmailLoginCodePreheader,
 	KeyEmailLoginCodeBody,
@@ -281,6 +471,53 @@ var catalogue = map[Key]map[string]string{
 	KeyAuthSignedOutTitle:             {"other": "You're signed out"},
 	KeyAuthSignedOutBody:              {"other": "Your pod is still there when you come back."},
 	KeyAuthSignOutAction:              {"other": "Sign out"},
+	KeyOnboardingIntentTitle:          {"other": "What have you been putting off?"},
+	KeyOnboardingIntentBody:           {"other": "One thing. The one that's been sitting there."},
+	KeyOnboardingGoalLabel:            {"other": "In your words"},
+	KeyOnboardingGoalPlaceholder:      {"other": "Finally sort out the spare room"},
+	KeyOnboardingGoalHint:             {"other": "Only your pod will see this."},
+	KeyOnboardingCategoryTitle:        {"other": "What kind of thing is it?"},
+	KeyOnboardingCategoryMovement:     {"other": "Moving my body"},
+	KeyOnboardingCategoryCreative:     {"other": "Making something"},
+	KeyOnboardingCategoryAdmin:        {"other": "Admin and paperwork"},
+	KeyOnboardingCategoryLearning:     {"other": "Learning something"},
+	KeyOnboardingCategoryCareer:       {"other": "Work and career"},
+	KeyOnboardingCategoryHome:         {"other": "Home and space"},
+	KeyOnboardingCategoryHealth:       {"other": "Health and looking after myself"},
+	KeyOnboardingCategoryConnection:   {"other": "People I've lost touch with"},
+	KeyOnboardingCategoryMoney:        {"other": "Money things"},
+	KeyOnboardingIntensityTitle:       {"other": "How much can you give it in a week?"},
+	KeyOnboardingIntensityBody:        {"other": "Pick what's realistic on a normal week, not a good one. You can change it later."},
+	KeyOnboardingIntensity1:           {"other": "A few minutes"},
+	KeyOnboardingIntensity2:           {"other": "Half an hour"},
+	KeyOnboardingIntensity3:           {"other": "An hour or two"},
+	KeyOnboardingIntensity4:           {"other": "Half a day"},
+	KeyOnboardingIntensity5:           {"other": "Several hours"},
+	KeyOnboardingReliabilityTitle:     {"other": "One last thing"},
+	KeyOnboardingReliabilityBody:      {"other": "How often do you keep commitments you make to yourself? There's no right answer — it only helps us pick who you'd get on with."},
+	KeyOnboardingReliabilityRarely:    {"other": "Not as often as I'd like"},
+	KeyOnboardingReliabilitySometimes: {"other": "Some of the time"},
+	KeyOnboardingReliabilityUsually:   {"other": "Most of the time"},
+	KeyOnboardingTimezoneLabel:        {"other": "Your timezone"},
+	KeyOnboardingTimezoneBody:         {"other": "So your pod's week lines up with yours."},
+	KeyOnboardingSubmit:               {"other": "Find me a pod"},
+	KeyOnboardingContinue:             {"other": "Continue"},
+	KeyPoolWaitingTitle:               {"other": "Looking for your pod"},
+	KeyPoolWaitingBody:                {"other": "We match every hour, so you're not waiting long. We'll let you know."},
+	KeyPoolWaitingNextWindow:          {"other": "Next match at {time}"},
+	KeyPoolWaitingLeave:               {"other": "Leave the queue"},
+	KeyPodTitle:                       {"other": "Your pod"},
+	KeyPodMembersTwo:                  {"other": "The two of you."},
+	KeyPodMembersThree:                {"other": "The three of you."},
+	KeyPodYou:                         {"other": "You"},
+	KeyPodNewlyFormedTitle:            {"other": "You're matched"},
+	KeyPodNewlyFormedBody:             {"other": "Same goal, same kind of week. Your first action lands soon."},
+	KeyErrorAlreadyInPodTitle:         {"other": "You're already in a pod"},
+	KeyErrorAlreadyInPodBody:          {"other": "One pod at a time, and yours is waiting for you."},
+	KeyErrorGoalTooShortTitle:         {"other": "A few more words"},
+	KeyErrorGoalTooShortBody:          {"other": "Tell us a little more so we can match you well."},
+	KeyA11yIntensityOption:            {"other": "{label}, option {index} of 5"},
+	KeyA11ySelected:                   {"other": "Selected"},
 	KeyEmailLoginCodeSubject:          {"other": "Your Pod code: {code}"},
 	KeyEmailLoginCodePreheader:        {"other": "It's good for {minutes} minutes."},
 	KeyEmailLoginCodeBody:             {"other": "Here's your sign-in code: {code}. It's good for {minutes} minutes. If you didn't ask for it, you can ignore this."},
