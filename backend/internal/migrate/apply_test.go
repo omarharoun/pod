@@ -33,11 +33,23 @@ func TestEveryMigrationAppliesToAnEmptyDatabase(t *testing.T) {
 	defer func() { _ = conn.Close(ctx) }()
 
 	name := fmt.Sprintf("pod_migrate_%d", os.Getpid())
-	if _, err := conn.Exec(ctx, `DROP DATABASE IF EXISTS `+pgx.Identifier{name}.Sanitize()); err != nil {
+	// A developer with a restricted database user may legitimately not be able to create
+	// one, and skipping is right for them. In CI it is not: a silent skip here would
+	// quietly remove the only check that migrations apply from nothing, which is the
+	// exact shape of bug this file exists to catch. POD_REQUIRE_MIGRATION_TEST makes the
+	// skip a failure, and the CI workflow sets it.
+	cannot := func(err error) {
+		t.Helper()
+		if os.Getenv("POD_REQUIRE_MIGRATION_TEST") != "" {
+			t.Fatalf("cannot create databases, and POD_REQUIRE_MIGRATION_TEST is set: %v", err)
+		}
 		t.Skipf("cannot create databases with this connection: %v", err)
 	}
+	if _, err := conn.Exec(ctx, `DROP DATABASE IF EXISTS `+pgx.Identifier{name}.Sanitize()); err != nil {
+		cannot(err)
+	}
 	if _, err := conn.Exec(ctx, `CREATE DATABASE `+pgx.Identifier{name}.Sanitize()); err != nil {
-		t.Skipf("cannot create databases with this connection: %v", err)
+		cannot(err)
 	}
 	t.Cleanup(func() {
 		_, _ = conn.Exec(context.Background(), `DROP DATABASE IF EXISTS `+pgx.Identifier{name}.Sanitize())

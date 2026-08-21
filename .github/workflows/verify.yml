@@ -24,6 +24,10 @@ jobs:
 
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/pod_test?sslmode=disable
+      # The migration test skips when it cannot create a throwaway database. In CI that
+      # skip would silently remove the only check that migrations apply from nothing, so
+      # here it is a failure instead.
+      POD_REQUIRE_MIGRATION_TEST: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -76,8 +80,34 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
       - name: PodKit tests
         run: swift test --package-path ios/PodKit
+
+      # PodKit alone does not cover the app target, and the app target is where the
+      # SwiftUI screens and Info.plist live — including the usage descriptions whose
+      # absence terminated the app on proof capture (ADR-025). Nothing but a real build
+      # catches that class of problem.
+      - name: Build the app target
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+          xcodebuild -project Pod.xcodeproj -scheme Pod \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -skipPackagePluginValidation build | xcpretty || \
+          xcodebuild -project Pod.xcodeproj -scheme Pod \
+            -destination 'platform=iOS Simulator,name=iPhone 16' build
+
+      # The usage descriptions must survive into the built plist, not merely into
+      # project.yml. copylint checks the source; this checks the artefact.
+      - name: The built app declares its usage descriptions
+        run: |
+          plist=$(find ~/Library/Developer/Xcode/DerivedData -name Info.plist -path '*Pod.app*' | head -1)
+          if [ -z "$plist" ]; then echo "no built Info.plist found"; exit 1; fi
+          for key in NSCameraUsageDescription NSMicrophoneUsageDescription NSPhotoLibraryUsageDescription; do
+            /usr/libexec/PlistBuddy -c "Print :$key" "$plist" >/dev/null \
+              || { echo "the built app declares no $key — it will be terminated on proof capture"; exit 1; }
+          done
 
   android-app:
     runs-on: ubuntu-latest
