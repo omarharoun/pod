@@ -15,8 +15,11 @@ plugins {
 // a release build putting somebody's session token on plain HTTP is not a configuration
 // option.
 fun apiBaseUrl(default: String): String {
-    val configured = (project.findProperty("podApiBaseUrl") as String?)
-        ?: System.getenv("POD_API_BASE_URL")
+    // Blank counts as unset, not as an override of nothing. A CI input nobody filled in
+    // arrives as "", and the first run of the apk workflow failed on this very check —
+    // refusing an empty string is right for a typo and wrong for "I did not set this".
+    val configured = (project.findProperty("podApiBaseUrl") as String?)?.takeIf { it.isNotBlank() }
+        ?: System.getenv("POD_API_BASE_URL")?.takeIf { it.isNotBlank() }
         ?: return default
     val trimmed = configured.trim().trimEnd('/')
     require(trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
