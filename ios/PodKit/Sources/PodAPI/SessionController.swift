@@ -110,7 +110,7 @@ public final class SessionController {
         self.state = state
     }
 
-    private func perform(_ work: @Sendable @escaping () async throws -> Void) async {
+    private func perform(_ work: () async throws -> Void) async {
         isWorking = true
         failure = nil
         defer { isWorking = false }

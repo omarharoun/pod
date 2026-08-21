@@ -15,8 +15,6 @@ struct VerifyCodeView: View {
     @State private var secondsUntilResend: Int
     @FocusState private var isFieldFocused: Bool
 
-    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
     init(session: SessionController, email: String, expiresAt: Date, resendAfter: TimeInterval) {
         self.session = session
         self.email = email
@@ -62,8 +60,11 @@ struct VerifyCodeView: View {
         }
         .background(palette(.surfaceCanvas))
         .onAppear { isFieldFocused = true }
-        .onReceive(ticker) { _ in
-            if secondsUntilResend > 0 { secondsUntilResend -= 1 }
+        .task(id: secondsUntilResend) {
+            guard secondsUntilResend > 0 else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            secondsUntilResend -= 1
         }
     }
 
@@ -111,11 +112,8 @@ struct VerifyCodeView: View {
 }
 
 #Preview("Verify code") {
-    let environment = PodEnvironment.preview(
-        state: .awaitingCode(email: "sam@example.com", expiresAt: .now.addingTimeInterval(600), resendAfter: 30)
-    )
-    return VerifyCodeView(
-        session: environment.session,
+    VerifyCodeView(
+        session: PodEnvironment.preview().session,
         email: "sam@example.com",
         expiresAt: .now.addingTimeInterval(600),
         resendAfter: 30

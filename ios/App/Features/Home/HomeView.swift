@@ -44,13 +44,9 @@ struct HomeView: View {
 }
 
 #Preview("Home") {
-    let user = User(
-        id: UUID(),
-        email: "sam@example.com",
-        createdAt: .now,
-        onboardingComplete: false
+    HomeView(
+        session: PodEnvironment.preview().session,
+        user: User(id: UUID(), email: "sam@example.com", createdAt: .now, onboardingComplete: false)
     )
-    let environment = PodEnvironment.preview(state: .signedIn(user))
-    return HomeView(session: environment.session, user: user)
-        .environment(\.palette, PodPalette(.light))
+    .environment(\.palette, PodPalette(.light))
 }

@@ -204,7 +204,7 @@ final class APIClientTests: XCTestCase {
              "expires_at":"\(timestamp)","code_length":6,"resend_after_seconds":30}
             """)
             let challenge = try await makeClient().startSignIn(email: "sam@example.com")
-            XCTAssertEqual(challenge.expiresAt.timeIntervalSince1970, 1787648400, accuracy: 1)
+            XCTAssertEqual(challenge.expiresAt.timeIntervalSince1970, 1_787_302_800, accuracy: 1) // 2026-08-21T09:00:00Z
         }
     }
 

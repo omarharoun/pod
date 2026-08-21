@@ -83,7 +83,6 @@ struct SignInView: View {
 }
 
 #Preview("Sign in") {
-    let environment = PodEnvironment.preview()
-    return SignInView(session: environment.session)
+    SignInView(session: PodEnvironment.preview().session)
         .environment(\.palette, PodPalette(.light))
 }
