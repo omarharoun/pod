@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 
@@ -445,4 +446,77 @@ func TestTheWeekWrapsRatherThanTruncating(t *testing.T) {
 	if got := availabilityOverlap(sam, alex); got != 1 {
 		t.Errorf("overlap = %v, want 1 — both are free 02:00-03:00 Monday UTC", got)
 	}
+}
+
+// ---- M7: lanes ---------------------------------------------------------------------
+
+// Since M7 a person can be waiting in more than one lane at once, so the pool can hold two
+// candidates with the same user id. They must never be podded together — a pod of one
+// person twice is not accountability, it is a mirror.
+//
+// `Eligible` has refused this since M2, defensively. M7 makes it load-bearing, so it is
+// pinned here rather than left as a happy accident.
+func TestAPersonIsNeverPoddedWithTheirOwnOtherLane(t *testing.T) {
+	lane0 := candidate(t, "sam")
+	lane1 := candidate(t, "sam", func(c *Candidate) { c.Slot = 1 })
+
+	if Eligible(lane0, lane1) {
+		t.Fatal("two lanes of the same person are eligible for each other")
+	}
+	for _, pod := range Assemble([]Candidate{lane0, lane1}, Options{}) {
+		t.Errorf("a pod was assembled from one person's two lanes: %v", lanes(pod))
+	}
+}
+
+// And not as the third member either, which is a separate code path with its own
+// eligibility checks.
+func TestAPersonIsNeverTheThirdMemberOfTheirOwnPod(t *testing.T) {
+	pool := []Candidate{
+		candidate(t, "sam"),
+		candidate(t, "alex"),
+		candidate(t, "sam", func(c *Candidate) { c.Slot = 1 }),
+	}
+
+	for _, pod := range Assemble(pool, Options{}) {
+		seen := map[string]bool{}
+		for _, member := range pod.Members {
+			if seen[member.UserID] {
+				t.Errorf("%s appears twice in one pod: %v", member.UserID, lanes(pod))
+			}
+			seen[member.UserID] = true
+		}
+	}
+}
+
+// The converse, which is the whole point of lanes: one person's two lanes may both be
+// matched in the same window, into two different pods.
+func TestTwoLanesOfOnePersonCanBothBeMatchedInOneWindow(t *testing.T) {
+	pool := []Candidate{
+		candidate(t, "sam"),
+		candidate(t, "alex"),
+		candidate(t, "sam", func(c *Candidate) { c.Slot = 1 }),
+		candidate(t, "remi"),
+	}
+	// A threshold nothing can clear, so every pod is a pair and the arithmetic is plain.
+	pods := Assemble(pool, Options{ThirdThreshold: 2})
+
+	placed := map[string]int{}
+	for _, pod := range pods {
+		for _, member := range pod.Members {
+			placed[fmt.Sprintf("%s/%d", member.UserID, member.Slot)]++
+		}
+	}
+	if placed["sam/0"] != 1 || placed["sam/1"] != 1 {
+		t.Errorf("sam's two lanes were placed %d and %d times: %+v", placed["sam/0"], placed["sam/1"], placed)
+	}
+}
+
+// lanes names a pod's members as "user/slot". Printing whole Candidates buries the one
+// fact a failure here is about under 256 floats of embedding.
+func lanes(pod Pod) []string {
+	out := make([]string, 0, len(pod.Members))
+	for _, member := range pod.Members {
+		out = append(out, fmt.Sprintf("%s/%d", member.UserID, member.Slot))
+	}
+	return out
 }
