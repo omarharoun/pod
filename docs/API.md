@@ -49,6 +49,7 @@ answers `501` with `code: not_implemented_yet` until its milestone lands.
 | M4 | `PUT` | `/v1/devices` | `registerDevice` | bearer |
 | M4 | `DELETE` | `/v1/devices` | `unregisterDevice` | bearer |
 | M2 | `GET` | `/v1/onboarding/state` | `getOnboardingState` | bearer |
+| M5 | `GET` | `/v1/onboarding/intent` | `getIntent` | bearer |
 | M2 | `PUT` | `/v1/onboarding/intent` | `putIntent` | bearer |
 | M2 | `POST` | `/v1/pool` | `joinPool` | bearer |
 | M2 | `DELETE` | `/v1/pool` | `leavePool` | bearer |
@@ -205,6 +206,22 @@ Milestone M2 · Requires a bearer access token.
 |---|---|---|
 | `200` | [`OnboardingState`](#onboardingstate) | The caller's onboarding position. |
 | `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
+| `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
+
+### `GET /v1/onboarding/intent` — getIntent
+
+**The intent on file**  
+Milestone M5 · Requires a bearer access token.
+
+A client has to be able to read what it can write. Without this, offering to lower
+somebody's intensity months after they set it would mean asking them to fill the
+whole thing in again.
+
+| Status | Body | |
+|---|---|---|
+| `200` | [`Intent`](#intent) | The stored intent. |
+| `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
+| `404` | [`ApiError`](#apierror) | Nothing recorded yet. |
 | `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
 
 ### `PUT /v1/onboarding/intent` — putIntent
@@ -562,7 +579,7 @@ Type: `integer` (range 1–5)
 | `goal_category` | [`GoalCategory`](#goalcategory) | yes |  |
 | `intensity` | [`Intensity`](#intensity) | yes |  |
 | `timezone` | `string` | yes | IANA zone, e.g. `Europe/Lisbon`. Hard filter is ±3 hours. |
-| `self_report_reliability` | [`SelfReportReliability`](#selfreportreliability) | yes |  |
+| `self_report_reliability` | [`SelfReportReliability`](#selfreportreliability) |  | Optional on update. Omitted, the answer already on file is kept — it is asked once, at onboarding, and nobody should have to re-answer a question about themselves in order to change how much time they have. |
 | `availability_windows` | [`AvailabilityWindow`](#availabilitywindow)[] |  |  |
 | `display_name` | `string` |  |  |
 

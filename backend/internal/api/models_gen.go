@@ -247,8 +247,12 @@ type IntentRequest struct {
 	Intensity    Intensity    `json:"intensity"`
 
 	// IANA zone, e.g. `Europe/Lisbon`. Hard filter is ±3 hours.
-	Timezone              string                `json:"timezone"`
-	SelfReportReliability SelfReportReliability `json:"self_report_reliability"`
+	Timezone string `json:"timezone"`
+
+	// Optional on update. Omitted, the answer already on file is kept — it is asked
+	// once, at onboarding, and nobody should have to re-answer a question about
+	// themselves in order to change how much time they have.
+	SelfReportReliability SelfReportReliability `json:"self_report_reliability,omitempty"`
 	AvailabilityWindows   []AvailabilityWindow  `json:"availability_windows,omitempty"`
 	DisplayName           *string               `json:"display_name,omitempty"`
 }

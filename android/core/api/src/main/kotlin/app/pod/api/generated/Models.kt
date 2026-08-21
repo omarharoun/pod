@@ -342,8 +342,14 @@ public data class IntentRequest(
      * IANA zone, e.g. `Europe/Lisbon`. Hard filter is ±3 hours.
      */
     val timezone: String,
+
+    /**
+     * Optional on update. Omitted, the answer already on file is kept — it is asked
+     * once, at onboarding, and nobody should have to re-answer a question about
+     * themselves in order to change how much time they have.
+     */
     @SerialName("self_report_reliability")
-    val selfReportReliability: SelfReportReliability,
+    val selfReportReliability: SelfReportReliability? = null,
     @SerialName("availability_windows")
     val availabilityWindows: List<AvailabilityWindow>? = null,
     @SerialName("display_name")

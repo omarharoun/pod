@@ -436,7 +436,11 @@ public struct IntentRequest: Codable, Hashable, Sendable {
 
     /// IANA zone, e.g. `Europe/Lisbon`. Hard filter is ±3 hours.
     public let timezone: String
-    public let selfReportReliability: SelfReportReliability
+
+    /// Optional on update. Omitted, the answer already on file is kept — it is asked
+    /// once, at onboarding, and nobody should have to re-answer a question about
+    /// themselves in order to change how much time they have.
+    public let selfReportReliability: SelfReportReliability?
     public let availabilityWindows: [AvailabilityWindow]?
     public let displayName: String?
 
@@ -445,7 +449,7 @@ public struct IntentRequest: Codable, Hashable, Sendable {
         goalCategory: GoalCategory,
         intensity: Intensity,
         timezone: String,
-        selfReportReliability: SelfReportReliability,
+        selfReportReliability: SelfReportReliability? = nil,
         availabilityWindows: [AvailabilityWindow]? = nil,
         displayName: String? = nil
     ) {
