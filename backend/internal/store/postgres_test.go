@@ -492,6 +492,55 @@ func TestMemoryAndPostgresAgree(t *testing.T) {
 				t.Error("there is no caller, so nobody's own answer should be reported")
 			}
 		}},
+		// A person in two lanes has two member_weeks a calendar week. reliability.Compute
+		// folds one capped step per entry, so two entries a week made a two-lane person's
+		// score move twice as fast as a one-lane person's for the same behaviour — their
+		// good weeks counted double and so did their bad ones.
+		{"two lanes are one week of history", func(t *testing.T, s store.Store) {
+			ctx := context.Background()
+			sam, err := s.UpsertUserByEmail(ctx, uniqueEmail(t), time.Now().UTC())
+			if err != nil {
+				t.Fatalf("user: %v", err)
+			}
+			now := time.Now().UTC().Truncate(time.Microsecond)
+
+			// Two pods, one per lane, whose weeks close in the same calendar week.
+			for slot := 0; slot < 2; slot++ {
+				podID, err := ids.NewUUID()
+				if err != nil {
+					t.Fatalf("ids.NewUUID: %v", err)
+				}
+				if err := s.CreatePod(ctx, store.Pod{
+					ID: podID, State: store.PodStateActive, GoalCategory: "home",
+					Timezone: "UTC", CreatedAt: now,
+				}, []store.Membership{{UserID: sam.ID, Slot: slot}}, now); err != nil {
+					t.Fatalf("CreatePod slot %d: %v", slot, err)
+				}
+				weekID, err := ids.NewUUID()
+				if err != nil {
+					t.Fatalf("ids.NewUUID: %v", err)
+				}
+				// An hour apart, as two pods in nearby zones would be.
+				closes := now.Add(time.Duration(slot) * time.Hour)
+				if _, err := s.EnsureWeek(ctx, store.Week{
+					ID: weekID, PodID: podID, ActionIsDefault: true,
+					OpensAt: closes.Add(-7 * 24 * time.Hour), ClosesAt: closes,
+				}, []string{sam.ID}); err != nil {
+					t.Fatalf("EnsureWeek slot %d: %v", slot, err)
+				}
+				if _, err := s.CloseWeek(ctx, weekID, closes); err != nil {
+					t.Fatalf("CloseWeek slot %d: %v", slot, err)
+				}
+			}
+
+			outcomes, err := s.RecentOutcomes(ctx, sam.ID, 0)
+			if err != nil {
+				t.Fatalf("RecentOutcomes: %v", err)
+			}
+			if len(outcomes) != 1 {
+				t.Errorf("two lanes produced %d entries for one calendar week — the score would move twice as fast", len(outcomes))
+			}
+		}},
 		{"missing refresh token", func(t *testing.T, s store.Store) {
 			if _, err := s.GetRefreshToken(context.Background(), "nope"); err != store.ErrNotFound {
 				t.Errorf("got %v, want ErrNotFound", err)
@@ -764,8 +813,15 @@ func seedPodWith(t testing.TB, db *store.Postgres, members ...store.User) string
 
 func seedWeek(t testing.TB, db *store.Postgres, podID string, members ...store.User) store.Week {
 	t.Helper()
+	return seedWeekAt(t, db, podID, time.Now().UTC(), members...)
+}
+
+// seedWeekAt is seedWeek with the week placed around a given instant, for tests that need
+// weeks in distinct calendar weeks.
+func seedWeekAt(t testing.TB, db *store.Postgres, podID string, at time.Time, members ...store.User) store.Week {
+	t.Helper()
 	ctx := context.Background()
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	now := at.UTC().Truncate(time.Microsecond)
 	weekID, err := ids.NewUUID()
 	if err != nil {
 		t.Fatalf("ids.NewUUID: %v", err)
@@ -1040,8 +1096,10 @@ func TestPostgresOutcomeLimitClampsDownNotBackToTheDefault(t *testing.T) {
 	db := newPostgres(t)
 	user := seedUser(t, db)
 	podID := seedPodWith(t, db, user)
+	// A week apart, as real weeks are: RecentOutcomes returns one entry per calendar
+	// week, so twelve weeks closing at the same instant would correctly collapse to one.
 	for i := 0; i < 12; i++ {
-		week := seedWeek(t, db, podID, user)
+		week := seedWeekAt(t, db, podID, time.Now().UTC().AddDate(0, 0, -7*i), user)
 		if _, err := db.CloseWeek(ctx, week.ID, time.Now().UTC()); err != nil {
 			t.Fatalf("CloseWeek: %v", err)
 		}

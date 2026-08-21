@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/omarharoun/pod/backend/internal/cycle"
@@ -124,10 +125,16 @@ func (j *Job) settleContinuations(ctx context.Context, now time.Time) (restarted
 	if err != nil {
 		return 0, 0, fmt.Errorf("week: list graduated pods: %w", err)
 	}
+	// Log-and-continue is right for one pod failing and wrong for a query that cannot
+	// succeed for any of them. Twice in one day a store error here meant no graduated pod
+	// ever restarted or closed, and the job reported a clean tick both times (ADR-028,
+	// ADR-029). If every pod fails, the tick fails.
+	var failures int
 	for _, pod := range pods {
 		counts, err := j.store.ContinuationFor(ctx, pod.ID, "")
 		if err != nil {
-			j.log.ErrorContext(ctx, "could not read a graduated pod's choice")
+			j.log.ErrorContext(ctx, "could not read a graduated pod's choice", slog.Any("error", err))
+			failures++
 			continue
 		}
 		choice := cycle.Choice{
@@ -141,17 +148,22 @@ func (j *Job) settleContinuations(ctx context.Context, now time.Time) (restarted
 		}
 		if choice.Continues() {
 			if err := j.store.StartNextCycle(ctx, pod.ID, now); err != nil {
-				j.log.ErrorContext(ctx, "could not start the next cycle")
+				j.log.ErrorContext(ctx, "could not start the next cycle", slog.Any("error", err))
+				failures++
 				continue
 			}
 			restarted++
 			continue
 		}
 		if err := j.store.CloseCompletedPod(ctx, pod.ID, now); err != nil {
-			j.log.ErrorContext(ctx, "could not close a graduated pod")
+			j.log.ErrorContext(ctx, "could not close a graduated pod", slog.Any("error", err))
+			failures++
 			continue
 		}
 		closed++
+	}
+	if failures == len(pods) && failures > 0 {
+		return restarted, closed, fmt.Errorf("week: every graduated pod failed to settle (%d)", failures)
 	}
 	return restarted, closed, nil
 }

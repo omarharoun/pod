@@ -96,9 +96,13 @@ func (j *Job) Tick(ctx context.Context) (JobResult, error) {
 		}
 	}
 
-	restarted, closedPods, err := j.settleContinuations(ctx, now)
-	if err != nil {
-		j.log.ErrorContext(ctx, "could not settle continuations", slog.Any("error", err))
+	// Held rather than returned here: the sweep and the notification drain still need to
+	// run, and a broken continuation settle must not silently take proof deletion with
+	// it. Reported at the end, so the tick fails rather than logging a clean result over
+	// a subsystem that did nothing (ADR-028, ADR-029).
+	restarted, closedPods, settleErr := j.settleContinuations(ctx, now)
+	if settleErr != nil {
+		j.log.ErrorContext(ctx, "could not settle continuations", slog.Any("error", settleErr))
 	}
 	result.CyclesRestarted = restarted
 	result.PodsClosed = closedPods
@@ -134,7 +138,7 @@ func (j *Job) Tick(ctx context.Context) (JobResult, error) {
 		slog.Int("notifications_sent", result.NotificationsSent),
 		slog.Int("notifications_quiet", result.NotificationsQuiet),
 	)
-	return result, nil
+	return result, settleErr
 }
 
 func (j *Job) turnOver(ctx context.Context, pod store.Pod, now time.Time) (closed, opened int, err error) {

@@ -3,6 +3,7 @@ package week
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -353,5 +354,27 @@ func TestAMissedWeekInTheMiddleDoesNotEraseTheOnesBefore(t *testing.T) {
 	}
 	if got.WeeksEveryoneWasIn != 5 {
 		t.Errorf("weeks everyone was in: got %d, want 5 (three before the miss, two after)", got.WeeksEveryoneWasIn)
+	}
+}
+
+// A tick where every graduated pod fails to settle must fail, not report a clean result.
+//
+// Twice in one day a store error here meant no graduated pod ever restarted or closed
+// while the job logged a successful tick (ADR-028, ADR-029). Log-and-continue is right for
+// one pod failing and wrong for a query that cannot succeed for any of them.
+func TestATickWhereEveryGraduatedPodFailsIsAFailedTick(t *testing.T) {
+	h := newTrio(t, "Europe/Lisbon")
+	h.graduate()
+
+	h.store.FailContinuationReads = errors.New("the continuations table is on fire")
+
+	if _, err := h.job.Tick(context.Background()); err == nil {
+		t.Fatal("every graduated pod failed to settle and the tick reported success")
+	}
+
+	// And one pod failing among several does not fail the tick.
+	h.store.FailContinuationReads = nil
+	if _, err := h.job.Tick(context.Background()); err != nil {
+		t.Fatalf("a healthy tick failed: %v", err)
 	}
 }

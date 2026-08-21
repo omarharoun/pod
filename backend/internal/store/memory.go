@@ -34,6 +34,10 @@ type Memory struct {
 	// has wound down" in front of a lane whose pod is running.
 	recoveryOffers map[string]bool
 
+	// FailContinuationReads makes ContinuationFor fail, so a test can prove that a tick
+	// where every graduated pod fails is a failed tick rather than a clean one.
+	FailContinuationReads error
+
 	// FailEntitlements makes ListEntitlements fail, so a test can prove the free lane
 	// does not depend on it. Exported because that is the only way to set it, and the
 	// property it proves is the one CLAUDE.md §2 rule 6 is about.
@@ -915,7 +919,12 @@ func (m *Memory) RecentOutcomes(_ context.Context, userID string, limit int) ([]
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var out []WeekOutcome
+	// One entry per CALENDAR week, not per member-week — a person can be in two pods at
+	// once since M7, and reliability.Compute folds one capped step per entry, so two rows
+	// a week made a two-lane person's score move twice as fast for the same behaviour.
+	// Keyed on the ISO week of the close, because two pods in zones up to three hours
+	// apart close the same week at different moments.
+	byWeek := map[string]WeekOutcome{}
 	for weekID, members := range m.memberWeeks {
 		week := m.weeks[weekID]
 		if week.ClosedAt == nil {
@@ -926,13 +935,34 @@ func (m *Memory) RecentOutcomes(_ context.Context, userID string, limit int) ([]
 			if member.UserID != userID {
 				continue
 			}
-			out = append(out, WeekOutcome{
-				WeekID:       weekID,
-				Posted:       member.State == MemberWeekPosted,
-				PodCompleted: week.PodCompleted,
-				ClosesAt:     week.ClosesAt,
-			})
+			year, isoWeek := week.ClosesAt.ISOWeek()
+			key := strconv.Itoa(year) + "/" + strconv.Itoa(isoWeek)
+			existing, seen := byWeek[key]
+			if !seen {
+				byWeek[key] = WeekOutcome{
+					WeekID:       weekID,
+					Posted:       member.State == MemberWeekPosted,
+					PodCompleted: week.PodCompleted,
+					ClosesAt:     week.ClosesAt,
+				}
+				continue
+			}
+			// The gentler reading of both, matching the SQL: showing up in any lane is
+			// showing up, and a pod completing is a pod completing.
+			existing.Posted = existing.Posted || member.State == MemberWeekPosted
+			existing.PodCompleted = existing.PodCompleted || week.PodCompleted
+			if week.ClosesAt.After(existing.ClosesAt) {
+				existing.ClosesAt = week.ClosesAt
+			}
+			if weekID < existing.WeekID {
+				existing.WeekID = weekID
+			}
+			byWeek[key] = existing
 		}
+	}
+	out := make([]WeekOutcome, 0, len(byWeek))
+	for _, outcome := range byWeek {
+		out = append(out, outcome)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].ClosesAt.Equal(out[j].ClosesAt) {
@@ -982,6 +1012,9 @@ func (m *Memory) AnswerContinuation(_ context.Context, podID, userID string, con
 func (m *Memory) ContinuationFor(_ context.Context, podID, userID string) (Continuation, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.FailContinuationReads != nil {
+		return Continuation{}, m.FailContinuationReads
+	}
 	if _, ok := m.pods[podID]; !ok {
 		return Continuation{}, ErrNotFound
 	}

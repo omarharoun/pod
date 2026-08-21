@@ -1144,12 +1144,28 @@ func (p *Postgres) RecentOutcomes(ctx context.Context, userID string, limit int)
 	if limit > maxOutcomeLimit {
 		limit = maxOutcomeLimit
 	}
+	// One row per CALENDAR week, not per member-week.
+	//
+	// Since M7 a person can be in two pods at once, which is two member_weeks a week.
+	// reliability.Compute folds one step per entry and caps each step, so a two-lane
+	// person's score moved twice as fast as a one-lane person's for the same behaviour —
+	// their good weeks counted double and so did their bad ones.
+	//
+	// Grouped on the ISO week of the close rather than the exact instant, because two
+	// pods in zones up to three hours apart close the same week at different moments.
+	//
+	// Both aggregates take the gentler reading (CLAUDE.md §2 rule 2): showing up in any
+	// lane is showing up, and a pod completing is a pod completing.
 	rows, err := p.pool.Query(ctx, `
-		SELECT w.id, mw.state = 'posted', w.pod_completed, w.closes_at
+		SELECT min(w.id::text),
+		       bool_or(mw.state = 'posted'),
+		       bool_or(w.pod_completed),
+		       max(w.closes_at)
 		FROM member_weeks mw
 		JOIN weeks w ON w.id = mw.week_id
 		WHERE mw.user_id = $1 AND w.closed_at IS NOT NULL
-		ORDER BY w.closes_at DESC, w.id DESC
+		GROUP BY date_trunc('week', w.closes_at)
+		ORDER BY max(w.closes_at) DESC
 		LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, wrap("recent outcomes", err)
