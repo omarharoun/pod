@@ -60,6 +60,8 @@ private struct SignedInView: View {
         switch environment.onboarding.phase {
         case .loading:
             LoadingView()
+        case .recovering(let recovery):
+            RecoveryView(controller: environment.onboarding, recovery: recovery)
         case .questions(let question):
             OnboardingFlowView(controller: environment.onboarding, question: question)
         case .waiting(let ticket):

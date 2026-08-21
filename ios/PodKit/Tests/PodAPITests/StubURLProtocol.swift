@@ -8,9 +8,26 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         var body: Data
     }
 
+    /// One recorded request. The body is captured here rather than read back off the
+    /// `URLRequest`: by the time a request reaches a protocol, `URLSession` has moved the
+    /// body into `httpBodyStream` and `httpBody` is nil.
+    struct Recorded {
+        var request: URLRequest
+        var body: Data?
+
+        var method: String { request.httpMethod ?? "GET" }
+        var path: String { request.url?.path ?? "" }
+
+        /// The body decoded as a JSON object, for asserting on what was actually sent.
+        func json() -> [String: Any]? {
+            guard let body else { return nil }
+            return try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+        }
+    }
+
     private static let lock = NSLock()
     nonisolated(unsafe) private static var replies: [Reply] = []
-    nonisolated(unsafe) private static var recorded: [URLRequest] = []
+    nonisolated(unsafe) private static var recorded: [Recorded] = []
 
     static func reset() {
         lock.withLock {
@@ -24,6 +41,11 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     static var requests: [URLRequest] {
+        lock.withLock { recorded.map(\.request) }
+    }
+
+    /// Every request in order, with its body.
+    static var calls: [Recorded] {
         lock.withLock { recorded }
     }
 
@@ -37,8 +59,9 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        let body = Self.readBody(of: request)
         let reply: Reply? = Self.lock.withLock {
-            Self.recorded.append(request)
+            Self.recorded.append(Recorded(request: request, body: body))
             return Self.replies.isEmpty ? nil : Self.replies.removeFirst()
         }
         guard let reply else {
@@ -57,4 +80,19 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+
+    private static func readBody(of request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data.isEmpty ? nil : data
+    }
 }

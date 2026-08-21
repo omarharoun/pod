@@ -50,6 +50,11 @@ public struct IntentDraft: Sendable, Equatable {
 /// Where a signed-in person is: still answering, waiting for a window, or in a pod.
 public enum OnboardingPhase: Sendable, Equatable {
     case loading
+    /// A pod has ended and there is an offer to make before anything else. Its own beat
+    /// rather than a banner: the person who needs it is the likeliest to stop opening the
+    /// app, and a banner over a pre-lowered answer implies a correction rather than a
+    /// question (docs/DESIGN.md).
+    case recovering(Recovery)
     case questions(OnboardingQuestion)
     case waiting(PoolTicket)
     case matched(Pod)
@@ -89,6 +94,10 @@ public final class OnboardingController {
             case "waiting_for_pod":
                 self.phase = .waiting(state.poolTicket ?? PoolTicket(queuedAt: .now, nextWindowAt: .now))
             default:
+                if let recovery = state.recovery, recovery.offerLowerIntensity || recovery.offerAlternatePath {
+                    self.phase = .recovering(recovery)
+                    return
+                }
                 self.phase = .questions(self.draft.isAnswered(.goal) ? .category : .goal)
             }
         }
@@ -104,6 +113,43 @@ public final class OnboardingController {
                 self.phase = .matched(pod)
             }
         }
+    }
+
+    /// Takes the offer: the same intent with a smaller intensity, which is all "lowering
+    /// the bar" is. There is no dedicated endpoint because it is not a special kind of
+    /// change (ADR-018).
+    public func acceptLowerIntensity(_ suggested: Int) async {
+        await perform { try await self.resubmit(intensity: suggested) }
+    }
+
+    /// Declines the offer and goes back into the pool unchanged. "Keep it as it is" is not
+    /// a secondary action — for plenty of people the pod simply did not work out.
+    public func keepIntensity() async {
+        await perform { try await self.resubmit(intensity: nil) }
+    }
+
+    /// Re-saves the intent on file and re-enters the pool, changing at most the intensity.
+    ///
+    /// The answers come from the server, not from ``draft``: someone recovering from a pod
+    /// that ended answered these weeks ago, on a device that may not be this one. The
+    /// self-report is deliberately not sent — the server keeps the stored answer, and
+    /// "how often do you keep commitments to yourself" is not a question to ask twice.
+    private func resubmit(intensity: Int?) async throws {
+        guard let existing = try await client.intent() else {
+            // Nothing on file, so there is nothing to re-offer. Ask the questions.
+            phase = .questions(.goal)
+            return
+        }
+        _ = try await client.saveIntent(IntentRequest(
+            goalText: existing.goalText,
+            goalCategory: existing.goalCategory,
+            intensity: intensity ?? existing.intensity,
+            timezone: TimeZone.current.identifier,
+            selfReportReliability: nil,
+            availabilityWindows: existing.availabilityWindows,
+            displayName: nil
+        ))
+        phase = .waiting(try await client.joinPool())
     }
 
     public func advance() {

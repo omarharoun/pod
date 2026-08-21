@@ -54,3 +54,68 @@ final class OnboardingCopyTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Recovery (M5)
+
+/// The recovery screen is the sharpest test of CLAUDE.md §2 rule 1: it is shown to
+/// someone whose pod just ended, and every true statement about why is a statement about
+/// somebody not showing up.
+final class RecoveryCopyTests: XCTestCase {
+    private let copy = Copywriter.bundled
+
+    private static let keys: [CopyKey] = [
+        .recoveryPodEndedTitle, .recoveryPodEndedBody,
+        .recoveryLowerBarTitle, .recoveryLowerBarBody,
+        .recoveryLowerBarAccept, .recoveryLowerBarKeep,
+        .recoveryFindAnother,
+        .recoveryAlternateTitle, .recoveryAlternateBody, .recoveryAlternateNotYet,
+    ]
+
+    func testEveryStringOnTheScreenResolves() {
+        for key in Self.keys {
+            XCTAssertTrue(copy.contains(key), "missing \(key.rawValue)")
+            XCTAssertFalse(copy(key).isEmpty, "empty \(key.rawValue)")
+        }
+    }
+
+    /// It may not say why the pod ended, and it may not count. "Again", "still" and
+    /// "unfortunately" all carry a history the copy is not allowed to have.
+    func testNothingOnTheScreenAssignsBlameOrCounts() {
+        let forbidden = [
+            "again", "unfortunately", "failed", "fail", "missed", "inactive",
+            "nobody", "no one", "didn't post", "gave up", "quit", "third", "second time",
+        ]
+        for key in Self.keys {
+            let text = copy(key).lowercased()
+            for word in forbidden {
+                XCTAssertFalse(text.contains(word), "\(key.rawValue) says \"\(word)\": \(copy(key))")
+            }
+        }
+    }
+
+    /// Both rungs are named by phrase. Interpolating the raw integer would put someone on
+    /// a scale, which ADR-010 forbids.
+    func testTheOfferNamesBothRungsByPhrase() {
+        let body = copy(.recoveryLowerBarBody, [
+            "current": copy(CopyKey(rawValue: "onboarding.intensity.3")),
+            "suggested": copy(CopyKey(rawValue: "onboarding.intensity.2")),
+        ])
+        XCTAssertTrue(body.contains("An hour or two"), body)
+        XCTAssertTrue(body.contains("Half an hour"), body)
+        XCTAssertFalse(body.contains("{"), "unresolved placeholder: \(body)")
+    }
+
+    func testTheAcceptButtonNamesTheSmallerRung() {
+        let title = copy(.recoveryLowerBarAccept, ["suggested": copy(CopyKey(rawValue: "onboarding.intensity.1"))])
+        XCTAssertTrue(title.contains("A few minutes"), title)
+        XCTAssertFalse(title.contains("{"), "unresolved placeholder: \(title)")
+    }
+
+    /// The alternate path is offered as another way, never as a verdict about the person.
+    func testTheAlternatePathIsNotAVerdict() {
+        let text = (copy(.recoveryAlternateTitle) + " " + copy(.recoveryAlternateBody)).lowercased()
+        for phrase in ["not for you", "instead of", "isn't working", "better suited"] {
+            XCTAssertFalse(text.contains(phrase), "the alternate path reads as a verdict: \(text)")
+        }
+    }
+}

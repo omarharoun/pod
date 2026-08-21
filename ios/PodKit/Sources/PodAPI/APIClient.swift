@@ -102,6 +102,18 @@ public actor APIClient {
         try await send(Request(method: "GET", path: "/v1/onboarding/state"))
     }
 
+    /// The intent on file, or `nil` when nothing has been answered yet.
+    ///
+    /// Recovery re-offers a smaller intensity without re-asking the goal, the timezone or
+    /// the availability windows, so it needs to read them back.
+    public func intent() async throws -> Intent? {
+        do {
+            return try await send(Request(method: "GET", path: "/v1/onboarding/intent"))
+        } catch APIError.api(let problem, _) where problem.code == .notFound {
+            return nil
+        }
+    }
+
     public func saveIntent(_ intent: IntentRequest) async throws -> Intent {
         try await send(Request(
             method: "PUT",

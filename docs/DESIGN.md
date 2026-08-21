@@ -233,6 +233,57 @@ did.
 
 ---
 
+## M5 — After a pod ends
+
+**Variant A — a banner on the goal screen.** "That pod wound down" above the questions,
+with the intensity question pre-set one rung lower.
+
+**Variant B — its own screen, before anything else.** One beat: what happened, the offer,
+and two ways forward.
+
+**Picked: B.** A is fewer screens and it buries the moment that matters most to exactly the
+person who needs it. Someone whose pod just ended is the likeliest person in the product to
+quietly stop opening it; putting the offer inside a form they have already filled in once
+makes it easy to skim past.
+
+More importantly, A implies a correction. A banner over a pre-lowered answer says *we have
+adjusted you*. B asks.
+
+### What the screen may not say
+
+It may not say why the pod ended, because everything true about that is a statement about
+somebody not showing up. The copy is identical for the person who posted every week and the
+person who never did:
+
+> **That pod has wound down**
+> It happens. We'll find you another one whenever you're ready.
+
+No count of pods that have ended. No reference to anyone's behaviour. No "unfortunately".
+No "again".
+
+### The offer
+
+> **Want to make it smaller?**
+> You picked *an hour or two*. *Half an hour* is also a real week.
+
+"Is also a real week" is the whole sentence doing the work. It refuses the framing that a
+smaller commitment is a reduced one — which is the framing the person is already applying
+to themselves, and the one `CLAUDE.md` §2 rule 2 exists to interrupt.
+
+Both buttons are equal weight. **Keep it as it is** is not a secondary action, because for
+plenty of people it is the right answer and the pod simply did not work out.
+
+### The alternate path
+
+After three (`CLAUDE.md` §6), a second card offers the one-to-one path. It does not exist
+yet, and the copy says so — "we can set that up when it's ready" — rather than pretending.
+Offering something that is not there and going quiet is worse than not offering it.
+
+It appears *below* the lower-the-bar offer and is never the only thing on screen: the
+message is "here is another way", never "the group thing is not for you".
+
+---
+
 ## Errors
 
 Failures render as a calm block under the content: a title, a line of explanation, and a
