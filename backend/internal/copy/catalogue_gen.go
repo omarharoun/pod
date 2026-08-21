@@ -138,10 +138,10 @@ const (
 	// "An hour or two"
 	KeyOnboardingIntensity3 Key = "onboarding.intensity.3"
 
-	// "Half a day"
+	// "A few hours"
 	KeyOnboardingIntensity4 Key = "onboarding.intensity.4"
 
-	// "Several hours"
+	// "Half a day"
 	KeyOnboardingIntensity5 Key = "onboarding.intensity.5"
 
 	// "One last thing"
@@ -738,8 +738,8 @@ var catalogue = map[Key]map[string]string{
 	KeyOnboardingIntensity1:           {"other": "A few minutes"},
 	KeyOnboardingIntensity2:           {"other": "Half an hour"},
 	KeyOnboardingIntensity3:           {"other": "An hour or two"},
-	KeyOnboardingIntensity4:           {"other": "Half a day"},
-	KeyOnboardingIntensity5:           {"other": "Several hours"},
+	KeyOnboardingIntensity4:           {"other": "A few hours"},
+	KeyOnboardingIntensity5:           {"other": "Half a day"},
 	KeyOnboardingReliabilityTitle:     {"other": "One last thing"},
 	KeyOnboardingReliabilityBody:      {"other": "How often do you keep commitments you make to yourself? There's no right answer — it only helps us pick who you'd get on with."},
 	KeyOnboardingReliabilityRarely:    {"other": "Not as often as I'd like"},

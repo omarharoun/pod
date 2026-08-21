@@ -220,12 +220,12 @@ public object CopyKey {
     public const val ONBOARDING_INTENSITY_3: String = "onboarding.intensity.3"
 
     /**
-     * "Half a day"
+     * "A few hours"
      */
     public const val ONBOARDING_INTENSITY_4: String = "onboarding.intensity.4"
 
     /**
-     * "Several hours"
+     * "Half a day"
      */
     public const val ONBOARDING_INTENSITY_5: String = "onboarding.intensity.5"
 

@@ -143,10 +143,10 @@ public extension CopyKey {
     /// "An hour or two"
     static let onboardingIntensity3 = CopyKey(rawValue: "onboarding.intensity.3")
 
-    /// "Half a day"
+    /// "A few hours"
     static let onboardingIntensity4 = CopyKey(rawValue: "onboarding.intensity.4")
 
-    /// "Several hours"
+    /// "Half a day"
     static let onboardingIntensity5 = CopyKey(rawValue: "onboarding.intensity.5")
 
     /// "One last thing"

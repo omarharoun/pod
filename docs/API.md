@@ -695,7 +695,8 @@ any per-member history. See ADR-018.
 | Field | Type | Required | |
 |---|---|---|---|
 | `offer_lower_intensity` | `boolean` | yes | Offer to drop their intensity by one before re-matching. Accepting is an ordinary `putIntent` with a lower value — there is no separate endpoint, because it is not a separate kind of change. |
-| `suggested_intensity` | [`Intensity`](#intensity) |  |  |
+| `current_intensity` | [`Intensity`](#intensity) |  | What they picked, so the offer can name both rungs without the client deriving one from the other. Present whenever `offer_lower_intensity` is. |
+| `suggested_intensity` | [`Intensity`](#intensity) |  | One rung below `current_intensity`. Absent when they are already on the smallest rung, in which case there is nothing smaller to offer. |
 | `offer_alternate_path` | `boolean` | yes | Offer the one-to-one path. CLAUDE.md §6: some people need less social pressure, not more. Set after three pods have ended under them; what it opens is not built yet, so the client shows the offer and nothing else. |
 
 ### SelfReportReliability

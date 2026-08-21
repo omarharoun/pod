@@ -741,8 +741,16 @@ components:
             Offer to drop their intensity by one before re-matching. Accepting is an
             ordinary `putIntent` with a lower value — there is no separate endpoint,
             because it is not a separate kind of change.
+        current_intensity:
+          $ref: '#/components/schemas/Intensity'
+          description: |
+            What they picked, so the offer can name both rungs without the client
+            deriving one from the other. Present whenever `offer_lower_intensity` is.
         suggested_intensity:
           $ref: '#/components/schemas/Intensity'
+          description: |
+            One rung below `current_intensity`. Absent when they are already on the
+            smallest rung, in which case there is nothing smaller to offer.
         offer_alternate_path:
           type: boolean
           description: |

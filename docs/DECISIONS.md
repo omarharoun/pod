@@ -785,3 +785,37 @@ falling.
   supposed to implement §6, not a change to §6, so it is not an escalation under §8.
 * The invariants are checked by enumeration, not by example. Fixtures could not have found
   this and did not.
+---
+
+## ADR-021 — A client can read its own intent back
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M5
+
+**Context.** The contract had `putIntent` and no read. That was fine while the only writer
+was onboarding, which holds the answers locally as it collects them. Recovery breaks the
+assumption: someone whose pod ended answered these questions weeks ago, possibly on
+another device, and the offer is to change exactly one field.
+
+Without a read the client's options were to re-ask everything (a form the person already
+filled in, which is what §2 rule 7 and the Variant B decision both refuse) or to send a
+partial intent and let the server merge — which turns `PUT` into a `PATCH` that is not
+documented as one.
+
+**Decision.**
+1. `GET /v1/onboarding/intent` returns the stored `Intent`, or 404 when there is none.
+2. `self_report_reliability` leaves `IntentRequest`'s required set. Omitted, the stored
+   answer is kept; for an account that has never answered, the cold-start default applies.
+3. `Intent` does **not** carry the self-report back. It is an input to the reliability
+   score and reflecting it would be the first step toward showing someone their own
+   inputs. They can change it by answering again; they cannot read it.
+
+**Consequences.**
+* `PUT` is now "replace, except the one field you may omit". That asymmetry is documented
+  on the field and is the price of not asking "how often do you keep commitments to
+  yourself" a second time, of someone whose pod just ended.
+* A 404 for "no intent yet" is a real 404 — the resource does not exist. It is
+  distinguishable from an unrouted path because `GET /v1/onboarding/state` answers first
+  and says which step they are on.
+
+---
+

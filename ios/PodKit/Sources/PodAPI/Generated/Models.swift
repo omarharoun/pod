@@ -313,6 +313,13 @@ public struct Recovery: Codable, Hashable, Sendable {
     /// ordinary `putIntent` with a lower value — there is no separate endpoint,
     /// because it is not a separate kind of change.
     public let offerLowerIntensity: Bool
+
+    /// What they picked, so the offer can name both rungs without the client
+    /// deriving one from the other. Present whenever `offer_lower_intensity` is.
+    public let currentIntensity: Intensity?
+
+    /// One rung below `current_intensity`. Absent when they are already on the
+    /// smallest rung, in which case there is nothing smaller to offer.
     public let suggestedIntensity: Intensity?
 
     /// Offer the one-to-one path. CLAUDE.md §6: some people need less social
@@ -322,16 +329,19 @@ public struct Recovery: Codable, Hashable, Sendable {
 
     public init(
         offerLowerIntensity: Bool,
+        currentIntensity: Intensity? = nil,
         suggestedIntensity: Intensity? = nil,
         offerAlternatePath: Bool
     ) {
         self.offerLowerIntensity = offerLowerIntensity
+        self.currentIntensity = currentIntensity
         self.suggestedIntensity = suggestedIntensity
         self.offerAlternatePath = offerAlternatePath
     }
 
     private enum CodingKeys: String, CodingKey {
         case offerLowerIntensity = "offer_lower_intensity"
+        case currentIntensity = "current_intensity"
         case suggestedIntensity = "suggested_intensity"
         case offerAlternatePath = "offer_alternate_path"
     }

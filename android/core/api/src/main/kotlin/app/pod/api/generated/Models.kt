@@ -220,6 +220,18 @@ public data class Recovery(
      */
     @SerialName("offer_lower_intensity")
     val offerLowerIntensity: Boolean,
+
+    /**
+     * What they picked, so the offer can name both rungs without the client
+     * deriving one from the other. Present whenever `offer_lower_intensity` is.
+     */
+    @SerialName("current_intensity")
+    val currentIntensity: Intensity? = null,
+
+    /**
+     * One rung below `current_intensity`. Absent when they are already on the
+     * smallest rung, in which case there is nothing smaller to offer.
+     */
     @SerialName("suggested_intensity")
     val suggestedIntensity: Intensity? = null,
 
