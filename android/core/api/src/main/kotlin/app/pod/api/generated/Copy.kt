@@ -326,6 +326,198 @@ public object CopyKey {
     public const val POD_NEWLY_FORMED_BODY: String = "pod.newlyFormed.body"
 
     /**
+     * "One small thing towards it this week."
+     */
+    public const val WEEK_DEFAULT_ACTION: String = "week.defaultAction"
+
+    /**
+     * "This week"
+     */
+    public const val WEEK_TITLE: String = "week.title"
+
+    /**
+     * "The one thing"
+     */
+    public const val WEEK_ACTION_LABEL: String = "week.actionLabel"
+
+    /**
+     * "Nobody's named this week's thing yet. You can."
+     */
+    public const val WEEK_ACTION_NAME_PROMPT: String = "week.action.namePrompt"
+
+    /**
+     * "Name it"
+     */
+    public const val WEEK_ACTION_NAME_CTA: String = "week.action.nameCta"
+
+    /**
+     * "Change it"
+     */
+    public const val WEEK_ACTION_EDIT_CTA: String = "week.action.editCta"
+
+    /**
+     * "Clear one shelf"
+     */
+    public const val WEEK_ACTION_PLACEHOLDER: String = "week.action.placeholder"
+
+    /**
+     * "Save"
+     */
+    public const val WEEK_ACTION_SAVE: String = "week.action.save"
+
+    /**
+     * "Someone's already posted, so this week's thing stays as it is."
+     */
+    public const val WEEK_ACTION_LOCKED_NOTE: String = "week.action.lockedNote"
+
+    /**
+     * "Closes in {count} days" (plural key — resolve with a count)
+     * Placeholders: count
+     */
+    public const val WEEK_CLOSES_IN: String = "week.closesIn"
+
+    /**
+     * "Closes tonight"
+     */
+    public const val WEEK_CLOSES_TODAY: String = "week.closesToday"
+
+    /**
+     * "This week is done"
+     */
+    public const val WEEK_CLOSED: String = "week.closed"
+
+    /**
+     * "Post your 10 seconds"
+     */
+    public const val WEEK_POST_CTA: String = "week.post.cta"
+
+    /**
+     * "Take a photo"
+     */
+    public const val WEEK_POST_PHOTO: String = "week.post.photo"
+
+    /**
+     * "Record a voice note"
+     */
+    public const val WEEK_POST_VOICE: String = "week.post.voice"
+
+    /**
+     * "Not now"
+     */
+    public const val WEEK_POST_CANCEL: String = "week.post.cancel"
+
+    /**
+     * "Sending"
+     */
+    public const val WEEK_POST_UPLOADING: String = "week.post.uploading"
+
+    /**
+     * "That's you in"
+     */
+    public const val WEEK_POST_DONE: String = "week.post.done"
+
+    /**
+     * "It disappears when the week closes. Nobody outside your pod ever sees it."
+     */
+    public const val WEEK_POST_EPHEMERAL_NOTE: String = "week.post.ephemeralNote"
+
+    /**
+     * "Send it again"
+     */
+    public const val WEEK_POST_RETRY: String = "week.post.retry"
+
+    /**
+     * "That one's gone now"
+     */
+    public const val WEEK_PROOF_GONE: String = "week.proof.gone"
+
+    /**
+     * "See it"
+     */
+    public const val WEEK_PROOF_VIEW: String = "week.proof.view"
+
+    /**
+     * "Everyone was in this week."
+     */
+    public const val WEEK_POD_COMPLETED: String = "week.podCompleted"
+
+    /**
+     * "The pod carries on."
+     */
+    public const val WEEK_POD_PARTIAL: String = "week.podPartial"
+
+    /**
+     * "That week has closed"
+     */
+    public const val ERROR_WEEK_CLOSED_TITLE: String = "error.weekClosed.title"
+
+    /**
+     * "This week's open now, whenever you're ready."
+     */
+    public const val ERROR_WEEK_CLOSED_BODY: String = "error.weekClosed.body"
+
+    /**
+     * "You're already in"
+     */
+    public const val ERROR_ALREADY_POSTED_TITLE: String = "error.alreadyPosted.title"
+
+    /**
+     * "You posted this week. One is all it takes."
+     */
+    public const val ERROR_ALREADY_POSTED_BODY: String = "error.alreadyPosted.body"
+
+    /**
+     * "This week's thing is set"
+     */
+    public const val ERROR_ACTION_LOCKED_TITLE: String = "error.actionLocked.title"
+
+    /**
+     * "Someone's already posted against it, so it stays as it is."
+     */
+    public const val ERROR_ACTION_LOCKED_BODY: String = "error.actionLocked.body"
+
+    /**
+     * "A little too long"
+     */
+    public const val ERROR_PROOF_TOO_LONG_TITLE: String = "error.proofTooLong.title"
+
+    /**
+     * "Ten seconds is all we keep. Have another go."
+     */
+    public const val ERROR_PROOF_TOO_LONG_BODY: String = "error.proofTooLong.body"
+
+    /**
+     * "That file's large"
+     */
+    public const val ERROR_PROOF_TOO_LARGE_TITLE: String = "error.proofTooLarge.title"
+
+    /**
+     * "Try a shorter clip or a smaller photo."
+     */
+    public const val ERROR_PROOF_TOO_LARGE_BODY: String = "error.proofTooLarge.body"
+
+    /**
+     * "That didn't send"
+     */
+    public const val ERROR_UPLOAD_INCOMPLETE_TITLE: String = "error.uploadIncomplete.title"
+
+    /**
+     * "Nothing arrived. Give it another go."
+     */
+    public const val ERROR_UPLOAD_INCOMPLETE_BODY: String = "error.uploadIncomplete.body"
+
+    /**
+     * "{count} of {total} in this week"
+     * Placeholders: count, total
+     */
+    public const val A11Y_RING_POSTED: String = "a11y.ringPosted"
+
+    /**
+     * "Post your ten seconds of proof"
+     */
+    public const val A11Y_POST_PROOF: String = "a11y.postProof"
+
+    /**
      * "You're already in a pod"
      */
     public const val ERROR_ALREADY_IN_POD_TITLE: String = "error.alreadyInPod.title"
@@ -592,6 +784,44 @@ public object CopyKey {
         POD_YOU,
         POD_NEWLY_FORMED_TITLE,
         POD_NEWLY_FORMED_BODY,
+        WEEK_DEFAULT_ACTION,
+        WEEK_TITLE,
+        WEEK_ACTION_LABEL,
+        WEEK_ACTION_NAME_PROMPT,
+        WEEK_ACTION_NAME_CTA,
+        WEEK_ACTION_EDIT_CTA,
+        WEEK_ACTION_PLACEHOLDER,
+        WEEK_ACTION_SAVE,
+        WEEK_ACTION_LOCKED_NOTE,
+        WEEK_CLOSES_IN,
+        WEEK_CLOSES_TODAY,
+        WEEK_CLOSED,
+        WEEK_POST_CTA,
+        WEEK_POST_PHOTO,
+        WEEK_POST_VOICE,
+        WEEK_POST_CANCEL,
+        WEEK_POST_UPLOADING,
+        WEEK_POST_DONE,
+        WEEK_POST_EPHEMERAL_NOTE,
+        WEEK_POST_RETRY,
+        WEEK_PROOF_GONE,
+        WEEK_PROOF_VIEW,
+        WEEK_POD_COMPLETED,
+        WEEK_POD_PARTIAL,
+        ERROR_WEEK_CLOSED_TITLE,
+        ERROR_WEEK_CLOSED_BODY,
+        ERROR_ALREADY_POSTED_TITLE,
+        ERROR_ALREADY_POSTED_BODY,
+        ERROR_ACTION_LOCKED_TITLE,
+        ERROR_ACTION_LOCKED_BODY,
+        ERROR_PROOF_TOO_LONG_TITLE,
+        ERROR_PROOF_TOO_LONG_BODY,
+        ERROR_PROOF_TOO_LARGE_TITLE,
+        ERROR_PROOF_TOO_LARGE_BODY,
+        ERROR_UPLOAD_INCOMPLETE_TITLE,
+        ERROR_UPLOAD_INCOMPLETE_BODY,
+        A11Y_RING_POSTED,
+        A11Y_POST_PROOF,
         ERROR_ALREADY_IN_POD_TITLE,
         ERROR_ALREADY_IN_POD_BODY,
         ERROR_GOAL_TOO_SHORT_TITLE,

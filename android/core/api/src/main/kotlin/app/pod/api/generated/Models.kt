@@ -467,6 +467,20 @@ public data class Week(
      */
     @SerialName("action_text")
     val actionText: String,
+
+    /**
+     * True while nobody has named an action and the week is carrying its category
+     * default. The client uses this to invite someone to name one, never to nag.
+     */
+    @SerialName("action_is_default")
+    val actionIsDefault: Boolean,
+
+    /**
+     * False once the week has closed or the first proof has landed. Editing after
+     * someone has acted would rewrite what they acted on.
+     */
+    @SerialName("action_editable")
+    val actionEditable: Boolean,
     @SerialName("opens_at")
     val opensAt: Instant,
 
@@ -487,6 +501,16 @@ public data class Week(
 @Serializable
 public data class WeekList(
     val weeks: List<Week>,
+)
+
+@Serializable
+public data class WeekActionRequest(
+    /**
+     * Small enough to do in the week the pod said they had. Nothing enforces that but
+     * the length limit and the people in the pod.
+     */
+    @SerialName("action_text")
+    val actionText: String,
 )
 
 /**

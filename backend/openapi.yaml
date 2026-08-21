@@ -328,6 +328,44 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '501': { $ref: '#/components/responses/NotImplementedYet' }
 
+  /v1/pods/{podId}/weeks/{weekId}/action:
+    parameters:
+      - $ref: '#/components/parameters/PodId'
+      - $ref: '#/components/parameters/WeekId'
+    put:
+      operationId: setWeekAction
+      summary: Name the one small action for this week.
+      description: |
+        Any member may set it, and it stays editable until the first proof lands — after
+        that the week is something people have already acted on, and changing what it
+        said would rewrite what they agreed to.
+
+        A week always has an action: until someone names one, it carries a neutral default
+        for its goal category, so the loop never blocks on a decision nobody made. See
+        ADR-014.
+      tags: [week]
+      x-milestone: M3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WeekActionRequest' }
+      responses:
+        '200':
+          description: The week, with its action set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Week' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The week is closed, or somebody has already posted to it.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
   /v1/pods/{podId}/weeks/{weekId}/proof:
     parameters:
       - $ref: '#/components/parameters/PodId'
@@ -773,7 +811,7 @@ components:
 
     Week:
       type: object
-      required: [id, pod_id, index, action_text, opens_at, closes_at, members, pod_completed]
+      required: [id, pod_id, index, action_text, action_is_default, action_editable, opens_at, closes_at, members, pod_completed]
       properties:
         id: { type: string, format: uuid }
         pod_id: { type: string, format: uuid }
@@ -781,6 +819,16 @@ components:
         action_text:
           type: string
           description: The one small action for the week, in the pod's words.
+        action_is_default:
+          type: boolean
+          description: |
+            True while nobody has named an action and the week is carrying its category
+            default. The client uses this to invite someone to name one, never to nag.
+        action_editable:
+          type: boolean
+          description: |
+            False once the week has closed or the first proof has landed. Editing after
+            someone has acted would rewrite what they acted on.
         opens_at: { type: string, format: date-time }
         closes_at:
           type: string
@@ -800,6 +848,18 @@ components:
         weeks:
           type: array
           items: { $ref: '#/components/schemas/Week' }
+
+    WeekActionRequest:
+      type: object
+      required: [action_text]
+      properties:
+        action_text:
+          type: string
+          minLength: 3
+          maxLength: 120
+          description: |
+            Small enough to do in the week the pod said they had. Nothing enforces that but
+            the length limit and the people in the pod.
 
     ProofKind:
       type: string

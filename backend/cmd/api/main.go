@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/omarharoun/pod/backend/internal/auth"
+	"github.com/omarharoun/pod/backend/internal/blob"
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
 	"github.com/omarharoun/pod/backend/internal/embed"
@@ -20,6 +21,7 @@ import (
 	"github.com/omarharoun/pod/backend/internal/mail"
 	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
+	"github.com/omarharoun/pod/backend/internal/week"
 )
 
 const shutdownGrace = 15 * time.Second
@@ -53,9 +55,20 @@ func run(log *slog.Logger) error {
 	}
 
 	now := clock.System{}
+	blobs, localBlobs, err := selectBlobStore(cfg, log)
+	if err != nil {
+		return err
+	}
+
 	// The hashing embedder until the hosted one is wired in — see ADR-011.
 	onboardingService := onboarding.NewService(db, embed.Hashing{}, now)
-	server := httpapi.New(auth.NewService(db, mailer, now, cfg), onboardingService, db, now, cfg, log)
+	weekService := week.NewService(db, blobs, now)
+	server := httpapi.New(
+		auth.NewService(db, mailer, now, cfg),
+		onboardingService,
+		weekService,
+		db, now, cfg, log, localBlobs,
+	)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,
@@ -85,6 +98,23 @@ func run(log *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
 	return httpServer.Shutdown(shutdownCtx)
+}
+
+// selectBlobStore refuses to start outside development without object storage, rather
+// than quietly serving proof bytes from the API tier — which is the thing ADR-008 exists
+// to prevent. The second return value is non-nil only for the local store, and is what
+// registers the development blob routes.
+func selectBlobStore(cfg config.Config, log *slog.Logger) (blob.Store, *blob.Local, error) {
+	if !cfg.IsDevelopment() {
+		return nil, nil, fmt.Errorf("config: no object storage is configured for env %q; wire one into selectBlobStore before deploying (ADR-008)", cfg.Env)
+	}
+	local, err := blob.NewLocal(cfg.BlobRoot, cfg.PublicURL, cfg.AuthSecret)
+	if err != nil {
+		return nil, nil, err
+	}
+	log.Warn("development blob store selected — proof bytes are on this machine's disk, not in object storage",
+		slog.String("root", cfg.BlobRoot))
+	return local, local, nil
 }
 
 // selectMailer refuses to start outside development without a real provider, rather than

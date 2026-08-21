@@ -438,3 +438,78 @@ hourly batch over a table is none of those things.
   not — this decision gets revisited.
 * **Overturn this if the Redis line in §5 was load-bearing for a reason not visible here.**
   It is one table and one implementation.
+
+---
+
+## ADR-014 — Any member names the week's action, and it locks on the first proof
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M3
+
+**Context.** `CLAUDE.md` §1 says "each week the pod has one small action" and never says who
+writes it. Three answers were available: derive it from the members' goal texts, have the
+pod negotiate one, or let any member set it.
+
+Deriving it means the machine tells two or three adults what their week is, from a sentence
+they typed once at onboarding. Negotiating it means building a proposal-and-agree flow —
+screens, notifications, a tie-break — before the loop the product exists for has run once.
+
+**Decision.** Any member may name it. It stays editable until the first proof lands, and
+locks after that.
+
+Until somebody names one, the week carries a neutral default — "One small thing towards it
+this week" — so the loop never blocks on a decision nobody made. `action_is_default` tells
+the client to invite someone to name it; it is an invitation, never a nag.
+
+The lock is the substantive half. Once a person has posted against what the week said,
+changing the words rewrites what they did. That is a small betrayal, and exactly the kind
+that erodes a low-stakes promise.
+
+**Where the default text lives.** In `content/microcopy.json`, resolved by the server at
+response time — not stored in the `weeks` row. An English sentence in a database column
+would be a second source of truth for copy, which ADR-003 exists to prevent. The column is
+empty while `action_is_default` is true.
+
+**Consequences.**
+* A pod where nobody names anything still works, week after week, on the default. That is a
+  real outcome and an acceptable one.
+* Two members editing in the same minute: last write wins, silently. Acceptable for two or
+  three people; revisit if it ever bites.
+* A negotiation flow is still possible later. This does not preclude one — it declines to
+  build one before the week loop has been used.
+
+---
+
+## ADR-015 — The development blob store, and what it is not
+
+**Date:** 2026-08-21 · **Status:** accepted, development only · **Milestone:** M3
+
+**Context.** ADR-008 says proof bytes never pass through the API: a signed URL, a direct PUT
+to object storage, then a commit. M3 has to make that flow real without an S3 account.
+
+**Decision.** `blob.Store` is the seam. `blob.Local` implements it against the local disk,
+signing URLs that point at `/blobs/{key}` on the service itself, and `config` refuses to
+select it outside development — the same stance as the logging mailer in ADR-002. Both
+`cmd/api` and `cmd/weekly` fail to start in any other environment rather than quietly
+serving proof from the API tier.
+
+The signing scheme is written by hand rather than borrowed, because the development store
+has to verify its own signatures. It covers key, operation and expiry, so a leaked link
+cannot be extended, retargeted at another proof, or upgraded from read to write. A forged or
+expired link answers 404, not 403: there is nothing here to confirm the existence of.
+
+The `/blobs` routes are deliberately outside `/v1`. They take no bearer token, they are not
+in `openapi.yaml`, and they must not look like an API anyone should build against — the
+signature in the query is the entire authorisation.
+
+**What this is not.** In development the bytes *do* pass through the service, which is the
+letter of ADR-008 broken. The interface is identical, so the week loop cannot tell; but
+production must point at object storage, and the code refuses to start otherwise rather than
+relying on anyone remembering.
+
+**Consequences.**
+* Proof bytes in development sit on a developer's disk until the sweep runs.
+  `POD_BLOB_ROOT` should not be a directory anyone backs up.
+* The production implementation is one type satisfying four methods. The signing helpers
+  are reusable against S3 or GCS signed URLs with no change to callers.
+* An upload is bounded twice — by the size the slot was signed for and by a hard cap on the
+  route — so a client that signs for a small photo cannot then send a large one.

@@ -15,12 +15,14 @@ import (
 
 	"github.com/omarharoun/pod/backend/internal/api"
 	"github.com/omarharoun/pod/backend/internal/auth"
+	"github.com/omarharoun/pod/backend/internal/blob"
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
 	"github.com/omarharoun/pod/backend/internal/copy"
 	"github.com/omarharoun/pod/backend/internal/embed"
 	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
+	"github.com/omarharoun/pod/backend/internal/week"
 )
 
 type testMailer struct{ code string }
@@ -32,6 +34,7 @@ func (m *testMailer) SendLoginCode(_ context.Context, _, code string, _ int) err
 
 type harness struct {
 	t      testing.TB
+	blobs  *blob.Local
 	server *Server
 	store  *store.Memory
 	mailer *testMailer
@@ -58,10 +61,16 @@ func newHarness(t testing.TB) *harness {
 		clock:  clock.NewFixed(time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)),
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	blobs, err := blob.NewLocal(t.TempDir(), "http://test.invalid", cfg.AuthSecret)
+	if err != nil {
+		t.Fatalf("blob.NewLocal: %v", err)
+	}
+	h.blobs = blobs
 	h.server = New(
 		auth.NewService(h.store, h.mailer, h.clock, cfg),
 		onboarding.NewService(h.store, embed.Hashing{}, h.clock),
-		h.store, h.clock, cfg, log,
+		week.NewService(h.store, blobs, h.clock),
+		h.store, h.clock, cfg, log, blobs,
 	)
 	return h
 }
@@ -113,6 +122,43 @@ func (h *harness) seedPod(userIDs ...string) string {
 		h.t.Fatalf("CreatePod: %v", err)
 	}
 	return podID
+}
+
+// seedWeekWithProof puts the caller in a pod with an open week and a committed proof, so
+// pod-scoped routes can be exercised against real ids.
+func (h *harness) seedWeekWithProof(userID string) pathIDs {
+	h.t.Helper()
+	ctx := context.Background()
+	podID := h.seedPod(userID)
+
+	weekRecord, err := h.store.EnsureWeek(ctx, store.Week{
+		ID:              "55555555-5555-4555-8555-555555555555",
+		PodID:           podID,
+		ActionText:      "",
+		ActionIsDefault: true,
+		OpensAt:         h.clock.Now().Add(-24 * time.Hour),
+		ClosesAt:        h.clock.Now().Add(5 * 24 * time.Hour),
+	}, []string{userID})
+	if err != nil {
+		h.t.Fatalf("EnsureWeek: %v", err)
+	}
+
+	proofID := "66666666-6666-4666-8666-666666666666"
+	if err := h.store.CreateProof(ctx, store.Proof{
+		ID: proofID, WeekID: weekRecord.ID, UserID: userID, Kind: "photo",
+		ContentType: "image/jpeg", ByteSize: 1024,
+		CreatedAt: h.clock.Now(), ExpiresAt: weekRecord.ClosesAt,
+	}); err != nil {
+		h.t.Fatalf("CreateProof: %v", err)
+	}
+	key := blob.Key(weekRecord.ID, proofID)
+	if err := h.blobs.Put(key, strings.NewReader("ten seconds of proof")); err != nil {
+		h.t.Fatalf("blob Put: %v", err)
+	}
+	if err := h.store.CommitProof(ctx, proofID, userID, key, h.clock.Now()); err != nil {
+		h.t.Fatalf("CommitProof: %v", err)
+	}
+	return pathIDs{pod: podID, week: weekRecord.ID, proof: proofID}
 }
 
 func decode(t testing.TB, rec *httptest.ResponseRecorder, wantStatus int, dst any) {
@@ -410,15 +456,5 @@ func TestResponsesNeverExposeIndividualScores(t *testing.T) {
 		if strings.Contains(body, forbidden) {
 			t.Errorf("/v1/me leaked %q: %s", forbidden, rec.Body.String())
 		}
-	}
-}
-
-func TestUnbuiltRoutesAnswer501(t *testing.T) {
-	h := newHarness(t)
-	session := h.signIn("sam@example.com")
-
-	body := decodeError(t, h.do(http.MethodGet, "/v1/pods/11111111-1111-4111-8111-111111111111/weeks/current", nil, session.AccessToken), http.StatusNotImplemented)
-	if body.Code != api.ErrorCodeNotImplementedYet {
-		t.Errorf("code: got %q, want not_implemented_yet — a 404 here reads as a client typo (ADR-007)", body.Code)
 	}
 }

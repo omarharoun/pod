@@ -207,6 +207,122 @@ public extension CopyKey {
     /// "Same goal, same kind of week. Your first action lands soon."
     static let podNewlyFormedBody = CopyKey(rawValue: "pod.newlyFormed.body")
 
+    /// "One small thing towards it this week."
+    static let weekDefaultAction = CopyKey(rawValue: "week.defaultAction")
+
+    /// "This week"
+    static let weekTitle = CopyKey(rawValue: "week.title")
+
+    /// "The one thing"
+    static let weekActionLabel = CopyKey(rawValue: "week.actionLabel")
+
+    /// "Nobody's named this week's thing yet. You can."
+    static let weekActionNamePrompt = CopyKey(rawValue: "week.action.namePrompt")
+
+    /// "Name it"
+    static let weekActionNameCta = CopyKey(rawValue: "week.action.nameCta")
+
+    /// "Change it"
+    static let weekActionEditCta = CopyKey(rawValue: "week.action.editCta")
+
+    /// "Clear one shelf"
+    static let weekActionPlaceholder = CopyKey(rawValue: "week.action.placeholder")
+
+    /// "Save"
+    static let weekActionSave = CopyKey(rawValue: "week.action.save")
+
+    /// "Someone's already posted, so this week's thing stays as it is."
+    static let weekActionLockedNote = CopyKey(rawValue: "week.action.lockedNote")
+
+    /// "Closes in {count} days" (plural key — resolve with a count)
+    /// Placeholders: count
+    static let weekClosesIn = CopyKey(rawValue: "week.closesIn")
+
+    /// "Closes tonight"
+    static let weekClosesToday = CopyKey(rawValue: "week.closesToday")
+
+    /// "This week is done"
+    static let weekClosed = CopyKey(rawValue: "week.closed")
+
+    /// "Post your 10 seconds"
+    static let weekPostCta = CopyKey(rawValue: "week.post.cta")
+
+    /// "Take a photo"
+    static let weekPostPhoto = CopyKey(rawValue: "week.post.photo")
+
+    /// "Record a voice note"
+    static let weekPostVoice = CopyKey(rawValue: "week.post.voice")
+
+    /// "Not now"
+    static let weekPostCancel = CopyKey(rawValue: "week.post.cancel")
+
+    /// "Sending"
+    static let weekPostUploading = CopyKey(rawValue: "week.post.uploading")
+
+    /// "That's you in"
+    static let weekPostDone = CopyKey(rawValue: "week.post.done")
+
+    /// "It disappears when the week closes. Nobody outside your pod ever sees it."
+    static let weekPostEphemeralNote = CopyKey(rawValue: "week.post.ephemeralNote")
+
+    /// "Send it again"
+    static let weekPostRetry = CopyKey(rawValue: "week.post.retry")
+
+    /// "That one's gone now"
+    static let weekProofGone = CopyKey(rawValue: "week.proof.gone")
+
+    /// "See it"
+    static let weekProofView = CopyKey(rawValue: "week.proof.view")
+
+    /// "Everyone was in this week."
+    static let weekPodCompleted = CopyKey(rawValue: "week.podCompleted")
+
+    /// "The pod carries on."
+    static let weekPodPartial = CopyKey(rawValue: "week.podPartial")
+
+    /// "That week has closed"
+    static let errorWeekClosedTitle = CopyKey(rawValue: "error.weekClosed.title")
+
+    /// "This week's open now, whenever you're ready."
+    static let errorWeekClosedBody = CopyKey(rawValue: "error.weekClosed.body")
+
+    /// "You're already in"
+    static let errorAlreadyPostedTitle = CopyKey(rawValue: "error.alreadyPosted.title")
+
+    /// "You posted this week. One is all it takes."
+    static let errorAlreadyPostedBody = CopyKey(rawValue: "error.alreadyPosted.body")
+
+    /// "This week's thing is set"
+    static let errorActionLockedTitle = CopyKey(rawValue: "error.actionLocked.title")
+
+    /// "Someone's already posted against it, so it stays as it is."
+    static let errorActionLockedBody = CopyKey(rawValue: "error.actionLocked.body")
+
+    /// "A little too long"
+    static let errorProofTooLongTitle = CopyKey(rawValue: "error.proofTooLong.title")
+
+    /// "Ten seconds is all we keep. Have another go."
+    static let errorProofTooLongBody = CopyKey(rawValue: "error.proofTooLong.body")
+
+    /// "That file's large"
+    static let errorProofTooLargeTitle = CopyKey(rawValue: "error.proofTooLarge.title")
+
+    /// "Try a shorter clip or a smaller photo."
+    static let errorProofTooLargeBody = CopyKey(rawValue: "error.proofTooLarge.body")
+
+    /// "That didn't send"
+    static let errorUploadIncompleteTitle = CopyKey(rawValue: "error.uploadIncomplete.title")
+
+    /// "Nothing arrived. Give it another go."
+    static let errorUploadIncompleteBody = CopyKey(rawValue: "error.uploadIncomplete.body")
+
+    /// "{count} of {total} in this week"
+    /// Placeholders: count, total
+    static let a11yRingPosted = CopyKey(rawValue: "a11y.ringPosted")
+
+    /// "Post your ten seconds of proof"
+    static let a11yPostProof = CopyKey(rawValue: "a11y.postProof")
+
     /// "You're already in a pod"
     static let errorAlreadyInPodTitle = CopyKey(rawValue: "error.alreadyInPod.title")
 
@@ -398,6 +514,44 @@ public extension CopyKey {
         .podYou,
         .podNewlyFormedTitle,
         .podNewlyFormedBody,
+        .weekDefaultAction,
+        .weekTitle,
+        .weekActionLabel,
+        .weekActionNamePrompt,
+        .weekActionNameCta,
+        .weekActionEditCta,
+        .weekActionPlaceholder,
+        .weekActionSave,
+        .weekActionLockedNote,
+        .weekClosesIn,
+        .weekClosesToday,
+        .weekClosed,
+        .weekPostCta,
+        .weekPostPhoto,
+        .weekPostVoice,
+        .weekPostCancel,
+        .weekPostUploading,
+        .weekPostDone,
+        .weekPostEphemeralNote,
+        .weekPostRetry,
+        .weekProofGone,
+        .weekProofView,
+        .weekPodCompleted,
+        .weekPodPartial,
+        .errorWeekClosedTitle,
+        .errorWeekClosedBody,
+        .errorAlreadyPostedTitle,
+        .errorAlreadyPostedBody,
+        .errorActionLockedTitle,
+        .errorActionLockedBody,
+        .errorProofTooLongTitle,
+        .errorProofTooLongBody,
+        .errorProofTooLargeTitle,
+        .errorProofTooLargeBody,
+        .errorUploadIncompleteTitle,
+        .errorUploadIncompleteBody,
+        .a11yRingPosted,
+        .a11yPostProof,
         .errorAlreadyInPodTitle,
         .errorAlreadyInPodBody,
         .errorGoalTooShortTitle,

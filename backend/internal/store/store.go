@@ -133,6 +133,58 @@ type PodMember struct {
 	JoinedAt    time.Time
 }
 
+// Week is one cycle of the loop: one small action, and who is in.
+type Week struct {
+	ID              string
+	PodID           string
+	Index           int
+	ActionText      string
+	ActionIsDefault bool
+	OpensAt         time.Time
+	ClosesAt        time.Time
+	// PodCompleted is whether the POD completed. There is no per-member equivalent, and
+	// adding one is a product bug (CLAUDE.md §2 rules 1 and 3).
+	PodCompleted bool
+	ClosedAt     *time.Time
+	Members      []MemberWeek
+}
+
+// MemberWeekState is posted / open / resting. There is no `missed` and no `failed`, and
+// there will not be — see ADR-006.
+type MemberWeekState string
+
+const (
+	MemberWeekPosted  MemberWeekState = "posted"
+	MemberWeekOpen    MemberWeekState = "open"
+	MemberWeekResting MemberWeekState = "resting"
+)
+
+// MemberWeek is one person's standing in one week.
+type MemberWeek struct {
+	UserID   string
+	State    MemberWeekState
+	PostedAt *time.Time
+	ProofID  *string
+}
+
+// Proof is ten seconds of evidence and the moment it stops existing.
+type Proof struct {
+	ID          string
+	WeekID      string
+	UserID      string
+	Kind        string
+	ContentType string
+	ByteSize    int64
+	DurationMs  *int
+	BlobKey     *string
+	CreatedAt   time.Time
+	CommittedAt *time.Time
+	// ExpiresAt is set once, at creation, and never extended. It is a promise
+	// (CLAUDE.md §2 rule 4).
+	ExpiresAt time.Time
+	DeletedAt *time.Time
+}
+
 // Store is everything the service needs from persistence. It grows a method per
 // milestone; it does not grow a generic query escape hatch.
 type Store interface {
@@ -188,4 +240,37 @@ type Store interface {
 	GetPodForMember(ctx context.Context, podID, userID string) (Pod, error)
 	// GetActivePod returns the caller's current pod, or ErrNotFound.
 	GetActivePod(ctx context.Context, userID string) (Pod, error)
+	// ListActivePods is the weekly job's input.
+	ListActivePods(ctx context.Context) ([]Pod, error)
+
+	// EnsureWeek creates a week and its member rows if that window has none, and returns
+	// the week either way. Idempotent, because the job that calls it may run twice.
+	EnsureWeek(ctx context.Context, week Week, memberIDs []string) (Week, error)
+	// GetWeekForMember returns a week only if userID belongs to its pod.
+	GetWeekForMember(ctx context.Context, weekID, userID string) (Week, error)
+	// GetCurrentWeek returns the pod's week containing `at`, or ErrNotFound.
+	GetCurrentWeek(ctx context.Context, podID, userID string, at time.Time) (Week, error)
+	// ListWeeksForMember returns a pod's weeks, newest first.
+	ListWeeksForMember(ctx context.Context, podID, userID string, limit int) ([]Week, error)
+	// ListWeeksForMemberless is the same, for the scheduled job, which serves no request
+	// and therefore has nobody to scope by. Never reachable from a handler.
+	ListWeeksForMemberless(ctx context.Context, podID string, limit int) ([]Week, error)
+	// SetWeekAction names the week's action. Returns ErrConflict once someone has posted.
+	SetWeekAction(ctx context.Context, weekID, actionText string) error
+	// CloseWeek settles a week: every still-open member becomes resting, pod_completed is
+	// recorded, and the pod's shared streak moves. Idempotent.
+	CloseWeek(ctx context.Context, weekID string, at time.Time) (Week, error)
+
+	// CreateProof reserves an upload slot. Nothing is visible to the pod until it is
+	// committed.
+	CreateProof(ctx context.Context, proof Proof) error
+	// GetProofForViewer returns a proof only if the viewer shares its pod.
+	GetProofForViewer(ctx context.Context, proofID, viewerID string) (Proof, error)
+	// CommitProof publishes an uploaded proof and marks its member posted, in one
+	// transaction. Returns ErrConflict if that person already posted this week.
+	CommitProof(ctx context.Context, proofID, userID, blobKey string, at time.Time) error
+	// ListExpiredProofs is the sweep's input: committed, undeleted, past expiry.
+	ListExpiredProofs(ctx context.Context, at time.Time, limit int) ([]Proof, error)
+	// MarkProofDeleted records that the bytes are gone.
+	MarkProofDeleted(ctx context.Context, proofID string, at time.Time) error
 }

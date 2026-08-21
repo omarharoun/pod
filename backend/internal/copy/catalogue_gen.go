@@ -202,6 +202,122 @@ const (
 	// "Same goal, same kind of week. Your first action lands soon."
 	KeyPodNewlyFormedBody Key = "pod.newlyFormed.body"
 
+	// "One small thing towards it this week."
+	KeyWeekDefaultAction Key = "week.defaultAction"
+
+	// "This week"
+	KeyWeekTitle Key = "week.title"
+
+	// "The one thing"
+	KeyWeekActionLabel Key = "week.actionLabel"
+
+	// "Nobody's named this week's thing yet. You can."
+	KeyWeekActionNamePrompt Key = "week.action.namePrompt"
+
+	// "Name it"
+	KeyWeekActionNameCta Key = "week.action.nameCta"
+
+	// "Change it"
+	KeyWeekActionEditCta Key = "week.action.editCta"
+
+	// "Clear one shelf"
+	KeyWeekActionPlaceholder Key = "week.action.placeholder"
+
+	// "Save"
+	KeyWeekActionSave Key = "week.action.save"
+
+	// "Someone's already posted, so this week's thing stays as it is."
+	KeyWeekActionLockedNote Key = "week.action.lockedNote"
+
+	// "Closes in {count} days" (plural key — resolve with a count)
+	// Placeholders: count
+	KeyWeekClosesIn Key = "week.closesIn"
+
+	// "Closes tonight"
+	KeyWeekClosesToday Key = "week.closesToday"
+
+	// "This week is done"
+	KeyWeekClosed Key = "week.closed"
+
+	// "Post your 10 seconds"
+	KeyWeekPostCta Key = "week.post.cta"
+
+	// "Take a photo"
+	KeyWeekPostPhoto Key = "week.post.photo"
+
+	// "Record a voice note"
+	KeyWeekPostVoice Key = "week.post.voice"
+
+	// "Not now"
+	KeyWeekPostCancel Key = "week.post.cancel"
+
+	// "Sending"
+	KeyWeekPostUploading Key = "week.post.uploading"
+
+	// "That's you in"
+	KeyWeekPostDone Key = "week.post.done"
+
+	// "It disappears when the week closes. Nobody outside your pod ever sees it."
+	KeyWeekPostEphemeralNote Key = "week.post.ephemeralNote"
+
+	// "Send it again"
+	KeyWeekPostRetry Key = "week.post.retry"
+
+	// "That one's gone now"
+	KeyWeekProofGone Key = "week.proof.gone"
+
+	// "See it"
+	KeyWeekProofView Key = "week.proof.view"
+
+	// "Everyone was in this week."
+	KeyWeekPodCompleted Key = "week.podCompleted"
+
+	// "The pod carries on."
+	KeyWeekPodPartial Key = "week.podPartial"
+
+	// "That week has closed"
+	KeyErrorWeekClosedTitle Key = "error.weekClosed.title"
+
+	// "This week's open now, whenever you're ready."
+	KeyErrorWeekClosedBody Key = "error.weekClosed.body"
+
+	// "You're already in"
+	KeyErrorAlreadyPostedTitle Key = "error.alreadyPosted.title"
+
+	// "You posted this week. One is all it takes."
+	KeyErrorAlreadyPostedBody Key = "error.alreadyPosted.body"
+
+	// "This week's thing is set"
+	KeyErrorActionLockedTitle Key = "error.actionLocked.title"
+
+	// "Someone's already posted against it, so it stays as it is."
+	KeyErrorActionLockedBody Key = "error.actionLocked.body"
+
+	// "A little too long"
+	KeyErrorProofTooLongTitle Key = "error.proofTooLong.title"
+
+	// "Ten seconds is all we keep. Have another go."
+	KeyErrorProofTooLongBody Key = "error.proofTooLong.body"
+
+	// "That file's large"
+	KeyErrorProofTooLargeTitle Key = "error.proofTooLarge.title"
+
+	// "Try a shorter clip or a smaller photo."
+	KeyErrorProofTooLargeBody Key = "error.proofTooLarge.body"
+
+	// "That didn't send"
+	KeyErrorUploadIncompleteTitle Key = "error.uploadIncomplete.title"
+
+	// "Nothing arrived. Give it another go."
+	KeyErrorUploadIncompleteBody Key = "error.uploadIncomplete.body"
+
+	// "{count} of {total} in this week"
+	// Placeholders: count, total
+	KeyA11yRingPosted Key = "a11y.ringPosted"
+
+	// "Post your ten seconds of proof"
+	KeyA11yPostProof Key = "a11y.postProof"
+
 	// "You're already in a pod"
 	KeyErrorAlreadyInPodTitle Key = "error.alreadyInPod.title"
 
@@ -394,6 +510,44 @@ var AllKeys = []Key{
 	KeyPodYou,
 	KeyPodNewlyFormedTitle,
 	KeyPodNewlyFormedBody,
+	KeyWeekDefaultAction,
+	KeyWeekTitle,
+	KeyWeekActionLabel,
+	KeyWeekActionNamePrompt,
+	KeyWeekActionNameCta,
+	KeyWeekActionEditCta,
+	KeyWeekActionPlaceholder,
+	KeyWeekActionSave,
+	KeyWeekActionLockedNote,
+	KeyWeekClosesIn,
+	KeyWeekClosesToday,
+	KeyWeekClosed,
+	KeyWeekPostCta,
+	KeyWeekPostPhoto,
+	KeyWeekPostVoice,
+	KeyWeekPostCancel,
+	KeyWeekPostUploading,
+	KeyWeekPostDone,
+	KeyWeekPostEphemeralNote,
+	KeyWeekPostRetry,
+	KeyWeekProofGone,
+	KeyWeekProofView,
+	KeyWeekPodCompleted,
+	KeyWeekPodPartial,
+	KeyErrorWeekClosedTitle,
+	KeyErrorWeekClosedBody,
+	KeyErrorAlreadyPostedTitle,
+	KeyErrorAlreadyPostedBody,
+	KeyErrorActionLockedTitle,
+	KeyErrorActionLockedBody,
+	KeyErrorProofTooLongTitle,
+	KeyErrorProofTooLongBody,
+	KeyErrorProofTooLargeTitle,
+	KeyErrorProofTooLargeBody,
+	KeyErrorUploadIncompleteTitle,
+	KeyErrorUploadIncompleteBody,
+	KeyA11yRingPosted,
+	KeyA11yPostProof,
 	KeyErrorAlreadyInPodTitle,
 	KeyErrorAlreadyInPodBody,
 	KeyErrorGoalTooShortTitle,
@@ -499,6 +653,44 @@ var catalogue = map[Key]map[string]string{
 	KeyPodYou:                         {"other": "You"},
 	KeyPodNewlyFormedTitle:            {"other": "You're matched"},
 	KeyPodNewlyFormedBody:             {"other": "Same goal, same kind of week. Your first action lands soon."},
+	KeyWeekDefaultAction:              {"other": "One small thing towards it this week."},
+	KeyWeekTitle:                      {"other": "This week"},
+	KeyWeekActionLabel:                {"other": "The one thing"},
+	KeyWeekActionNamePrompt:           {"other": "Nobody's named this week's thing yet. You can."},
+	KeyWeekActionNameCta:              {"other": "Name it"},
+	KeyWeekActionEditCta:              {"other": "Change it"},
+	KeyWeekActionPlaceholder:          {"other": "Clear one shelf"},
+	KeyWeekActionSave:                 {"other": "Save"},
+	KeyWeekActionLockedNote:           {"other": "Someone's already posted, so this week's thing stays as it is."},
+	KeyWeekClosesIn:                   {"one": "Closes in {count} day", "other": "Closes in {count} days"},
+	KeyWeekClosesToday:                {"other": "Closes tonight"},
+	KeyWeekClosed:                     {"other": "This week is done"},
+	KeyWeekPostCta:                    {"other": "Post your 10 seconds"},
+	KeyWeekPostPhoto:                  {"other": "Take a photo"},
+	KeyWeekPostVoice:                  {"other": "Record a voice note"},
+	KeyWeekPostCancel:                 {"other": "Not now"},
+	KeyWeekPostUploading:              {"other": "Sending"},
+	KeyWeekPostDone:                   {"other": "That's you in"},
+	KeyWeekPostEphemeralNote:          {"other": "It disappears when the week closes. Nobody outside your pod ever sees it."},
+	KeyWeekPostRetry:                  {"other": "Send it again"},
+	KeyWeekProofGone:                  {"other": "That one's gone now"},
+	KeyWeekProofView:                  {"other": "See it"},
+	KeyWeekPodCompleted:               {"other": "Everyone was in this week."},
+	KeyWeekPodPartial:                 {"other": "The pod carries on."},
+	KeyErrorWeekClosedTitle:           {"other": "That week has closed"},
+	KeyErrorWeekClosedBody:            {"other": "This week's open now, whenever you're ready."},
+	KeyErrorAlreadyPostedTitle:        {"other": "You're already in"},
+	KeyErrorAlreadyPostedBody:         {"other": "You posted this week. One is all it takes."},
+	KeyErrorActionLockedTitle:         {"other": "This week's thing is set"},
+	KeyErrorActionLockedBody:          {"other": "Someone's already posted against it, so it stays as it is."},
+	KeyErrorProofTooLongTitle:         {"other": "A little too long"},
+	KeyErrorProofTooLongBody:          {"other": "Ten seconds is all we keep. Have another go."},
+	KeyErrorProofTooLargeTitle:        {"other": "That file's large"},
+	KeyErrorProofTooLargeBody:         {"other": "Try a shorter clip or a smaller photo."},
+	KeyErrorUploadIncompleteTitle:     {"other": "That didn't send"},
+	KeyErrorUploadIncompleteBody:      {"other": "Nothing arrived. Give it another go."},
+	KeyA11yRingPosted:                 {"other": "{count} of {total} in this week"},
+	KeyA11yPostProof:                  {"other": "Post your ten seconds of proof"},
 	KeyErrorAlreadyInPodTitle:         {"other": "You're already in a pod"},
 	KeyErrorAlreadyInPodBody:          {"other": "One pod at a time, and yours is waiting for you."},
 	KeyErrorGoalTooShortTitle:         {"other": "A few more words"},

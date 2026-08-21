@@ -637,6 +637,14 @@ public struct Week: Codable, Hashable, Sendable {
 
     /// The one small action for the week, in the pod's words.
     public let actionText: String
+
+    /// True while nobody has named an action and the week is carrying its category
+    /// default. The client uses this to invite someone to name one, never to nag.
+    public let actionIsDefault: Bool
+
+    /// False once the week has closed or the first proof has landed. Editing after
+    /// someone has acted would rewrite what they acted on.
+    public let actionEditable: Bool
     public let opensAt: Date
 
     /// Anchored to the pod's timezone. Also when this week's proof dies.
@@ -651,6 +659,8 @@ public struct Week: Codable, Hashable, Sendable {
         podId: UUID,
         index: Int,
         actionText: String,
+        actionIsDefault: Bool,
+        actionEditable: Bool,
         opensAt: Date,
         closesAt: Date,
         members: [MemberWeek],
@@ -660,6 +670,8 @@ public struct Week: Codable, Hashable, Sendable {
         self.podId = podId
         self.index = index
         self.actionText = actionText
+        self.actionIsDefault = actionIsDefault
+        self.actionEditable = actionEditable
         self.opensAt = opensAt
         self.closesAt = closesAt
         self.members = members
@@ -671,6 +683,8 @@ public struct Week: Codable, Hashable, Sendable {
         case podId = "pod_id"
         case index
         case actionText = "action_text"
+        case actionIsDefault = "action_is_default"
+        case actionEditable = "action_editable"
         case opensAt = "opens_at"
         case closesAt = "closes_at"
         case members
@@ -685,6 +699,22 @@ public struct WeekList: Codable, Hashable, Sendable {
         weeks: [Week]
     ) {
         self.weeks = weeks
+    }
+}
+
+public struct WeekActionRequest: Codable, Hashable, Sendable {
+    /// Small enough to do in the week the pod said they had. Nothing enforces that but
+    /// the length limit and the people in the pod.
+    public let actionText: String
+
+    public init(
+        actionText: String
+    ) {
+        self.actionText = actionText
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case actionText = "action_text"
     }
 }
 

@@ -531,3 +531,294 @@ func TestPostgresRefusesASecondActivePod(t *testing.T) {
 		t.Fatalf("pod has %d members after a failed second insert", len(pod.Members))
 	}
 }
+
+// -------------------------------------------------------------- M3: the week loop
+
+func seedPodWith(t testing.TB, db *store.Postgres, members ...store.User) string {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	podID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatalf("ids.NewUUID: %v", err)
+	}
+	ids := make([]string, 0, len(members))
+	for _, member := range members {
+		ids = append(ids, member.ID)
+	}
+	pod := store.Pod{ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: "Europe/Lisbon", CreatedAt: now}
+	if err := db.CreatePod(ctx, pod, ids, now); err != nil {
+		t.Fatalf("CreatePod: %v", err)
+	}
+	return podID
+}
+
+func seedWeek(t testing.TB, db *store.Postgres, podID string, members ...store.User) store.Week {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	weekID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatalf("ids.NewUUID: %v", err)
+	}
+	memberIDs := make([]string, 0, len(members))
+	for _, member := range members {
+		memberIDs = append(memberIDs, member.ID)
+	}
+	week, err := db.EnsureWeek(ctx, store.Week{
+		ID: weekID, PodID: podID, ActionIsDefault: true,
+		OpensAt: now.Add(-24 * time.Hour), ClosesAt: now.Add(5 * 24 * time.Hour),
+	}, memberIDs)
+	if err != nil {
+		t.Fatalf("EnsureWeek: %v", err)
+	}
+	return week
+}
+
+func TestPostgresEnsureWeekIsIdempotent(t *testing.T) {
+	db := newPostgres(t)
+	first, second := seedUser(t, db), seedUser(t, db)
+	podID := seedPodWith(t, db, first, second)
+
+	week := seedWeek(t, db, podID, first, second)
+	if week.Index != 1 || len(week.Members) != 2 {
+		t.Fatalf("got %+v", week)
+	}
+	for _, member := range week.Members {
+		if member.State != store.MemberWeekOpen {
+			t.Errorf("a fresh week starts open, got %q", member.State)
+		}
+	}
+
+	// The same window again returns the same week rather than a second one.
+	again, err := db.EnsureWeek(context.Background(), store.Week{
+		ID: "99999999-9999-4999-8999-999999999999", PodID: podID,
+		OpensAt: week.OpensAt, ClosesAt: week.ClosesAt,
+	}, []string{first.ID, second.ID})
+	if err != nil {
+		t.Fatalf("EnsureWeek: %v", err)
+	}
+	if again.ID != week.ID {
+		t.Fatalf("a second EnsureWeek made a new week: %q then %q", week.ID, again.ID)
+	}
+}
+
+func TestPostgresProofLifecycle(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	mine, theirs := seedUser(t, db), seedUser(t, db)
+	outsider := seedUser(t, db)
+	podID := seedPodWith(t, db, mine, theirs)
+	week := seedWeek(t, db, podID, mine, theirs)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	proofID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatalf("ids.NewUUID: %v", err)
+	}
+	if err := db.CreateProof(ctx, store.Proof{
+		ID: proofID, WeekID: week.ID, UserID: mine.ID, Kind: "photo",
+		ContentType: "image/jpeg", ByteSize: 2048, CreatedAt: now, ExpiresAt: week.ClosesAt,
+	}); err != nil {
+		t.Fatalf("CreateProof: %v", err)
+	}
+
+	// Uncommitted, so it is not a proof yet and the pod cannot see it.
+	if _, err := db.GetProofForViewer(ctx, proofID, theirs.ID); err != nil {
+		t.Fatalf("GetProofForViewer: %v", err)
+	}
+	if err := db.CommitProof(ctx, proofID, mine.ID, "proof/"+week.ID+"/"+proofID, now); err != nil {
+		t.Fatalf("CommitProof: %v", err)
+	}
+
+	settled, err := db.GetWeekForMember(ctx, week.ID, mine.ID)
+	if err != nil {
+		t.Fatalf("GetWeekForMember: %v", err)
+	}
+	for _, member := range settled.Members {
+		if member.UserID == mine.ID {
+			if member.State != store.MemberWeekPosted || member.ProofID == nil || *member.ProofID != proofID {
+				t.Fatalf("committing did not mark the member posted: %+v", member)
+			}
+		}
+	}
+
+	// One committed proof per person per week, enforced by the index.
+	otherID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatalf("ids.NewUUID: %v", err)
+	}
+	if err := db.CreateProof(ctx, store.Proof{
+		ID: otherID, WeekID: week.ID, UserID: mine.ID, Kind: "photo",
+		ContentType: "image/jpeg", ByteSize: 2048, CreatedAt: now, ExpiresAt: week.ClosesAt,
+	}); err != nil {
+		t.Fatalf("CreateProof: %v", err)
+	}
+	if err := db.CommitProof(ctx, otherID, mine.ID, "proof/"+week.ID+"/"+otherID, now); err != store.ErrConflict {
+		t.Fatalf("a second commit: got %v, want ErrConflict", err)
+	}
+
+	// Pod-only visibility.
+	if _, err := db.GetProofForViewer(ctx, proofID, outsider.ID); err != store.ErrNotFound {
+		t.Fatalf("an outsider read the proof: %v", err)
+	}
+
+	// Deletion takes the pointer with it.
+	if err := db.MarkProofDeleted(ctx, proofID, now); err != nil {
+		t.Fatalf("MarkProofDeleted: %v", err)
+	}
+	if _, err := db.GetProofForViewer(ctx, proofID, theirs.ID); err != store.ErrNotFound {
+		t.Fatalf("a deleted proof is still readable: %v", err)
+	}
+	swept, err := db.GetWeekForMember(ctx, week.ID, mine.ID)
+	if err != nil {
+		t.Fatalf("GetWeekForMember: %v", err)
+	}
+	for _, member := range swept.Members {
+		if member.UserID == mine.ID {
+			if member.ProofID != nil {
+				t.Fatalf("the week still points at a deleted proof: %v", *member.ProofID)
+			}
+			// The fact of posting survives; only the bytes are ephemeral.
+			if member.State != store.MemberWeekPosted {
+				t.Fatalf("the record of posting went with the proof: %q", member.State)
+			}
+		}
+	}
+}
+
+func TestPostgresCloseWeekSettlesAndMovesTheSharedStreak(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	mine, theirs := seedUser(t, db), seedUser(t, db)
+	podID := seedPodWith(t, db, mine, theirs)
+	week := seedWeek(t, db, podID, mine, theirs)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	proofID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatalf("ids.NewUUID: %v", err)
+	}
+	if err := db.CreateProof(ctx, store.Proof{
+		ID: proofID, WeekID: week.ID, UserID: mine.ID, Kind: "photo",
+		ContentType: "image/jpeg", ByteSize: 2048, CreatedAt: now, ExpiresAt: week.ClosesAt,
+	}); err != nil {
+		t.Fatalf("CreateProof: %v", err)
+	}
+	if err := db.CommitProof(ctx, proofID, mine.ID, "proof/k", now); err != nil {
+		t.Fatalf("CommitProof: %v", err)
+	}
+
+	closed, err := db.CloseWeek(ctx, week.ID, now)
+	if err != nil {
+		t.Fatalf("CloseWeek: %v", err)
+	}
+	if closed.PodCompleted {
+		t.Error("one of two is not a completed pod week")
+	}
+	states := map[string]store.MemberWeekState{}
+	for _, member := range closed.Members {
+		states[member.UserID] = member.State
+	}
+	if states[theirs.ID] != store.MemberWeekResting {
+		t.Errorf("the non-poster is %q, want resting — never missed, never failed", states[theirs.ID])
+	}
+
+	pod, err := db.GetActivePod(ctx, mine.ID)
+	if err != nil {
+		t.Fatalf("GetActivePod: %v", err)
+	}
+	if pod.StreakWeeks != 0 {
+		t.Errorf("streak = %d, want 0 after an incomplete week", pod.StreakWeeks)
+	}
+
+	// Closing twice is a no-op, so a job that runs twice cannot double the streak.
+	again, err := db.CloseWeek(ctx, week.ID, now)
+	if err != nil {
+		t.Fatalf("second CloseWeek: %v", err)
+	}
+	if again.ID != closed.ID {
+		t.Fatal("closing twice produced a different week")
+	}
+}
+
+func TestPostgresSetWeekActionLocksAfterAPost(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	mine := seedUser(t, db)
+	podID := seedPodWith(t, db, mine)
+	week := seedWeek(t, db, podID, mine)
+	now := time.Now().UTC()
+
+	if err := db.SetWeekAction(ctx, week.ID, "Clear one shelf"); err != nil {
+		t.Fatalf("SetWeekAction: %v", err)
+	}
+	updated, err := db.GetWeekForMember(ctx, week.ID, mine.ID)
+	if err != nil {
+		t.Fatalf("GetWeekForMember: %v", err)
+	}
+	if updated.ActionText != "Clear one shelf" || updated.ActionIsDefault {
+		t.Fatalf("got %+v", updated)
+	}
+
+	proofID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatalf("ids.NewUUID: %v", err)
+	}
+	if err := db.CreateProof(ctx, store.Proof{
+		ID: proofID, WeekID: week.ID, UserID: mine.ID, Kind: "photo",
+		ContentType: "image/jpeg", ByteSize: 1, CreatedAt: now, ExpiresAt: week.ClosesAt,
+	}); err != nil {
+		t.Fatalf("CreateProof: %v", err)
+	}
+	if err := db.CommitProof(ctx, proofID, mine.ID, "proof/k", now); err != nil {
+		t.Fatalf("CommitProof: %v", err)
+	}
+	if err := db.SetWeekAction(ctx, week.ID, "Something else"); err != store.ErrConflict {
+		t.Fatalf("got %v, want ErrConflict — editing after someone acted rewrites what they acted on", err)
+	}
+}
+
+func TestPostgresListExpiredProofs(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	mine := seedUser(t, db)
+	podID := seedPodWith(t, db, mine)
+	week := seedWeek(t, db, podID, mine)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	proofID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatalf("ids.NewUUID: %v", err)
+	}
+	if err := db.CreateProof(ctx, store.Proof{
+		ID: proofID, WeekID: week.ID, UserID: mine.ID, Kind: "photo",
+		ContentType: "image/jpeg", ByteSize: 1, CreatedAt: now, ExpiresAt: now.Add(time.Hour),
+	}); err != nil {
+		t.Fatalf("CreateProof: %v", err)
+	}
+
+	expired, err := db.ListExpiredProofs(ctx, now, 0)
+	if err != nil {
+		t.Fatalf("ListExpiredProofs: %v", err)
+	}
+	for _, proof := range expired {
+		if proof.ID == proofID {
+			t.Fatal("a proof that has not expired is queued for deletion")
+		}
+	}
+
+	expired, err = db.ListExpiredProofs(ctx, now.Add(2*time.Hour), 0)
+	if err != nil {
+		t.Fatalf("ListExpiredProofs: %v", err)
+	}
+	found := false
+	for _, proof := range expired {
+		if proof.ID == proofID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("an expired proof was not queued for deletion — the sweep would never reach it")
+	}
+}

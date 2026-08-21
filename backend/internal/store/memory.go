@@ -12,16 +12,19 @@ import (
 // invariants Postgres enforces — atomic attempt counting, single-use rotation — so that a
 // test passing here means something.
 type Memory struct {
-	mu         sync.Mutex
-	users      map[string]User
-	usersByKey map[string]string // normalised email -> user id
-	challenges map[string]AuthChallenge
-	tokens     map[string]RefreshToken
-	intents    map[string]Intent
-	pool       map[string]PoolTicket
-	pods       map[string]Pod
-	podMembers map[string][]PodMember
-	nextID     int
+	mu          sync.Mutex
+	users       map[string]User
+	usersByKey  map[string]string // normalised email -> user id
+	challenges  map[string]AuthChallenge
+	tokens      map[string]RefreshToken
+	intents     map[string]Intent
+	pool        map[string]PoolTicket
+	pods        map[string]Pod
+	podMembers  map[string][]PodMember
+	weeks       map[string]Week
+	memberWeeks map[string][]MemberWeek
+	proofs      map[string]Proof
+	nextID      int
 
 	// FailPing makes Ping report the datastore as unreachable, for health tests.
 	FailPing error
@@ -29,14 +32,17 @@ type Memory struct {
 
 func NewMemory() *Memory {
 	return &Memory{
-		users:      map[string]User{},
-		usersByKey: map[string]string{},
-		challenges: map[string]AuthChallenge{},
-		tokens:     map[string]RefreshToken{},
-		intents:    map[string]Intent{},
-		pool:       map[string]PoolTicket{},
-		pods:       map[string]Pod{},
-		podMembers: map[string][]PodMember{},
+		users:       map[string]User{},
+		usersByKey:  map[string]string{},
+		challenges:  map[string]AuthChallenge{},
+		tokens:      map[string]RefreshToken{},
+		intents:     map[string]Intent{},
+		pool:        map[string]PoolTicket{},
+		pods:        map[string]Pod{},
+		podMembers:  map[string][]PodMember{},
+		weeks:       map[string]Week{},
+		memberWeeks: map[string][]MemberWeek{},
+		proofs:      map[string]Proof{},
 	}
 }
 
@@ -379,4 +385,288 @@ func tenureWeeks(since, now time.Time) int {
 		return 0
 	}
 	return int(now.Sub(since).Hours() / (24 * 7))
+}
+
+// -------------------------------------------------------------- M3: the week loop
+
+func (m *Memory) ListActivePods(_ context.Context) ([]Pod, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Pod
+	for id, pod := range m.pods {
+		if pod.State == PodStateDissolved {
+			continue
+		}
+		pod.Members = m.podMembers[id]
+		out = append(out, pod)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+func (m *Memory) EnsureWeek(_ context.Context, week Week, memberIDs []string) (Week, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, existing := range m.weeks {
+		if existing.PodID == week.PodID && existing.OpensAt.Equal(week.OpensAt) {
+			return m.hydrateWeek(existing), nil
+		}
+	}
+	week.Index = 1
+	for _, existing := range m.weeks {
+		if existing.PodID == week.PodID && existing.Index >= week.Index {
+			week.Index = existing.Index + 1
+		}
+	}
+	m.weeks[week.ID] = week
+	for _, userID := range memberIDs {
+		m.memberWeeks[week.ID] = append(m.memberWeeks[week.ID], MemberWeek{UserID: userID, State: MemberWeekOpen})
+	}
+	return m.hydrateWeek(week), nil
+}
+
+func (m *Memory) GetWeekForMember(_ context.Context, weekID, userID string) (Week, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	week, ok := m.weeks[weekID]
+	if !ok || !m.isMemberOf(week.PodID, userID) {
+		return Week{}, ErrNotFound
+	}
+	return m.hydrateWeek(week), nil
+}
+
+func (m *Memory) GetCurrentWeek(_ context.Context, podID, userID string, at time.Time) (Week, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.isMemberOf(podID, userID) {
+		return Week{}, ErrNotFound
+	}
+	for _, week := range m.weeks {
+		if week.PodID == podID && !at.Before(week.OpensAt) && at.Before(week.ClosesAt) {
+			return m.hydrateWeek(week), nil
+		}
+	}
+	return Week{}, ErrNotFound
+}
+
+func (m *Memory) ListWeeksForMember(_ context.Context, podID, userID string, limit int) ([]Week, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.isMemberOf(podID, userID) {
+		return nil, ErrNotFound
+	}
+	var out []Week
+	for _, week := range m.weeks {
+		if week.PodID == podID {
+			out = append(out, m.hydrateWeek(week))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Index > out[j].Index })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *Memory) ListWeeksForMemberless(_ context.Context, podID string, limit int) ([]Week, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Week
+	for _, week := range m.weeks {
+		if week.PodID == podID {
+			out = append(out, m.hydrateWeek(week))
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Index > out[j].Index })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *Memory) SetWeekAction(_ context.Context, weekID, actionText string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	week, ok := m.weeks[weekID]
+	if !ok {
+		return ErrNotFound
+	}
+	if week.ClosedAt != nil || m.anyoneHasPosted(weekID) {
+		return ErrConflict
+	}
+	week.ActionText = actionText
+	week.ActionIsDefault = false
+	m.weeks[weekID] = week
+	return nil
+}
+
+func (m *Memory) CloseWeek(_ context.Context, weekID string, at time.Time) (Week, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	week, ok := m.weeks[weekID]
+	if !ok {
+		return Week{}, ErrNotFound
+	}
+	if week.ClosedAt != nil {
+		return m.hydrateWeek(week), nil
+	}
+
+	members := m.memberWeeks[weekID]
+	posted := 0
+	for i, member := range members {
+		if member.State == MemberWeekOpen {
+			members[i].State = MemberWeekResting
+		}
+		if members[i].State == MemberWeekPosted {
+			posted++
+		}
+	}
+	m.memberWeeks[weekID] = members
+
+	// The pod completed when everyone in it posted. It is the pod that succeeds, so a
+	// partial week is not a partial score — it is simply not a completed week.
+	week.PodCompleted = len(members) > 0 && posted == len(members)
+	closedAt := at
+	week.ClosedAt = &closedAt
+	m.weeks[weekID] = week
+
+	pod := m.pods[week.PodID]
+	if week.PodCompleted {
+		pod.StreakWeeks++
+	} else {
+		// A missed week resets the shared streak and nothing else. No score moves, no
+		// member is named, and next week opens exactly like any other.
+		pod.StreakWeeks = 0
+	}
+	m.pods[week.PodID] = pod
+
+	return m.hydrateWeek(week), nil
+}
+
+func (m *Memory) CreateProof(_ context.Context, proof Proof) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.weeks[proof.WeekID]; !ok {
+		return ErrNotFound
+	}
+	m.proofs[proof.ID] = proof
+	return nil
+}
+
+func (m *Memory) GetProofForViewer(_ context.Context, proofID, viewerID string) (Proof, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	proof, ok := m.proofs[proofID]
+	if !ok || proof.DeletedAt != nil {
+		return Proof{}, ErrNotFound
+	}
+	week := m.weeks[proof.WeekID]
+	if !m.isMemberOf(week.PodID, viewerID) {
+		return Proof{}, ErrNotFound
+	}
+	return proof, nil
+}
+
+func (m *Memory) CommitProof(_ context.Context, proofID, userID, blobKey string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	proof, ok := m.proofs[proofID]
+	if !ok || proof.UserID != userID || proof.DeletedAt != nil {
+		return ErrNotFound
+	}
+	if proof.CommittedAt != nil {
+		return ErrConflict
+	}
+	for _, other := range m.proofs {
+		if other.WeekID == proof.WeekID && other.UserID == userID && other.CommittedAt != nil && other.DeletedAt == nil {
+			return ErrConflict
+		}
+	}
+	committedAt := at
+	proof.CommittedAt = &committedAt
+	proof.BlobKey = &blobKey
+	m.proofs[proofID] = proof
+
+	members := m.memberWeeks[proof.WeekID]
+	for i, member := range members {
+		if member.UserID == userID {
+			postedAt := at
+			members[i].State = MemberWeekPosted
+			members[i].PostedAt = &postedAt
+			id := proofID
+			members[i].ProofID = &id
+		}
+	}
+	m.memberWeeks[proof.WeekID] = members
+	return nil
+}
+
+func (m *Memory) ListExpiredProofs(_ context.Context, at time.Time, limit int) ([]Proof, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Proof
+	for _, proof := range m.proofs {
+		if proof.DeletedAt == nil && !at.Before(proof.ExpiresAt) {
+			out = append(out, proof)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *Memory) MarkProofDeleted(_ context.Context, proofID string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	proof, ok := m.proofs[proofID]
+	if !ok {
+		return ErrNotFound
+	}
+	deletedAt := at
+	proof.DeletedAt = &deletedAt
+	proof.BlobKey = nil
+	m.proofs[proofID] = proof
+
+	// The proof id comes off the member's week with the bytes: a pod-mate should not be
+	// left holding a handle to something that no longer exists.
+	members := m.memberWeeks[proof.WeekID]
+	for i, member := range members {
+		if member.ProofID != nil && *member.ProofID == proofID {
+			members[i].ProofID = nil
+		}
+	}
+	m.memberWeeks[proof.WeekID] = members
+	return nil
+}
+
+// hydrateWeek must be called with the lock held.
+func (m *Memory) hydrateWeek(week Week) Week {
+	members := make([]MemberWeek, len(m.memberWeeks[week.ID]))
+	copy(members, m.memberWeeks[week.ID])
+	sort.Slice(members, func(i, j int) bool { return members[i].UserID < members[j].UserID })
+	week.Members = members
+	return week
+}
+
+// anyoneHasPosted must be called with the lock held.
+func (m *Memory) anyoneHasPosted(weekID string) bool {
+	for _, member := range m.memberWeeks[weekID] {
+		if member.State == MemberWeekPosted {
+			return true
+		}
+	}
+	return false
+}
+
+// isMemberOf must be called with the lock held.
+func (m *Memory) isMemberOf(podID, userID string) bool {
+	for _, member := range m.podMembers[podID] {
+		if member.UserID == userID {
+			return true
+		}
+	}
+	return false
 }

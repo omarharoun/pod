@@ -1,0 +1,263 @@
+package week
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/omarharoun/pod/backend/internal/blob"
+	"github.com/omarharoun/pod/backend/internal/clock"
+	"github.com/omarharoun/pod/backend/internal/store"
+)
+
+type harness struct {
+	t       *testing.T
+	service *Service
+	job     *Job
+	store   *store.Memory
+	blobs   *blob.Local
+	clock   *clock.Fixed
+	podID   string
+	members []string
+}
+
+func newHarness(t *testing.T, zone string) *harness {
+	t.Helper()
+	memory := store.NewMemory()
+	// A Thursday, so the first week has days left in it.
+	fixed := clock.NewFixed(time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC))
+	blobs, err := blob.NewLocal(t.TempDir(), "http://test.invalid", "a-development-signing-secret-value")
+	if err != nil {
+		t.Fatalf("blob.NewLocal: %v", err)
+	}
+
+	ctx := context.Background()
+	var members []string
+	for _, email := range []string{"sam@example.com", "alex@example.com"} {
+		user, err := memory.UpsertUserByEmail(ctx, email, fixed.Now())
+		if err != nil {
+			t.Fatalf("UpsertUserByEmail: %v", err)
+		}
+		members = append(members, user.ID)
+	}
+	podID := "pod-1"
+	if err := memory.CreatePod(ctx, store.Pod{
+		ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: zone, CreatedAt: fixed.Now(),
+	}, members, fixed.Now()); err != nil {
+		t.Fatalf("CreatePod: %v", err)
+	}
+
+	service := NewService(memory, blobs, fixed)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return &harness{
+		t: t, service: service, job: NewJob(service, memory, blobs, fixed, log),
+		store: memory, blobs: blobs, clock: fixed, podID: podID, members: members,
+	}
+}
+
+func (h *harness) currentWeek() store.Week {
+	h.t.Helper()
+	week, err := h.service.Current(context.Background(), h.podID, h.members[0])
+	if err != nil {
+		h.t.Fatalf("Current: %v", err)
+	}
+	return week
+}
+
+func (h *harness) post(weekID, userID string) string {
+	h.t.Helper()
+	ctx := context.Background()
+	upload, err := h.service.StartProof(ctx, weekID, userID, "photo", "image/jpeg", 2048, nil)
+	if err != nil {
+		h.t.Fatalf("StartProof: %v", err)
+	}
+	if err := h.blobs.Put(blob.Key(weekID, upload.ProofID), strings.NewReader("ten seconds")); err != nil {
+		h.t.Fatalf("Put: %v", err)
+	}
+	if _, err := h.service.CommitProof(ctx, weekID, upload.ProofID, userID); err != nil {
+		h.t.Fatalf("CommitProof: %v", err)
+	}
+	return upload.ProofID
+}
+
+func TestTickOpensAWeekForEveryActivePod(t *testing.T) {
+	h := newHarness(t, "Europe/Lisbon")
+	result, err := h.job.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if result.PodsSeen != 1 || result.WeeksOpened != 1 {
+		t.Fatalf("got %+v", result)
+	}
+
+	// Running again must not open a second week for the same window.
+	second, err := h.job.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("second Tick: %v", err)
+	}
+	if second.WeeksOpened != 0 {
+		t.Fatalf("a second tick opened %d weeks", second.WeeksOpened)
+	}
+}
+
+func TestTickClosesTheWeekAndOpensTheNext(t *testing.T) {
+	h := newHarness(t, "Europe/Lisbon")
+	first := h.currentWeek()
+	h.post(first.ID, h.members[0])
+	h.post(first.ID, h.members[1])
+
+	h.clock.Advance(first.ClosesAt.Sub(h.clock.Now()) + time.Hour)
+	result, err := h.job.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if result.WeeksClosed != 1 || result.WeeksOpened != 1 {
+		t.Fatalf("got %+v, want one closed and one opened", result)
+	}
+
+	next := h.currentWeek()
+	if next.ID == first.ID {
+		t.Fatal("the new week is the old one")
+	}
+	if next.Index != first.Index+1 {
+		t.Fatalf("week index went %d then %d", first.Index, next.Index)
+	}
+	// A new week starts everyone open again. Last week is over, whatever happened in it.
+	for _, member := range next.Members {
+		if member.State != store.MemberWeekOpen {
+			t.Errorf("a new week starts open, got %q", member.State)
+		}
+	}
+}
+
+// A pod nobody opened for a fortnight still settles correctly rather than leaving weeks
+// hanging open behind it.
+func TestTickSettlesSeveralMissedWeeksAtOnce(t *testing.T) {
+	h := newHarness(t, "Europe/Lisbon")
+	first := h.currentWeek()
+
+	h.clock.Advance(21 * 24 * time.Hour)
+	result, err := h.job.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if result.WeeksClosed < 1 || result.WeeksOpened != 1 {
+		t.Fatalf("got %+v", result)
+	}
+
+	weeks, err := h.store.ListWeeksForMemberless(context.Background(), h.podID, 0)
+	if err != nil {
+		t.Fatalf("ListWeeksForMemberless: %v", err)
+	}
+	for _, week := range weeks {
+		if week.ID == first.ID && week.ClosedAt == nil {
+			t.Fatal("the first week is still open three weeks later")
+		}
+	}
+}
+
+// The sweep is CLAUDE.md §2 rule 4 being kept, and this is the test that says so.
+func TestSweepDeletesProofBytesAtCycleEnd(t *testing.T) {
+	h := newHarness(t, "Europe/Lisbon")
+	ctx := context.Background()
+	week := h.currentWeek()
+	proofID := h.post(week.ID, h.members[0])
+	key := blob.Key(week.ID, proofID)
+
+	exists, err := h.blobs.Exists(ctx, key)
+	if err != nil || !exists {
+		t.Fatalf("the proof bytes are not there to begin with: %v %v", exists, err)
+	}
+
+	h.clock.Advance(week.ClosesAt.Sub(h.clock.Now()) + time.Hour)
+	result, err := h.job.Tick(ctx)
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if result.ProofsDeleted != 1 || result.SweepFailures != 0 {
+		t.Fatalf("got %+v", result)
+	}
+
+	// The bytes are gone from storage.
+	exists, err = h.blobs.Exists(ctx, key)
+	if err != nil {
+		t.Fatalf("Exists: %v", err)
+	}
+	if exists {
+		t.Fatal("the proof bytes survived the sweep — the promise in §2 rule 4 is broken")
+	}
+	// And nothing is left holding a pointer to them.
+	if _, err := h.store.GetProofForViewer(ctx, proofID, h.members[1]); err != store.ErrNotFound {
+		t.Fatalf("a pod-mate can still resolve the proof: %v", err)
+	}
+	settled, err := h.store.GetWeekForMember(ctx, week.ID, h.members[0])
+	if err != nil {
+		t.Fatalf("GetWeekForMember: %v", err)
+	}
+	for _, member := range settled.Members {
+		if member.ProofID != nil {
+			t.Fatalf("member %s still carries proof id %s", member.UserID, *member.ProofID)
+		}
+	}
+	// The fact that they posted survives. Only the bytes are ephemeral.
+	for _, member := range settled.Members {
+		if member.UserID == h.members[0] && member.State != store.MemberWeekPosted {
+			t.Fatalf("the record of posting was lost along with the proof: %q", member.State)
+		}
+	}
+}
+
+func TestSweepIsIdempotent(t *testing.T) {
+	h := newHarness(t, "Europe/Lisbon")
+	week := h.currentWeek()
+	h.post(week.ID, h.members[0])
+
+	h.clock.Advance(week.ClosesAt.Sub(h.clock.Now()) + time.Hour)
+	if _, err := h.job.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	second, err := h.job.Tick(context.Background())
+	if err != nil {
+		t.Fatalf("second Tick: %v", err)
+	}
+	if second.ProofsDeleted != 0 || second.SweepFailures != 0 {
+		t.Fatalf("a second sweep did work: %+v", second)
+	}
+}
+
+// Two pods in different zones turn their weeks over at different instants.
+func TestWeeksTurnOverInEachPodsOwnZone(t *testing.T) {
+	lisbon := newHarness(t, "Europe/Lisbon")
+	auckland := newHarness(t, "Pacific/Auckland")
+
+	if lisbon.currentWeek().ClosesAt.Equal(auckland.currentWeek().ClosesAt) {
+		t.Fatal("two pods on opposite sides of the world close their week at the same instant")
+	}
+}
+
+func TestUnknownPodTimezoneDoesNotStopTheWholeTick(t *testing.T) {
+	h := newHarness(t, "Europe/Lisbon")
+	ctx := context.Background()
+	// A second pod with a corrupt zone.
+	broken, err := h.store.UpsertUserByEmail(ctx, "broken@example.com", h.clock.Now())
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	if err := h.store.CreatePod(ctx, store.Pod{
+		ID: "pod-broken", State: store.PodStateActive, GoalCategory: "home",
+		Timezone: "Not/AZone", CreatedAt: h.clock.Now(),
+	}, []string{broken.ID}, h.clock.Now()); err != nil {
+		t.Fatalf("CreatePod: %v", err)
+	}
+
+	result, err := h.job.Tick(ctx)
+	if err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+	if result.WeeksOpened != 1 {
+		t.Fatalf("the healthy pod did not get its week: %+v", result)
+	}
+}

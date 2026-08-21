@@ -26,24 +26,23 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /v1/pods/current", s.requireAuth(s.handleCurrentPod))
 	mux.HandleFunc("GET /v1/pods/{podId}", s.requireAuth(s.handleGetPod))
 
-	// ---- Specified, not yet built ---------------------------------------------
-	for _, route := range []string{
-		"GET /v1/pods/{podId}/weeks/current",                          // M3
-		"GET /v1/pods/{podId}/weeks",                                  // M3
-		"POST /v1/pods/{podId}/weeks/{weekId}/proof",                  // M3
-		"POST /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}/commit", // M3
-		"GET /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}",         // M3
-	} {
-		mux.HandleFunc(route, s.requireAuth(s.handleNotImplementedYet))
-	}
+	// ---- M3: implemented ------------------------------------------------------
+	mux.HandleFunc("GET /v1/pods/{podId}/weeks/current", s.requireAuth(s.handleCurrentWeek))
+	mux.HandleFunc("GET /v1/pods/{podId}/weeks", s.requireAuth(s.handleListWeeks))
+	mux.HandleFunc("PUT /v1/pods/{podId}/weeks/{weekId}/action", s.requireAuth(s.handleSetWeekAction))
+	mux.HandleFunc("POST /v1/pods/{podId}/weeks/{weekId}/proof", s.requireAuth(s.handleCreateProofUpload))
+	mux.HandleFunc("POST /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}/commit", s.requireAuth(s.handleCommitProof))
+	mux.HandleFunc("GET /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}", s.requireAuth(s.handleGetProof))
+
+	// Every operation in the contract is now implemented, so the not-yet-built table
+	// from ADR-007 is empty and gone. handleNotImplementedYet stays for the next
+	// milestone that specifies ahead of building.
+
+	s.registerBlobRoutes(mux)
 
 	// Anything else is genuinely not part of the contract.
 	mux.HandleFunc("/", s.handleUnknownRoute)
 	return mux
-}
-
-func (s *Server) handleNotImplementedYet(w http.ResponseWriter, r *http.Request) {
-	s.writeError(w, r, notImplementedYet(), nil)
 }
 
 func (s *Server) handleUnknownRoute(w http.ResponseWriter, r *http.Request) {

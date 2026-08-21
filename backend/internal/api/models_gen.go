@@ -340,8 +340,16 @@ type Week struct {
 	Index int `json:"index"`
 
 	// The one small action for the week, in the pod's words.
-	ActionText string    `json:"action_text"`
-	OpensAt    time.Time `json:"opens_at"`
+	ActionText string `json:"action_text"`
+
+	// True while nobody has named an action and the week is carrying its category
+	// default. The client uses this to invite someone to name one, never to nag.
+	ActionIsDefault bool `json:"action_is_default"`
+
+	// False once the week has closed or the first proof has landed. Editing after
+	// someone has acted would rewrite what they acted on.
+	ActionEditable bool      `json:"action_editable"`
+	OpensAt        time.Time `json:"opens_at"`
 
 	// Anchored to the pod's timezone. Also when this week's proof dies.
 	ClosesAt time.Time    `json:"closes_at"`
@@ -353,6 +361,12 @@ type Week struct {
 
 type WeekList struct {
 	Weeks []Week `json:"weeks"`
+}
+
+type WeekActionRequest struct {
+	// Small enough to do in the week the pod said they had. Nothing enforces that but
+	// the length limit and the people in the pod.
+	ActionText string `json:"action_text"`
 }
 
 type ProofKind string

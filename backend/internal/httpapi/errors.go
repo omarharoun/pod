@@ -71,6 +71,30 @@ func alreadyInPod() failure {
 	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorAlreadyInPodBody}
 }
 
+func weekClosed() failure {
+	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorWeekClosedBody}
+}
+
+func alreadyPosted() failure {
+	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorAlreadyPostedBody}
+}
+
+func actionLocked() failure {
+	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorActionLockedBody}
+}
+
+func proofTooLong() failure {
+	return failure{status: http.StatusBadRequest, code: api.ErrorCodeBadRequest, copyKey: copy.KeyErrorProofTooLongBody}
+}
+
+func proofTooLarge() failure {
+	return failure{status: http.StatusBadRequest, code: api.ErrorCodeBadRequest, copyKey: copy.KeyErrorProofTooLargeBody}
+}
+
+func uploadIncomplete() failure {
+	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorUploadIncompleteBody}
+}
+
 func notFound() failure {
 	return failure{status: http.StatusNotFound, code: api.ErrorCodeNotFound, copyKey: copy.KeyErrorServerBody}
 }

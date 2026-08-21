@@ -54,6 +54,7 @@ answers `501` with `code: not_implemented_yet` until its milestone lands.
 | M2 | `GET` | `/v1/pods/{podId}` | `getPod` | bearer |
 | M3 | `GET` | `/v1/pods/{podId}/weeks/current` | `getCurrentWeek` | bearer |
 | M3 | `GET` | `/v1/pods/{podId}/weeks` | `listWeeks` | bearer |
+| M3 | `PUT` | `/v1/pods/{podId}/weeks/{weekId}/action` | `setWeekAction` | bearer |
 | M3 | `POST` | `/v1/pods/{podId}/weeks/{weekId}/proof` | `createProofUpload` | bearer |
 | M3 | `POST` | `/v1/pods/{podId}/weeks/{weekId}/proof/{proofId}/commit` | `commitProof` | bearer |
 | M3 | `GET` | `/v1/pods/{podId}/weeks/{weekId}/proof/{proofId}` | `getProof` | bearer |
@@ -274,6 +275,35 @@ Proof bytes are long gone for closed weeks; only the states remain.
 | `200` | [`WeekList`](#weeklist) | The pod's history. |
 | `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
 | `404` | [`ApiError`](#apierror) | No such resource, or it isn't the caller's. |
+| `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
+
+### `PUT /v1/pods/{podId}/weeks/{weekId}/action` — setWeekAction
+
+**Name the one small action for this week**  
+Milestone M3 · Requires a bearer access token.
+
+Any member may set it, and it stays editable until the first proof lands — after
+that the week is something people have already acted on, and changing what it
+said would rewrite what they agreed to.
+
+A week always has an action: until someone names one, it carries a neutral default
+for its goal category, so the loop never blocks on a decision nobody made. See
+ADR-014.
+
+| Parameter | In | Required | Type |
+|---|---|---|---|
+| `podId` | path | yes | string |
+| `weekId` | path | yes | string |
+
+Request body: [`WeekActionRequest`](#weekactionrequest)
+
+| Status | Body | |
+|---|---|---|
+| `200` | [`Week`](#week) | The week, with its action set. |
+| `400` | [`ApiError`](#apierror) | The request was malformed. |
+| `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
+| `404` | [`ApiError`](#apierror) | No such resource, or it isn't the caller's. |
+| `409` | [`ApiError`](#apierror) | The week is closed, or somebody has already posted to it. |
 | `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
 
 ## Proof
@@ -611,10 +641,18 @@ product has no public profile surface (`CLAUDE.md` §2 rules 3 and 5).
 | `pod_id` | `string(uuid)` | yes |  |
 | `index` | `integer` | yes | 1-based |
 | `action_text` | `string` | yes | The one small action for the week, in the pod's words. |
+| `action_is_default` | `boolean` | yes | True while nobody has named an action and the week is carrying its category default. The client uses this to invite someone to name one, never to nag. |
+| `action_editable` | `boolean` | yes | False once the week has closed or the first proof has landed. Editing after someone has acted would rewrite what they acted on. |
 | `opens_at` | `string(date-time)` | yes |  |
 | `closes_at` | `string(date-time)` | yes | Anchored to the pod's timezone. Also when this week's proof dies. |
 | `members` | [`MemberWeek`](#memberweek)[] | yes |  |
 | `pod_completed` | `boolean` | yes | Whether the pod as a whole completed. Never a per-member verdict. |
+
+### WeekActionRequest
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `action_text` | `string` | yes | Small enough to do in the week the pod said they had. Nothing enforces that but the length limit and the people in the pod. |
 
 ### WeekList
 

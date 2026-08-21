@@ -37,6 +37,13 @@ type Config struct {
 	MaxCodesPerHour int
 	// ResendAfter is how long the client should wait before offering "send it again".
 	ResendAfter time.Duration
+
+	// PublicURL is where clients reach this service. Signed blob links are built from
+	// it, so it has to be the address a phone can actually resolve.
+	PublicURL string
+	// BlobRoot is where the development blob store keeps proof bytes on disk. Unused in
+	// production, where the bytes never touch the service (ADR-008).
+	BlobRoot string
 }
 
 func (c Config) IsDevelopment() bool { return c.Env == "development" }
@@ -54,6 +61,8 @@ func Load() (Config, error) {
 		MaxCodeAttempts: 5,
 		MaxCodesPerHour: 5,
 		ResendAfter:     30 * time.Second,
+		PublicURL:       env("POD_PUBLIC_URL", "http://localhost:8080"),
+		BlobRoot:        env("POD_BLOB_ROOT", "./.blobs"),
 	}
 
 	var err error

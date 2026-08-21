@@ -425,3 +425,426 @@ func (p *Postgres) loadPod(ctx context.Context, query string, args ...any) (Pod,
 	}
 	return pod, wrap("load pod members", rows.Err())
 }
+
+// -------------------------------------------------------------- M3: the week loop
+
+func (p *Postgres) ListActivePods(ctx context.Context) ([]Pod, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, state, goal_category, timezone, streak_weeks, created_at, dissolved_at
+		FROM pods WHERE state <> 'dissolved' ORDER BY created_at, id`)
+	if err != nil {
+		return nil, wrap("list active pods", err)
+	}
+	defer rows.Close()
+
+	var pods []Pod
+	for rows.Next() {
+		var pod Pod
+		var state string
+		if err := rows.Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks, &pod.CreatedAt, &pod.DissolvedAt); err != nil {
+			return nil, wrap("scan pod", err)
+		}
+		pod.State = PodState(state)
+		pods = append(pods, pod)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, wrap("list active pods", err)
+	}
+
+	for i := range pods {
+		members, err := p.podMembers(ctx, pods[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		pods[i].Members = members
+	}
+	return pods, nil
+}
+
+func (p *Postgres) podMembers(ctx context.Context, podID string) ([]PodMember, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT m.user_id, u.display_name, m.joined_at
+		FROM pod_members m JOIN users u ON u.id = m.user_id
+		WHERE m.pod_id = $1 AND m.left_at IS NULL
+		ORDER BY m.joined_at, m.user_id`, podID)
+	if err != nil {
+		return nil, wrap("load pod members", err)
+	}
+	defer rows.Close()
+	var members []PodMember
+	for rows.Next() {
+		var member PodMember
+		if err := rows.Scan(&member.UserID, &member.DisplayName, &member.JoinedAt); err != nil {
+			return nil, wrap("scan pod member", err)
+		}
+		members = append(members, member)
+	}
+	return members, wrap("load pod members", rows.Err())
+}
+
+func (p *Postgres) EnsureWeek(ctx context.Context, week Week, memberIDs []string) (Week, error) {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return Week{}, wrap("begin ensure week", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var existingID string
+	err = tx.QueryRow(ctx, `SELECT id FROM weeks WHERE pod_id = $1 AND opens_at = $2`, week.PodID, week.OpensAt).Scan(&existingID)
+	switch {
+	case err == nil:
+		// Already opened, by an earlier run of the job or a concurrent one.
+		_ = tx.Rollback(ctx)
+		return p.GetWeek(ctx, existingID)
+	case !errors.Is(err, pgx.ErrNoRows):
+		return Week{}, wrap("check for existing week", err)
+	}
+
+	var index int
+	if err := tx.QueryRow(ctx, `
+		SELECT coalesce(max(index), 0) + 1 FROM weeks WHERE pod_id = $1`, week.PodID).Scan(&index); err != nil {
+		return Week{}, wrap("next week index", err)
+	}
+	week.Index = index
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO weeks (id, pod_id, index, action_text, action_is_default, opens_at, closes_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		week.ID, week.PodID, week.Index, week.ActionText, week.ActionIsDefault, week.OpensAt, week.ClosesAt); err != nil {
+		return Week{}, wrap("insert week", err)
+	}
+	for _, userID := range memberIDs {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO member_weeks (week_id, user_id, state) VALUES ($1, $2, 'open')`,
+			week.ID, userID); err != nil {
+			return Week{}, wrap("insert member week", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Week{}, wrap("commit ensure week", err)
+	}
+	return p.GetWeek(ctx, week.ID)
+}
+
+// GetWeek loads a week with no visibility check. Callers that serve a request must use
+// GetWeekForMember instead.
+func (p *Postgres) GetWeek(ctx context.Context, weekID string) (Week, error) {
+	week, err := p.scanWeek(ctx, `
+		SELECT id, pod_id, index, action_text, action_is_default, opens_at, closes_at, pod_completed, closed_at
+		FROM weeks WHERE id = $1`, weekID)
+	if err != nil {
+		return Week{}, err
+	}
+	return p.withMembers(ctx, week)
+}
+
+func (p *Postgres) GetWeekForMember(ctx context.Context, weekID, userID string) (Week, error) {
+	week, err := p.scanWeek(ctx, `
+		SELECT w.id, w.pod_id, w.index, w.action_text, w.action_is_default, w.opens_at, w.closes_at, w.pod_completed, w.closed_at
+		FROM weeks w
+		JOIN pod_members m ON m.pod_id = w.pod_id AND m.user_id = $2 AND m.left_at IS NULL
+		WHERE w.id = $1`, weekID, userID)
+	if err != nil {
+		return Week{}, err
+	}
+	return p.withMembers(ctx, week)
+}
+
+func (p *Postgres) GetCurrentWeek(ctx context.Context, podID, userID string, at time.Time) (Week, error) {
+	week, err := p.scanWeek(ctx, `
+		SELECT w.id, w.pod_id, w.index, w.action_text, w.action_is_default, w.opens_at, w.closes_at, w.pod_completed, w.closed_at
+		FROM weeks w
+		JOIN pod_members m ON m.pod_id = w.pod_id AND m.user_id = $2 AND m.left_at IS NULL
+		WHERE w.pod_id = $1 AND w.opens_at <= $3 AND w.closes_at > $3`, podID, userID, at)
+	if err != nil {
+		return Week{}, err
+	}
+	return p.withMembers(ctx, week)
+}
+
+func (p *Postgres) ListWeeksForMember(ctx context.Context, podID, userID string, limit int) ([]Week, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 52
+	}
+	rows, err := p.pool.Query(ctx, `
+		SELECT w.id, w.pod_id, w.index, w.action_text, w.action_is_default, w.opens_at, w.closes_at, w.pod_completed, w.closed_at
+		FROM weeks w
+		JOIN pod_members m ON m.pod_id = w.pod_id AND m.user_id = $2 AND m.left_at IS NULL
+		WHERE w.pod_id = $1
+		ORDER BY w.index DESC
+		LIMIT $3`, podID, userID, limit)
+	if err != nil {
+		return nil, wrap("list weeks", err)
+	}
+	defer rows.Close()
+
+	var weeks []Week
+	for rows.Next() {
+		week, err := scanWeekRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		weeks = append(weeks, week)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, wrap("list weeks", err)
+	}
+	for i := range weeks {
+		hydrated, err := p.withMembers(ctx, weeks[i])
+		if err != nil {
+			return nil, err
+		}
+		weeks[i] = hydrated
+	}
+	return weeks, nil
+}
+
+func (p *Postgres) ListWeeksForMemberless(ctx context.Context, podID string, limit int) ([]Week, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 52
+	}
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, pod_id, index, action_text, action_is_default, opens_at, closes_at, pod_completed, closed_at
+		FROM weeks WHERE pod_id = $1 ORDER BY index DESC LIMIT $2`, podID, limit)
+	if err != nil {
+		return nil, wrap("list weeks", err)
+	}
+	defer rows.Close()
+
+	var weeks []Week
+	for rows.Next() {
+		week, err := scanWeekRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		weeks = append(weeks, week)
+	}
+	return weeks, wrap("list weeks", rows.Err())
+}
+
+func (p *Postgres) SetWeekAction(ctx context.Context, weekID, actionText string) error {
+	tag, err := p.pool.Exec(ctx, `
+		UPDATE weeks SET action_text = $2, action_is_default = false
+		WHERE id = $1
+		  AND closed_at IS NULL
+		  AND NOT EXISTS (
+		      SELECT 1 FROM member_weeks WHERE week_id = $1 AND state = 'posted'
+		  )`, weekID, actionText)
+	if err != nil {
+		return wrap("set week action", err)
+	}
+	if tag.RowsAffected() == 0 {
+		var exists bool
+		if err := p.pool.QueryRow(ctx, `SELECT true FROM weeks WHERE id = $1`, weekID).Scan(&exists); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			return wrap("check week", err)
+		}
+		// The week exists but is closed, or somebody has already acted on what it said.
+		return ErrConflict
+	}
+	return nil
+}
+
+func (p *Postgres) CloseWeek(ctx context.Context, weekID string, at time.Time) (Week, error) {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return Week{}, wrap("begin close week", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var alreadyClosed *time.Time
+	if err := tx.QueryRow(ctx, `SELECT closed_at FROM weeks WHERE id = $1 FOR UPDATE`, weekID).Scan(&alreadyClosed); err != nil {
+		return Week{}, wrap("lock week", err)
+	}
+	if alreadyClosed != nil {
+		_ = tx.Rollback(ctx)
+		return p.GetWeek(ctx, weekID)
+	}
+
+	// Everyone still open at the boundary is resting. Not missed, not failed — the week
+	// simply closed without them (ADR-006).
+	if _, err := tx.Exec(ctx, `
+		UPDATE member_weeks SET state = 'resting' WHERE week_id = $1 AND state = 'open'`, weekID); err != nil {
+		return Week{}, wrap("settle member weeks", err)
+	}
+
+	var total, posted int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*), count(*) FILTER (WHERE state = 'posted')
+		FROM member_weeks WHERE week_id = $1`, weekID).Scan(&total, &posted); err != nil {
+		return Week{}, wrap("count member weeks", err)
+	}
+	completed := total > 0 && posted == total
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE weeks SET pod_completed = $2, closed_at = $3 WHERE id = $1`, weekID, completed, at); err != nil {
+		return Week{}, wrap("close week", err)
+	}
+
+	// The streak is the pod's. A week that did not complete resets it and nothing else:
+	// no score moves here, and no member is named.
+	if completed {
+		if _, err := tx.Exec(ctx, `
+			UPDATE pods SET streak_weeks = streak_weeks + 1
+			WHERE id = (SELECT pod_id FROM weeks WHERE id = $1)`, weekID); err != nil {
+			return Week{}, wrap("advance streak", err)
+		}
+	} else {
+		if _, err := tx.Exec(ctx, `
+			UPDATE pods SET streak_weeks = 0
+			WHERE id = (SELECT pod_id FROM weeks WHERE id = $1)`, weekID); err != nil {
+			return Week{}, wrap("reset streak", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Week{}, wrap("commit close week", err)
+	}
+	return p.GetWeek(ctx, weekID)
+}
+
+func (p *Postgres) CreateProof(ctx context.Context, proof Proof) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO proofs (id, week_id, user_id, kind, content_type, byte_size, duration_ms, created_at, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		proof.ID, proof.WeekID, proof.UserID, proof.Kind, proof.ContentType,
+		proof.ByteSize, proof.DurationMs, proof.CreatedAt, proof.ExpiresAt)
+	return wrap("create proof", err)
+}
+
+func (p *Postgres) GetProofForViewer(ctx context.Context, proofID, viewerID string) (Proof, error) {
+	var proof Proof
+	err := p.pool.QueryRow(ctx, `
+		SELECT p.id, p.week_id, p.user_id, p.kind, p.content_type, p.byte_size, p.duration_ms,
+		       p.blob_key, p.created_at, p.committed_at, p.expires_at, p.deleted_at
+		FROM proofs p
+		JOIN weeks w ON w.id = p.week_id
+		JOIN pod_members m ON m.pod_id = w.pod_id AND m.user_id = $2 AND m.left_at IS NULL
+		WHERE p.id = $1 AND p.deleted_at IS NULL`, proofID, viewerID).
+		Scan(&proof.ID, &proof.WeekID, &proof.UserID, &proof.Kind, &proof.ContentType, &proof.ByteSize,
+			&proof.DurationMs, &proof.BlobKey, &proof.CreatedAt, &proof.CommittedAt, &proof.ExpiresAt, &proof.DeletedAt)
+	if err != nil {
+		return Proof{}, wrap("get proof", err)
+	}
+	return proof, nil
+}
+
+func (p *Postgres) CommitProof(ctx context.Context, proofID, userID, blobKey string, at time.Time) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return wrap("begin commit proof", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var weekID string
+	err = tx.QueryRow(ctx, `
+		SELECT week_id FROM proofs
+		WHERE id = $1 AND user_id = $2 AND committed_at IS NULL AND deleted_at IS NULL
+		FOR UPDATE`, proofID, userID).Scan(&weekID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return wrap("lock proof", err)
+	}
+
+	// The partial unique index makes a second committed proof for the same person and
+	// week impossible; this turns that into a clean conflict.
+	if _, err := tx.Exec(ctx, `
+		UPDATE proofs SET committed_at = $2, blob_key = $3 WHERE id = $1`, proofID, at, blobKey); err != nil {
+		if errors.Is(wrap("", err), ErrConflict) {
+			return ErrConflict
+		}
+		return wrap("commit proof", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE member_weeks SET state = 'posted', posted_at = $3
+		WHERE week_id = $1 AND user_id = $2`, weekID, userID, at); err != nil {
+		return wrap("mark member posted", err)
+	}
+	return wrap("commit proof transaction", tx.Commit(ctx))
+}
+
+func (p *Postgres) ListExpiredProofs(ctx context.Context, at time.Time, limit int) ([]Proof, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, week_id, user_id, kind, content_type, byte_size, duration_ms,
+		       blob_key, created_at, committed_at, expires_at, deleted_at
+		FROM proofs
+		WHERE deleted_at IS NULL AND expires_at <= $1
+		ORDER BY expires_at
+		LIMIT $2`, at, limit)
+	if err != nil {
+		return nil, wrap("list expired proofs", err)
+	}
+	defer rows.Close()
+
+	var proofs []Proof
+	for rows.Next() {
+		var proof Proof
+		if err := rows.Scan(&proof.ID, &proof.WeekID, &proof.UserID, &proof.Kind, &proof.ContentType,
+			&proof.ByteSize, &proof.DurationMs, &proof.BlobKey, &proof.CreatedAt, &proof.CommittedAt,
+			&proof.ExpiresAt, &proof.DeletedAt); err != nil {
+			return nil, wrap("scan expired proof", err)
+		}
+		proofs = append(proofs, proof)
+	}
+	return proofs, wrap("list expired proofs", rows.Err())
+}
+
+func (p *Postgres) MarkProofDeleted(ctx context.Context, proofID string, at time.Time) error {
+	// blob_key is cleared with the deletion: nothing should be left holding a pointer to
+	// bytes that are gone (CLAUDE.md §2 rule 4).
+	_, err := p.pool.Exec(ctx, `
+		UPDATE proofs SET deleted_at = $2, blob_key = NULL WHERE id = $1 AND deleted_at IS NULL`, proofID, at)
+	return wrap("mark proof deleted", err)
+}
+
+func (p *Postgres) scanWeek(ctx context.Context, query string, args ...any) (Week, error) {
+	var week Week
+	err := p.pool.QueryRow(ctx, query, args...).
+		Scan(&week.ID, &week.PodID, &week.Index, &week.ActionText, &week.ActionIsDefault,
+			&week.OpensAt, &week.ClosesAt, &week.PodCompleted, &week.ClosedAt)
+	if err != nil {
+		return Week{}, wrap("load week", err)
+	}
+	return week, nil
+}
+
+func scanWeekRow(rows pgx.Rows) (Week, error) {
+	var week Week
+	if err := rows.Scan(&week.ID, &week.PodID, &week.Index, &week.ActionText, &week.ActionIsDefault,
+		&week.OpensAt, &week.ClosesAt, &week.PodCompleted, &week.ClosedAt); err != nil {
+		return Week{}, wrap("scan week", err)
+	}
+	return week, nil
+}
+
+func (p *Postgres) withMembers(ctx context.Context, week Week) (Week, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT mw.user_id, mw.state, mw.posted_at,
+		       (SELECT pr.id FROM proofs pr
+		         WHERE pr.week_id = mw.week_id AND pr.user_id = mw.user_id
+		           AND pr.committed_at IS NOT NULL AND pr.deleted_at IS NULL
+		         LIMIT 1)
+		FROM member_weeks mw
+		WHERE mw.week_id = $1
+		ORDER BY mw.user_id`, week.ID)
+	if err != nil {
+		return Week{}, wrap("load member weeks", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var member MemberWeek
+		var state string
+		if err := rows.Scan(&member.UserID, &state, &member.PostedAt, &member.ProofID); err != nil {
+			return Week{}, wrap("scan member week", err)
+		}
+		member.State = MemberWeekState(state)
+		week.Members = append(week.Members, member)
+	}
+	return week, wrap("load member weeks", rows.Err())
+}

@@ -25,3 +25,4 @@ android/.idea/
 # Tooling
 .DS_Store
 node_modules/
+.blobs/
