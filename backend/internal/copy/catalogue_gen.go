@@ -216,6 +216,69 @@ const (
 	// "We'll let you know"
 	KeyRecoveryAlternateNotYet Key = "recovery.alternate.notYet"
 
+	// "{count} weeks, done"
+	// Placeholders: count
+	KeyGraduationTitle Key = "graduation.title"
+
+	// "That's the cycle. Your pod got to the end of it together."
+	KeyGraduationBody Key = "graduation.body"
+
+	// "{count} weeks where everyone was in."
+	// Placeholders: count
+	KeyGraduationStreak Key = "graduation.streak"
+
+	// "Some weeks landed, some didn't. You still got here."
+	KeyGraduationStreakNone Key = "graduation.streakNone"
+
+	// "Another {count}?"
+	// Placeholders: count
+	KeyGraduationChoiceTitle Key = "graduation.choice.title"
+
+	// "Same pod, same goal, a fresh cycle. Everyone decides for themselves."
+	KeyGraduationChoiceBody Key = "graduation.choice.body"
+
+	// "I'm in for another"
+	KeyGraduationChoiceYes Key = "graduation.choice.yes"
+
+	// "I'll stop here"
+	KeyGraduationChoiceNo Key = "graduation.choice.no"
+
+	// "You can decide any time before {date}."
+	// Placeholders: date
+	KeyGraduationChoiceDeadline Key = "graduation.choice.deadline"
+
+	// "You're in"
+	KeyGraduationWaitingTitle Key = "graduation.waiting.title"
+
+	// "Waiting to hear from the others. We'll let you know."
+	KeyGraduationWaitingBody Key = "graduation.waiting.body"
+
+	// "{count} of you are carrying on so far."
+	// Placeholders: count
+	KeyGraduationWaitingCount Key = "graduation.waiting.count"
+
+	// "That's the cycle, then"
+	KeyGraduationDeclinedTitle Key = "graduation.declined.title"
+
+	// "Nothing more to do. If you want another pod later, it's here."
+	KeyGraduationDeclinedBody Key = "graduation.declined.body"
+
+	// "Change my mind"
+	KeyGraduationChange Key = "graduation.change"
+
+	// "{count} weeks, done"
+	// Placeholders: count
+	KeyPushCycleCompletedTitle Key = "push.cycleCompleted.title"
+
+	// "Your pod got to the end of the cycle."
+	KeyPushCycleCompletedBody Key = "push.cycleCompleted.body"
+
+	// "Your pod is carrying on"
+	KeyPushCycleContinuingTitle Key = "push.cycleContinuing.title"
+
+	// "A fresh cycle starts this week."
+	KeyPushCycleContinuingBody Key = "push.cycleContinuing.body"
+
 	// "You"
 	KeyPodYou Key = "pod.you"
 
@@ -404,6 +467,12 @@ const (
 
 	// "One pod at a time, and yours is waiting for you."
 	KeyErrorAlreadyInPodBody Key = "error.alreadyInPod.body"
+
+	// "That's already settled"
+	KeyErrorCycleChoiceClosedTitle Key = "error.cycleChoiceClosed.title"
+
+	// "Your pod's moved on from that choice. Have a look at where it's at."
+	KeyErrorCycleChoiceClosedBody Key = "error.cycleChoiceClosed.body"
 
 	// "A few more words"
 	KeyErrorGoalTooShortTitle Key = "error.goalTooShort.title"
@@ -595,6 +664,25 @@ var AllKeys = []Key{
 	KeyRecoveryAlternateTitle,
 	KeyRecoveryAlternateBody,
 	KeyRecoveryAlternateNotYet,
+	KeyGraduationTitle,
+	KeyGraduationBody,
+	KeyGraduationStreak,
+	KeyGraduationStreakNone,
+	KeyGraduationChoiceTitle,
+	KeyGraduationChoiceBody,
+	KeyGraduationChoiceYes,
+	KeyGraduationChoiceNo,
+	KeyGraduationChoiceDeadline,
+	KeyGraduationWaitingTitle,
+	KeyGraduationWaitingBody,
+	KeyGraduationWaitingCount,
+	KeyGraduationDeclinedTitle,
+	KeyGraduationDeclinedBody,
+	KeyGraduationChange,
+	KeyPushCycleCompletedTitle,
+	KeyPushCycleCompletedBody,
+	KeyPushCycleContinuingTitle,
+	KeyPushCycleContinuingBody,
 	KeyPodYou,
 	KeyPodSomeone,
 	KeyPushPodFormedTitle,
@@ -656,6 +744,8 @@ var AllKeys = []Key{
 	KeyA11yPostProof,
 	KeyErrorAlreadyInPodTitle,
 	KeyErrorAlreadyInPodBody,
+	KeyErrorCycleChoiceClosedTitle,
+	KeyErrorCycleChoiceClosedBody,
 	KeyErrorGoalTooShortTitle,
 	KeyErrorGoalTooShortBody,
 	KeyA11yIntensityOption,
@@ -763,6 +853,25 @@ var catalogue = map[Key]map[string]string{
 	KeyRecoveryAlternateTitle:         {"other": "There's another way to do this"},
 	KeyRecoveryAlternateBody:          {"other": "Some people do better one-to-one than in a group. We can set that up when it's ready."},
 	KeyRecoveryAlternateNotYet:        {"other": "We'll let you know"},
+	KeyGraduationTitle:                {"other": "{count} weeks, done"},
+	KeyGraduationBody:                 {"other": "That's the cycle. Your pod got to the end of it together."},
+	KeyGraduationStreak:               {"other": "{count} weeks where everyone was in."},
+	KeyGraduationStreakNone:           {"other": "Some weeks landed, some didn't. You still got here."},
+	KeyGraduationChoiceTitle:          {"other": "Another {count}?"},
+	KeyGraduationChoiceBody:           {"other": "Same pod, same goal, a fresh cycle. Everyone decides for themselves."},
+	KeyGraduationChoiceYes:            {"other": "I'm in for another"},
+	KeyGraduationChoiceNo:             {"other": "I'll stop here"},
+	KeyGraduationChoiceDeadline:       {"other": "You can decide any time before {date}."},
+	KeyGraduationWaitingTitle:         {"other": "You're in"},
+	KeyGraduationWaitingBody:          {"other": "Waiting to hear from the others. We'll let you know."},
+	KeyGraduationWaitingCount:         {"other": "{count} of you are carrying on so far."},
+	KeyGraduationDeclinedTitle:        {"other": "That's the cycle, then"},
+	KeyGraduationDeclinedBody:         {"other": "Nothing more to do. If you want another pod later, it's here."},
+	KeyGraduationChange:               {"other": "Change my mind"},
+	KeyPushCycleCompletedTitle:        {"other": "{count} weeks, done"},
+	KeyPushCycleCompletedBody:         {"other": "Your pod got to the end of the cycle."},
+	KeyPushCycleContinuingTitle:       {"other": "Your pod is carrying on"},
+	KeyPushCycleContinuingBody:        {"other": "A fresh cycle starts this week."},
 	KeyPodYou:                         {"other": "You"},
 	KeyPodSomeone:                     {"other": "Someone in your pod"},
 	KeyPushPodFormedTitle:             {"other": "You've got a pod"},
@@ -824,6 +933,8 @@ var catalogue = map[Key]map[string]string{
 	KeyA11yPostProof:                  {"other": "Post your ten seconds of proof"},
 	KeyErrorAlreadyInPodTitle:         {"other": "You're already in a pod"},
 	KeyErrorAlreadyInPodBody:          {"other": "One pod at a time, and yours is waiting for you."},
+	KeyErrorCycleChoiceClosedTitle:    {"other": "That's already settled"},
+	KeyErrorCycleChoiceClosedBody:     {"other": "Your pod's moved on from that choice. Have a look at where it's at."},
 	KeyErrorGoalTooShortTitle:         {"other": "A few more words"},
 	KeyErrorGoalTooShortBody:          {"other": "Tell us a little more so we can match you well."},
 	KeyA11yIntensityOption:            {"other": "{label}, option {index} of 5"},

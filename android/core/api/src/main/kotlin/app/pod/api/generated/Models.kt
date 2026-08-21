@@ -395,12 +395,18 @@ public data class PoolTicket(
 )
 
 /**
+ * `completed` and `dissolved` are not the same event and must never render the same.
+ * A pod that finished its cycle graduated; a pod that dissolved stopped early. Only
+ * the second one carries a reliability consequence, and only for members who were
+ * inactive (ADR-019).
+ *
  * An unrecognised value from a newer server decodes as [UNKNOWN] rather than throwing.
  */
 @Serializable(with = PodStateSerializer::class)
 public enum class PodState(override val wire: String) : WireEnum {
     FORMING("forming"),
     ACTIVE("active"),
+    COMPLETED("completed"),
     DISSOLVED("dissolved"),
 
     /** A value this build does not know about. */
@@ -415,6 +421,74 @@ public enum class PodState(override val wire: String) : WireEnum {
 internal object PodStateSerializer : WireEnumSerializer<PodState>(
     "app.pod.api.generated.PodState",
     { value -> PodState.fromWire(value) },
+)
+
+/**
+ * A pod runs for a fixed number of weeks and then finishes. The client is given
+ * counts and an instant, not a week index to do arithmetic on — "two weeks left"
+ * must not be a date calculation on a device in the wrong timezone (`CLAUDE.md` §5).
+ */
+@Serializable
+public data class Cycle(
+    /**
+     * How long this pod's cycle is. Fixed when the pod forms.
+     */
+    @SerialName("length_weeks")
+    val lengthWeeks: Int,
+
+    /**
+     * Weeks of the cycle that have closed. Not weeks the pod *completed* — the two
+     * differ and this one is the position in the cycle, not a measure of anybody.
+     */
+    @SerialName("weeks_completed")
+    val weeksCompleted: Int,
+
+    /**
+     * When the last week of the cycle closes, in the pod's zone.
+     */
+    @SerialName("ends_at")
+    val endsAt: Instant,
+)
+
+/**
+ * Who is carrying on after graduation.
+ *
+ * There is no per-member breakdown here, and there must never be one. "Alex is not
+ * continuing" is the most shaming sentence this product could show, and a member id
+ * next to a `false` is one join away from it. The count is enough to render the
+ * screen; the identity is not needed and so is not sent (`CLAUDE.md` §2 rule 1).
+ */
+@Serializable
+public data class Continuation(
+    /**
+     * How many members have said they are carrying on.
+     */
+    val continuing: Int,
+
+    /**
+     * How many have not answered yet. Silence is not a no — it holds the pod open
+     * until `decide_by` rather than closing it.
+     */
+    val undecided: Int,
+
+    /**
+     * Whether *the caller* has answered. The only per-member fact here.
+     */
+    @SerialName("you_answered")
+    val youAnswered: Boolean,
+
+    /**
+     * The caller's own answer, absent until they give one.
+     */
+    @SerialName("you_are_continuing")
+    val youAreContinuing: Boolean? = null,
+
+    /**
+     * After this, an unanswered pod closes. Closing is the default because holding
+     * someone in a pod they did not re-choose is the worse mistake.
+     */
+    @SerialName("decide_by")
+    val decideBy: Instant,
 )
 
 @Serializable
@@ -436,10 +510,32 @@ public data class Pod(
     @SerialName("streak_weeks")
     val streakWeeks: Int,
     val members: List<PodMember>,
+    val cycle: Cycle? = null,
+
+    /**
+     * Present once the cycle has finished and the choice is open.
+     */
+    val continuation: Continuation? = null,
     @SerialName("created_at")
     val createdAt: Instant,
+
+    /**
+     * When the cycle finished. Graduation, not an ending.
+     */
+    @SerialName("completed_at")
+    val completedAt: Instant? = null,
     @SerialName("dissolved_at")
     val dissolvedAt: Instant? = null,
+)
+
+@Serializable
+public data class ContinueRequest(
+    /**
+     * Whether the caller wants another cycle with this pod. `false` is an ordinary
+     * answer, not a withdrawal — it is recorded and counted, and it is never
+     * attributed to them in any response.
+     */
+    val continuing: Boolean,
 )
 
 /**

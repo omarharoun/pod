@@ -221,6 +221,69 @@ public extension CopyKey {
     /// "We'll let you know"
     static let recoveryAlternateNotYet = CopyKey(rawValue: "recovery.alternate.notYet")
 
+    /// "{count} weeks, done"
+    /// Placeholders: count
+    static let graduationTitle = CopyKey(rawValue: "graduation.title")
+
+    /// "That's the cycle. Your pod got to the end of it together."
+    static let graduationBody = CopyKey(rawValue: "graduation.body")
+
+    /// "{count} weeks where everyone was in."
+    /// Placeholders: count
+    static let graduationStreak = CopyKey(rawValue: "graduation.streak")
+
+    /// "Some weeks landed, some didn't. You still got here."
+    static let graduationStreakNone = CopyKey(rawValue: "graduation.streakNone")
+
+    /// "Another {count}?"
+    /// Placeholders: count
+    static let graduationChoiceTitle = CopyKey(rawValue: "graduation.choice.title")
+
+    /// "Same pod, same goal, a fresh cycle. Everyone decides for themselves."
+    static let graduationChoiceBody = CopyKey(rawValue: "graduation.choice.body")
+
+    /// "I'm in for another"
+    static let graduationChoiceYes = CopyKey(rawValue: "graduation.choice.yes")
+
+    /// "I'll stop here"
+    static let graduationChoiceNo = CopyKey(rawValue: "graduation.choice.no")
+
+    /// "You can decide any time before {date}."
+    /// Placeholders: date
+    static let graduationChoiceDeadline = CopyKey(rawValue: "graduation.choice.deadline")
+
+    /// "You're in"
+    static let graduationWaitingTitle = CopyKey(rawValue: "graduation.waiting.title")
+
+    /// "Waiting to hear from the others. We'll let you know."
+    static let graduationWaitingBody = CopyKey(rawValue: "graduation.waiting.body")
+
+    /// "{count} of you are carrying on so far."
+    /// Placeholders: count
+    static let graduationWaitingCount = CopyKey(rawValue: "graduation.waiting.count")
+
+    /// "That's the cycle, then"
+    static let graduationDeclinedTitle = CopyKey(rawValue: "graduation.declined.title")
+
+    /// "Nothing more to do. If you want another pod later, it's here."
+    static let graduationDeclinedBody = CopyKey(rawValue: "graduation.declined.body")
+
+    /// "Change my mind"
+    static let graduationChange = CopyKey(rawValue: "graduation.change")
+
+    /// "{count} weeks, done"
+    /// Placeholders: count
+    static let pushCycleCompletedTitle = CopyKey(rawValue: "push.cycleCompleted.title")
+
+    /// "Your pod got to the end of the cycle."
+    static let pushCycleCompletedBody = CopyKey(rawValue: "push.cycleCompleted.body")
+
+    /// "Your pod is carrying on"
+    static let pushCycleContinuingTitle = CopyKey(rawValue: "push.cycleContinuing.title")
+
+    /// "A fresh cycle starts this week."
+    static let pushCycleContinuingBody = CopyKey(rawValue: "push.cycleContinuing.body")
+
     /// "You"
     static let podYou = CopyKey(rawValue: "pod.you")
 
@@ -409,6 +472,12 @@ public extension CopyKey {
 
     /// "One pod at a time, and yours is waiting for you."
     static let errorAlreadyInPodBody = CopyKey(rawValue: "error.alreadyInPod.body")
+
+    /// "That's already settled"
+    static let errorCycleChoiceClosedTitle = CopyKey(rawValue: "error.cycleChoiceClosed.title")
+
+    /// "Your pod's moved on from that choice. Have a look at where it's at."
+    static let errorCycleChoiceClosedBody = CopyKey(rawValue: "error.cycleChoiceClosed.body")
 
     /// "A few more words"
     static let errorGoalTooShortTitle = CopyKey(rawValue: "error.goalTooShort.title")
@@ -599,6 +668,25 @@ public extension CopyKey {
         .recoveryAlternateTitle,
         .recoveryAlternateBody,
         .recoveryAlternateNotYet,
+        .graduationTitle,
+        .graduationBody,
+        .graduationStreak,
+        .graduationStreakNone,
+        .graduationChoiceTitle,
+        .graduationChoiceBody,
+        .graduationChoiceYes,
+        .graduationChoiceNo,
+        .graduationChoiceDeadline,
+        .graduationWaitingTitle,
+        .graduationWaitingBody,
+        .graduationWaitingCount,
+        .graduationDeclinedTitle,
+        .graduationDeclinedBody,
+        .graduationChange,
+        .pushCycleCompletedTitle,
+        .pushCycleCompletedBody,
+        .pushCycleContinuingTitle,
+        .pushCycleContinuingBody,
         .podYou,
         .podSomeone,
         .pushPodFormedTitle,
@@ -660,6 +748,8 @@ public extension CopyKey {
         .a11yPostProof,
         .errorAlreadyInPodTitle,
         .errorAlreadyInPodBody,
+        .errorCycleChoiceClosedTitle,
+        .errorCycleChoiceClosedBody,
         .errorGoalTooShortTitle,
         .errorGoalTooShortBody,
         .a11yIntensityOption,

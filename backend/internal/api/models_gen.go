@@ -280,17 +280,22 @@ type PoolTicket struct {
 	NextWindowAt time.Time `json:"next_window_at"`
 }
 
+// `completed` and `dissolved` are not the same event and must never render the same.
+// A pod that finished its cycle graduated; a pod that dissolved stopped early. Only
+// the second one carries a reliability consequence, and only for members who were
+// inactive (ADR-019).
 type PodState string
 
 const (
 	PodStateForming   PodState = "forming"
 	PodStateActive    PodState = "active"
+	PodStateCompleted PodState = "completed"
 	PodStateDissolved PodState = "dissolved"
 )
 
 // KnownPodStates lists every value this build understands. A peer may send others.
 func KnownPodStates() []PodState {
-	return []PodState{PodStateForming, PodStateActive, PodStateDissolved}
+	return []PodState{PodStateForming, PodStateActive, PodStateCompleted, PodStateDissolved}
 }
 
 // IsKnown reports whether v is a value this build understands.
@@ -301,6 +306,46 @@ func (v PodState) IsKnown() bool {
 		}
 	}
 	return false
+}
+
+// A pod runs for a fixed number of weeks and then finishes. The client is given
+// counts and an instant, not a week index to do arithmetic on — "two weeks left"
+// must not be a date calculation on a device in the wrong timezone (`CLAUDE.md` §5).
+type Cycle struct {
+	// How long this pod's cycle is. Fixed when the pod forms.
+	LengthWeeks int `json:"length_weeks"`
+
+	// Weeks of the cycle that have closed. Not weeks the pod *completed* — the two
+	// differ and this one is the position in the cycle, not a measure of anybody.
+	WeeksCompleted int `json:"weeks_completed"`
+
+	// When the last week of the cycle closes, in the pod's zone.
+	EndsAt time.Time `json:"ends_at"`
+}
+
+// Who is carrying on after graduation.
+//
+// There is no per-member breakdown here, and there must never be one. "Alex is not
+// continuing" is the most shaming sentence this product could show, and a member id
+// next to a `false` is one join away from it. The count is enough to render the
+// screen; the identity is not needed and so is not sent (`CLAUDE.md` §2 rule 1).
+type Continuation struct {
+	// How many members have said they are carrying on.
+	Continuing int `json:"continuing"`
+
+	// How many have not answered yet. Silence is not a no — it holds the pod open
+	// until `decide_by` rather than closing it.
+	Undecided int `json:"undecided"`
+
+	// Whether *the caller* has answered. The only per-member fact here.
+	YouAnswered bool `json:"you_answered"`
+
+	// The caller's own answer, absent until they give one.
+	YouAreContinuing *bool `json:"you_are_continuing,omitempty"`
+
+	// After this, an unanswered pod closes. Closing is the default because holding
+	// someone in a pod they did not re-choose is the worse mistake.
+	DecideBy time.Time `json:"decide_by"`
 }
 
 type Pod struct {
@@ -315,8 +360,22 @@ type Pod struct {
 	// per-member equivalent anywhere in this API (`CLAUDE.md` §2 rule 3).
 	StreakWeeks int         `json:"streak_weeks"`
 	Members     []PodMember `json:"members"`
-	CreatedAt   time.Time   `json:"created_at"`
-	DissolvedAt *time.Time  `json:"dissolved_at,omitempty"`
+	Cycle       *Cycle      `json:"cycle,omitempty"`
+
+	// Present once the cycle has finished and the choice is open.
+	Continuation *Continuation `json:"continuation,omitempty"`
+	CreatedAt    time.Time     `json:"created_at"`
+
+	// When the cycle finished. Graduation, not an ending.
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	DissolvedAt *time.Time `json:"dissolved_at,omitempty"`
+}
+
+type ContinueRequest struct {
+	// Whether the caller wants another cycle with this pod. `false` is an ordinary
+	// answer, not a withdrawal — it is recorded and counted, and it is never
+	// attributed to them in any response.
+	Continuing bool `json:"continuing"`
 }
 
 // No reliability score, no band, no personal completion rate, no individual streak.

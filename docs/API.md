@@ -55,6 +55,7 @@ answers `501` with `code: not_implemented_yet` until its milestone lands.
 | M2 | `DELETE` | `/v1/pool` | `leavePool` | bearer |
 | M2 | `GET` | `/v1/pods/current` | `getCurrentPod` | bearer |
 | M2 | `GET` | `/v1/pods/{podId}` | `getPod` | bearer |
+| M6 | `POST` | `/v1/pods/{podId}/continue` | `continueCycle` | bearer |
 | M3 | `GET` | `/v1/pods/{podId}/weeks/current` | `getCurrentWeek` | bearer |
 | M3 | `GET` | `/v1/pods/{podId}/weeks` | `listWeeks` | bearer |
 | M3 | `PUT` | `/v1/pods/{podId}/weeks/{weekId}/action` | `setWeekAction` | bearer |
@@ -296,6 +297,35 @@ Milestone M2 · Requires a bearer access token.
 | `404` | [`ApiError`](#apierror) | No such resource, or it isn't the caller's. |
 | `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
 
+### `POST /v1/pods/{podId}/continue` — continueCycle
+
+**Say whether you are carrying on after graduation**  
+Milestone M6 · Requires a bearer access token.
+
+Answerable only while the pod is `completed` and before `continuation.decide_by`.
+
+A pod carries on when at least two members do — `CLAUDE.md` §6 is explicit that a
+working pair beats a forced trio, and that applies to a second cycle as much as to
+assembly. Anyone who does not carry on re-enters the pool with no penalty of any
+kind: choosing not to do another six weeks is a choice, not a miss.
+
+Answering twice replaces the previous answer while the choice is open.
+
+| Parameter | In | Required | Type |
+|---|---|---|---|
+| `podId` | path | yes | string |
+
+Request body: [`ContinueRequest`](#continuerequest)
+
+| Status | Body | |
+|---|---|---|
+| `200` | [`Pod`](#pod) | The pod, with the choice so far. |
+| `400` | [`ApiError`](#apierror) | The request was malformed. |
+| `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
+| `404` | [`ApiError`](#apierror) | No such resource, or it isn't the caller's. |
+| `409` | [`ApiError`](#apierror) | The pod is not waiting on this choice, or the deadline has passed. |
+| `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
+
 ## Week
 
 The weekly action and who is in.
@@ -498,6 +528,41 @@ A recurring window in the user's own timezone.
 | `start_minute` | `integer` | yes |  |
 | `end_minute` | `integer` | yes |  |
 
+### Continuation
+
+Who is carrying on after graduation.
+
+There is no per-member breakdown here, and there must never be one. "Alex is not
+continuing" is the most shaming sentence this product could show, and a member id
+next to a `false` is one join away from it. The count is enough to render the
+screen; the identity is not needed and so is not sent (`CLAUDE.md` §2 rule 1).
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `continuing` | `integer` | yes | How many members have said they are carrying on. |
+| `undecided` | `integer` | yes | How many have not answered yet. Silence is not a no — it holds the pod open until `decide_by` rather than closing it. |
+| `you_answered` | `boolean` | yes | Whether *the caller* has answered. The only per-member fact here. |
+| `you_are_continuing` | `boolean` |  | The caller's own answer, absent until they give one. |
+| `decide_by` | `string(date-time)` | yes | After this, an unanswered pod closes. Closing is the default because holding someone in a pod they did not re-choose is the worse mistake. |
+
+### ContinueRequest
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `continuing` | `boolean` | yes | Whether the caller wants another cycle with this pod. `false` is an ordinary answer, not a withdrawal — it is recorded and counted, and it is never attributed to them in any response. |
+
+### Cycle
+
+A pod runs for a fixed number of weeks and then finishes. The client is given
+counts and an instant, not a week index to do arithmetic on — "two weeks left"
+must not be a date calculation on a device in the wrong timezone (`CLAUDE.md` §5).
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `length_weeks` | `integer` | yes | How long this pod's cycle is. Fixed when the pod forms. |
+| `weeks_completed` | `integer` | yes | Weeks of the cycle that have closed. Not weeks the pod *completed* — the two differ and this one is the position in the cycle, not a measure of anybody. |
+| `ends_at` | `string(date-time)` | yes | When the last week of the cycle closes, in the pod's zone. |
+
 ### DevicePlatform
 
 One of: `ios`, `android`
@@ -620,7 +685,10 @@ One of: `posted`, `open`, `resting`
 | `timezone` | `string` | yes | The pod's shared zone. Cycles anchor here, not to each device. |
 | `streak_weeks` | `integer` | yes | Consecutive weeks the **pod** completed. Pod-level by design — there is no per-member equivalent anywhere in this API (`CLAUDE.md` §2 rule 3). |
 | `members` | [`PodMember`](#podmember)[] | yes |  |
+| `cycle` | [`Cycle`](#cycle) |  |  |
+| `continuation` | [`Continuation`](#continuation) |  | Present once the cycle has finished and the choice is open. |
 | `created_at` | `string(date-time)` | yes |  |
+| `completed_at` | `string(date-time)` |  | When the cycle finished. Graduation, not an ending. |
 | `dissolved_at` | `string(date-time)` |  |  |
 
 ### PodMember
@@ -637,7 +705,12 @@ If a future feature seems to need one here, it doesn't — read `CLAUDE.md` §6 
 
 ### PodState
 
-One of: `forming`, `active`, `dissolved`
+`completed` and `dissolved` are not the same event and must never render the same.
+A pod that finished its cycle graduated; a pod that dissolved stopped early. Only
+the second one carries a reliability consequence, and only for members who were
+inactive (ADR-019).
+
+One of: `forming`, `active`, `completed`, `dissolved`
 
 ### PoolTicket
 

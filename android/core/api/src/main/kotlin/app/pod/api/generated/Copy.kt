@@ -348,6 +348,107 @@ public object CopyKey {
     public const val RECOVERY_ALTERNATE_NOT_YET: String = "recovery.alternate.notYet"
 
     /**
+     * "{count} weeks, done"
+     * Placeholders: count
+     */
+    public const val GRADUATION_TITLE: String = "graduation.title"
+
+    /**
+     * "That's the cycle. Your pod got to the end of it together."
+     */
+    public const val GRADUATION_BODY: String = "graduation.body"
+
+    /**
+     * "{count} weeks where everyone was in."
+     * Placeholders: count
+     */
+    public const val GRADUATION_STREAK: String = "graduation.streak"
+
+    /**
+     * "Some weeks landed, some didn't. You still got here."
+     */
+    public const val GRADUATION_STREAK_NONE: String = "graduation.streakNone"
+
+    /**
+     * "Another {count}?"
+     * Placeholders: count
+     */
+    public const val GRADUATION_CHOICE_TITLE: String = "graduation.choice.title"
+
+    /**
+     * "Same pod, same goal, a fresh cycle. Everyone decides for themselves."
+     */
+    public const val GRADUATION_CHOICE_BODY: String = "graduation.choice.body"
+
+    /**
+     * "I'm in for another"
+     */
+    public const val GRADUATION_CHOICE_YES: String = "graduation.choice.yes"
+
+    /**
+     * "I'll stop here"
+     */
+    public const val GRADUATION_CHOICE_NO: String = "graduation.choice.no"
+
+    /**
+     * "You can decide any time before {date}."
+     * Placeholders: date
+     */
+    public const val GRADUATION_CHOICE_DEADLINE: String = "graduation.choice.deadline"
+
+    /**
+     * "You're in"
+     */
+    public const val GRADUATION_WAITING_TITLE: String = "graduation.waiting.title"
+
+    /**
+     * "Waiting to hear from the others. We'll let you know."
+     */
+    public const val GRADUATION_WAITING_BODY: String = "graduation.waiting.body"
+
+    /**
+     * "{count} of you are carrying on so far."
+     * Placeholders: count
+     */
+    public const val GRADUATION_WAITING_COUNT: String = "graduation.waiting.count"
+
+    /**
+     * "That's the cycle, then"
+     */
+    public const val GRADUATION_DECLINED_TITLE: String = "graduation.declined.title"
+
+    /**
+     * "Nothing more to do. If you want another pod later, it's here."
+     */
+    public const val GRADUATION_DECLINED_BODY: String = "graduation.declined.body"
+
+    /**
+     * "Change my mind"
+     */
+    public const val GRADUATION_CHANGE: String = "graduation.change"
+
+    /**
+     * "{count} weeks, done"
+     * Placeholders: count
+     */
+    public const val PUSH_CYCLE_COMPLETED_TITLE: String = "push.cycleCompleted.title"
+
+    /**
+     * "Your pod got to the end of the cycle."
+     */
+    public const val PUSH_CYCLE_COMPLETED_BODY: String = "push.cycleCompleted.body"
+
+    /**
+     * "Your pod is carrying on"
+     */
+    public const val PUSH_CYCLE_CONTINUING_TITLE: String = "push.cycleContinuing.title"
+
+    /**
+     * "A fresh cycle starts this week."
+     */
+    public const val PUSH_CYCLE_CONTINUING_BODY: String = "push.cycleContinuing.body"
+
+    /**
      * "You"
      */
     public const val POD_YOU: String = "pod.you"
@@ -659,6 +760,16 @@ public object CopyKey {
     public const val ERROR_ALREADY_IN_POD_BODY: String = "error.alreadyInPod.body"
 
     /**
+     * "That's already settled"
+     */
+    public const val ERROR_CYCLE_CHOICE_CLOSED_TITLE: String = "error.cycleChoiceClosed.title"
+
+    /**
+     * "Your pod's moved on from that choice. Have a look at where it's at."
+     */
+    public const val ERROR_CYCLE_CHOICE_CLOSED_BODY: String = "error.cycleChoiceClosed.body"
+
+    /**
      * "A few more words"
      */
     public const val ERROR_GOAL_TOO_SHORT_TITLE: String = "error.goalTooShort.title"
@@ -919,6 +1030,25 @@ public object CopyKey {
         RECOVERY_ALTERNATE_TITLE,
         RECOVERY_ALTERNATE_BODY,
         RECOVERY_ALTERNATE_NOT_YET,
+        GRADUATION_TITLE,
+        GRADUATION_BODY,
+        GRADUATION_STREAK,
+        GRADUATION_STREAK_NONE,
+        GRADUATION_CHOICE_TITLE,
+        GRADUATION_CHOICE_BODY,
+        GRADUATION_CHOICE_YES,
+        GRADUATION_CHOICE_NO,
+        GRADUATION_CHOICE_DEADLINE,
+        GRADUATION_WAITING_TITLE,
+        GRADUATION_WAITING_BODY,
+        GRADUATION_WAITING_COUNT,
+        GRADUATION_DECLINED_TITLE,
+        GRADUATION_DECLINED_BODY,
+        GRADUATION_CHANGE,
+        PUSH_CYCLE_COMPLETED_TITLE,
+        PUSH_CYCLE_COMPLETED_BODY,
+        PUSH_CYCLE_CONTINUING_TITLE,
+        PUSH_CYCLE_CONTINUING_BODY,
         POD_YOU,
         POD_SOMEONE,
         PUSH_POD_FORMED_TITLE,
@@ -980,6 +1110,8 @@ public object CopyKey {
         A11Y_POST_PROOF,
         ERROR_ALREADY_IN_POD_TITLE,
         ERROR_ALREADY_IN_POD_BODY,
+        ERROR_CYCLE_CHOICE_CLOSED_TITLE,
+        ERROR_CYCLE_CHOICE_CLOSED_BODY,
         ERROR_GOAL_TOO_SHORT_TITLE,
         ERROR_GOAL_TOO_SHORT_BODY,
         A11Y_INTENSITY_OPTION,

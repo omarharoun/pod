@@ -537,6 +537,10 @@ public struct PoolTicket: Codable, Hashable, Sendable {
     }
 }
 
+/// `completed` and `dissolved` are not the same event and must never render the same.
+/// A pod that finished its cycle graduated; a pod that dissolved stopped early. Only
+/// the second one carries a reliability consequence, and only for members who were
+/// inactive (ADR-019).
 ///
 /// Open enum: an unrecognised value from a newer server decodes rather than throwing.
 public struct PodState: RawRepresentable, Codable, Hashable, Sendable {
@@ -548,12 +552,91 @@ public struct PodState: RawRepresentable, Codable, Hashable, Sendable {
 
     public static let forming = PodState(rawValue: "forming")
     public static let active = PodState(rawValue: "active")
+    public static let completed = PodState(rawValue: "completed")
     public static let dissolved = PodState(rawValue: "dissolved")
 
     /// Every value this build knows about, in contract order.
-    public static let knownCases: [PodState] = [.forming, .active, .dissolved]
+    public static let knownCases: [PodState] = [.forming, .active, .completed, .dissolved]
 
     public var isKnown: Bool { Self.knownCases.contains(self) }
+}
+
+/// A pod runs for a fixed number of weeks and then finishes. The client is given
+/// counts and an instant, not a week index to do arithmetic on — "two weeks left"
+/// must not be a date calculation on a device in the wrong timezone (`CLAUDE.md` §5).
+public struct Cycle: Codable, Hashable, Sendable {
+    /// How long this pod's cycle is. Fixed when the pod forms.
+    public let lengthWeeks: Int
+
+    /// Weeks of the cycle that have closed. Not weeks the pod *completed* — the two
+    /// differ and this one is the position in the cycle, not a measure of anybody.
+    public let weeksCompleted: Int
+
+    /// When the last week of the cycle closes, in the pod's zone.
+    public let endsAt: Date
+
+    public init(
+        lengthWeeks: Int,
+        weeksCompleted: Int,
+        endsAt: Date
+    ) {
+        self.lengthWeeks = lengthWeeks
+        self.weeksCompleted = weeksCompleted
+        self.endsAt = endsAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case lengthWeeks = "length_weeks"
+        case weeksCompleted = "weeks_completed"
+        case endsAt = "ends_at"
+    }
+}
+
+/// Who is carrying on after graduation.
+///
+/// There is no per-member breakdown here, and there must never be one. "Alex is not
+/// continuing" is the most shaming sentence this product could show, and a member id
+/// next to a `false` is one join away from it. The count is enough to render the
+/// screen; the identity is not needed and so is not sent (`CLAUDE.md` §2 rule 1).
+public struct Continuation: Codable, Hashable, Sendable {
+    /// How many members have said they are carrying on.
+    public let continuing: Int
+
+    /// How many have not answered yet. Silence is not a no — it holds the pod open
+    /// until `decide_by` rather than closing it.
+    public let undecided: Int
+
+    /// Whether *the caller* has answered. The only per-member fact here.
+    public let youAnswered: Bool
+
+    /// The caller's own answer, absent until they give one.
+    public let youAreContinuing: Bool?
+
+    /// After this, an unanswered pod closes. Closing is the default because holding
+    /// someone in a pod they did not re-choose is the worse mistake.
+    public let decideBy: Date
+
+    public init(
+        continuing: Int,
+        undecided: Int,
+        youAnswered: Bool,
+        youAreContinuing: Bool? = nil,
+        decideBy: Date
+    ) {
+        self.continuing = continuing
+        self.undecided = undecided
+        self.youAnswered = youAnswered
+        self.youAreContinuing = youAreContinuing
+        self.decideBy = decideBy
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case continuing
+        case undecided
+        case youAnswered = "you_answered"
+        case youAreContinuing = "you_are_continuing"
+        case decideBy = "decide_by"
+    }
 }
 
 public struct Pod: Codable, Hashable, Sendable {
@@ -568,7 +651,14 @@ public struct Pod: Codable, Hashable, Sendable {
     /// per-member equivalent anywhere in this API (`CLAUDE.md` §2 rule 3).
     public let streakWeeks: Int
     public let members: [PodMember]
+    public let cycle: Cycle?
+
+    /// Present once the cycle has finished and the choice is open.
+    public let continuation: Continuation?
     public let createdAt: Date
+
+    /// When the cycle finished. Graduation, not an ending.
+    public let completedAt: Date?
     public let dissolvedAt: Date?
 
     public init(
@@ -578,7 +668,10 @@ public struct Pod: Codable, Hashable, Sendable {
         timezone: String,
         streakWeeks: Int,
         members: [PodMember],
+        cycle: Cycle? = nil,
+        continuation: Continuation? = nil,
         createdAt: Date,
+        completedAt: Date? = nil,
         dissolvedAt: Date? = nil
     ) {
         self.id = id
@@ -587,7 +680,10 @@ public struct Pod: Codable, Hashable, Sendable {
         self.timezone = timezone
         self.streakWeeks = streakWeeks
         self.members = members
+        self.cycle = cycle
+        self.continuation = continuation
         self.createdAt = createdAt
+        self.completedAt = completedAt
         self.dissolvedAt = dissolvedAt
     }
 
@@ -598,8 +694,24 @@ public struct Pod: Codable, Hashable, Sendable {
         case timezone
         case streakWeeks = "streak_weeks"
         case members
+        case cycle
+        case continuation
         case createdAt = "created_at"
+        case completedAt = "completed_at"
         case dissolvedAt = "dissolved_at"
+    }
+}
+
+public struct ContinueRequest: Codable, Hashable, Sendable {
+    /// Whether the caller wants another cycle with this pod. `false` is an ordinary
+    /// answer, not a withdrawal — it is recorded and counted, and it is never
+    /// attributed to them in any response.
+    public let continuing: Bool
+
+    public init(
+        continuing: Bool
+    ) {
+        self.continuing = continuing
     }
 }
 
