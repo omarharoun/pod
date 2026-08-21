@@ -88,13 +88,12 @@ jobs:
       # SwiftUI screens and Info.plist live — including the usage descriptions whose
       # absence terminated the app on proof capture (ADR-025). Nothing but a real build
       # catches that class of problem.
+      # Deliberately not piped through xcpretty: a pipe takes the exit code from the
+      # formatter, which returns 0 whatever xcodebuild did, so a failed build would pass.
       - name: Build the app target
         run: |
           brew install xcodegen
           cd ios && xcodegen generate
-          xcodebuild -project Pod.xcodeproj -scheme Pod \
-            -destination 'platform=iOS Simulator,name=iPhone 16' \
-            -skipPackagePluginValidation build | xcpretty || \
           xcodebuild -project Pod.xcodeproj -scheme Pod \
             -destination 'platform=iOS Simulator,name=iPhone 16' build
 
