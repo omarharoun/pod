@@ -10,21 +10,30 @@ import (
 	"github.com/omarharoun/pod/backend/internal/auth"
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
+	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
 
 type Server struct {
-	auth  *auth.Service
-	store store.Store
-	clock clock.Clock
-	cfg   config.Config
-	log   *slog.Logger
+	auth       *auth.Service
+	onboarding *onboarding.Service
+	store      store.Store
+	clock      clock.Clock
+	cfg        config.Config
+	log        *slog.Logger
 
 	handler http.Handler
 }
 
-func New(authService *auth.Service, s store.Store, c clock.Clock, cfg config.Config, log *slog.Logger) *Server {
-	srv := &Server{auth: authService, store: s, clock: c, cfg: cfg, log: log}
+func New(
+	authService *auth.Service,
+	onboardingService *onboarding.Service,
+	s store.Store,
+	c clock.Clock,
+	cfg config.Config,
+	log *slog.Logger,
+) *Server {
+	srv := &Server{auth: authService, onboarding: onboardingService, store: s, clock: c, cfg: cfg, log: log}
 	srv.handler = srv.withRecovery(srv.withRequestID(srv.withLogging(srv.routes())))
 	return srv
 }

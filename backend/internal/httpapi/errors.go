@@ -63,6 +63,14 @@ func rateLimited(retryAfterSeconds int) failure {
 	}
 }
 
+func goalTooShort() failure {
+	return failure{status: http.StatusBadRequest, code: api.ErrorCodeBadRequest, copyKey: copy.KeyErrorGoalTooShortBody}
+}
+
+func alreadyInPod() failure {
+	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorAlreadyInPodBody}
+}
+
 func notFound() failure {
 	return failure{status: http.StatusNotFound, code: api.ErrorCodeNotFound, copyKey: copy.KeyErrorServerBody}
 }

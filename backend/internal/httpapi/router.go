@@ -18,14 +18,16 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/auth/logout", s.requireAuth(s.handleAuthLogout))
 	mux.HandleFunc("GET /v1/me", s.requireAuth(s.handleMe))
 
+	// ---- M2: implemented ------------------------------------------------------
+	mux.HandleFunc("GET /v1/onboarding/state", s.requireAuth(s.handleOnboardingState))
+	mux.HandleFunc("PUT /v1/onboarding/intent", s.requireAuth(s.handlePutIntent))
+	mux.HandleFunc("POST /v1/pool", s.requireAuth(s.handleJoinPool))
+	mux.HandleFunc("DELETE /v1/pool", s.requireAuth(s.handleLeavePool))
+	mux.HandleFunc("GET /v1/pods/current", s.requireAuth(s.handleCurrentPod))
+	mux.HandleFunc("GET /v1/pods/{podId}", s.requireAuth(s.handleGetPod))
+
 	// ---- Specified, not yet built ---------------------------------------------
 	for _, route := range []string{
-		"GET /v1/onboarding/state",                                    // M2
-		"PUT /v1/onboarding/intent",                                   // M2
-		"POST /v1/pool",                                               // M2
-		"DELETE /v1/pool",                                             // M2
-		"GET /v1/pods/current",                                        // M2
-		"GET /v1/pods/{podId}",                                        // M2
 		"GET /v1/pods/{podId}/weeks/current",                          // M3
 		"GET /v1/pods/{podId}/weeks",                                  // M3
 		"POST /v1/pods/{podId}/weeks/{weekId}/proof",                  // M3

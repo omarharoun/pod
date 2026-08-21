@@ -341,3 +341,100 @@ match.** Everything else in ADR-005 stands.
   are one decision, not two, and ADR-005 is the proof of how easily they come apart.
 * The rungs are copy, so they are covered by `tools/copylint` and by both clients'
   catalogue tests.
+
+---
+
+## ADR-011 — The embedder is hashed bag-of-words until it isn't
+
+**Date:** 2026-08-21 · **Status:** accepted, with a known expiry · **Milestone:** M2
+
+**Context.** The 0.40 weight in `CLAUDE.md` §6 is embedding cosine over goal text. A real
+embedding means a hosted model, which means a network dependency, an API key, a cost per
+call and a vendor decision — none of which M2 needs in order to prove the pipeline.
+
+**Decision.** `internal/embed.Hashing`: hashed word and word-pair features projected into
+256 dimensions and normalised. Deterministic, dependency-free, and it makes the matching
+job run end to end today.
+
+It is a real implementation, not a stub — but it matches on shared vocabulary, not on
+meaning. "Run every morning" and "start jogging daily" score **-0.07** against each other,
+which is to say the 0.40 signal is close to noise for anyone who does not happen to use
+the same words as their future pod-mate. There is a test that prints exactly that number
+so nobody discovers it by accident.
+
+Embedding happens at intent-save time, not in the matching job, so a matching window never
+waits on a model call and a model outage delays nobody's onboarding.
+
+**Consequences.**
+* **This must be replaced before real users are matched.** Matching people on vocabulary
+  overlap is not the product described in §1.
+* Swapping it is one line at the two `embed.Hashing{}` call sites plus a backfill of the
+  `intents.embedding` column, which is why `Dimensions` is a constant in the package
+  rather than inferred from the stored data.
+* Until then, the other three signals are carrying the match, and the category hard filter
+  is doing more work than §6 intended.
+
+---
+
+## ADR-012 — The third-member threshold is 0.55
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M2
+
+**Context.** `CLAUDE.md` §6 says to pair the highest scores, "then attempt a third above
+threshold", and never names the threshold. Without one there is no assembly step.
+
+**Decision.** `matching.DefaultThirdThreshold = 0.55`, and a third is judged on its
+**weaker** pairing, not the average of the two.
+
+The weaker pairing is the substantive half of this decision. A third who fits one member
+brilliantly and the other not at all produces a pod of two plus a spectator, which is the
+shape §2 rule 1 is most likely to be violated in — the spectator is the one who quietly
+stops posting.
+
+0.55 sits above what two people with nothing in common but the category can score, and
+below what a genuinely good third scores. Unlike the four weights, it is a parameter
+(`matching.Options`) rather than a constant, because it is the one number here that
+genuinely wants tuning against real pools.
+
+**Consequences.**
+* Raising it produces more pairs, lowering it produces more trios. `CLAUDE.md` §6 is clear
+  which way to err: **if no third clears it, ship a pod of two.**
+* Tuning it is not a §8 escalation — it is not a weight and not a band. Changing any of
+  the four weights still is.
+
+---
+
+## ADR-013 — The matching queue is a Postgres table, not Redis
+
+**Date:** 2026-08-21 · **Status:** accepted · **Deviates from CLAUDE.md §5** · **Milestone:** M2
+
+**Context.** `CLAUDE.md` §5 nominates "Redis for the matching queue". This is the one place
+M2 does not follow a platform standard, so it needs to be visible rather than discovered.
+
+**Decision.** The pool is `pool_tickets` in Postgres.
+
+The reasoning is about what the matching job actually does. It is an hourly batch that
+reads *every* waiting person's category, intensity, timezone, availability and embedding —
+all of which are already Postgres rows — and then writes pods and dequeues their members
+**in one transaction**. Redis holding the queue would mean the job reads ids from Redis,
+joins them against Postgres, and then has two systems to keep consistent across a failure
+between the dequeue and the pod insert. The failure mode is someone in a pod they cannot
+see, or queued for a second one.
+
+The transactional dequeue is not a nicety: `pod_members` has a partial unique index that
+allows one active pod per person, so a concurrent window losing the race fails cleanly
+rather than producing a duplicate. That guarantee needs the queue and the pods in the same
+database.
+
+Redis earns its place when the queue is hot — high write rate, low latency, pub/sub. An
+hourly batch over a table is none of those things.
+
+**Consequences.**
+* One fewer production dependency for M2, and the matching job is testable against a plain
+  Postgres.
+* `Store` exposes the queue behind `JoinPool`/`LeavePool`/`ListPoolCandidates`, so moving
+  to Redis later is contained to the store, not spread through the job.
+* If matching ever needs to be closer to real time than hourly — which §5 says it should
+  not — this decision gets revisited.
+* **Overturn this if the Redis line in §5 was load-bearing for a reason not visible here.**
+  It is one table and one implementation.

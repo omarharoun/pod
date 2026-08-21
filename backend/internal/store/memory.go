@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,10 @@ type Memory struct {
 	usersByKey map[string]string // normalised email -> user id
 	challenges map[string]AuthChallenge
 	tokens     map[string]RefreshToken
+	intents    map[string]Intent
+	pool       map[string]PoolTicket
+	pods       map[string]Pod
+	podMembers map[string][]PodMember
 	nextID     int
 
 	// FailPing makes Ping report the datastore as unreachable, for health tests.
@@ -28,6 +33,10 @@ func NewMemory() *Memory {
 		usersByKey: map[string]string{},
 		challenges: map[string]AuthChallenge{},
 		tokens:     map[string]RefreshToken{},
+		intents:    map[string]Intent{},
+		pool:       map[string]PoolTicket{},
+		pods:       map[string]Pod{},
+		podMembers: map[string][]PodMember{},
 	}
 }
 
@@ -183,4 +192,191 @@ func (m *Memory) RevokeFamily(_ context.Context, familyID string, at time.Time) 
 // or plus-addressing: those are the user's addresses to distinguish, not ours.
 func NormaliseEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// ---------------------------------------------------------------- M2: onboarding
+
+func (m *Memory) SetDisplayName(_ context.Context, userID, displayName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[userID]
+	if !ok {
+		return ErrNotFound
+	}
+	u.DisplayName = displayName
+	m.users[userID] = u
+	return nil
+}
+
+func (m *Memory) UpsertIntent(_ context.Context, intent Intent) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.users[intent.UserID]; !ok {
+		return ErrNotFound
+	}
+	if m.intents == nil {
+		m.intents = map[string]Intent{}
+	}
+	m.intents[intent.UserID] = intent
+	u := m.users[intent.UserID]
+	u.OnboardingComplete = true
+	m.users[intent.UserID] = u
+	return nil
+}
+
+func (m *Memory) GetIntent(_ context.Context, userID string) (Intent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	intent, ok := m.intents[userID]
+	if !ok {
+		return Intent{}, ErrNotFound
+	}
+	return intent, nil
+}
+
+func (m *Memory) JoinPool(_ context.Context, userID string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.intents[userID]; !ok {
+		return ErrNotFound
+	}
+	if m.activePodOf(userID) != "" {
+		return ErrConflict
+	}
+	if m.pool == nil {
+		m.pool = map[string]PoolTicket{}
+	}
+	if _, queued := m.pool[userID]; queued {
+		return ErrConflict
+	}
+	m.pool[userID] = PoolTicket{UserID: userID, QueuedAt: at}
+	return nil
+}
+
+func (m *Memory) LeavePool(_ context.Context, userID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.pool, userID)
+	return nil
+}
+
+func (m *Memory) GetPoolTicket(_ context.Context, userID string) (PoolTicket, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ticket, ok := m.pool[userID]
+	if !ok {
+		return PoolTicket{}, ErrNotFound
+	}
+	return ticket, nil
+}
+
+func (m *Memory) ListPoolCandidates(_ context.Context, limit int) ([]PoolCandidate, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make([]PoolCandidate, 0, len(m.pool))
+	for userID, ticket := range m.pool {
+		intent, ok := m.intents[userID]
+		if !ok {
+			continue
+		}
+		out = append(out, PoolCandidate{
+			UserID:       userID,
+			GoalCategory: intent.GoalCategory,
+			Intensity:    intent.Intensity,
+			Timezone:     intent.Timezone,
+			SelfReport:   intent.SelfReport,
+			Availability: intent.AvailabilityWindows,
+			Embedding:    intent.Embedding,
+			TenureWeeks:  tenureWeeks(m.users[userID].CreatedAt, ticket.QueuedAt),
+			QueuedAt:     ticket.QueuedAt,
+		})
+	}
+	// Oldest first, then by id, so the pool order is stable and the job reproducible.
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].QueuedAt.Equal(out[j].QueuedAt) {
+			return out[i].QueuedAt.Before(out[j].QueuedAt)
+		}
+		return out[i].UserID < out[j].UserID
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (m *Memory) CreatePod(_ context.Context, pod Pod, memberIDs []string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, id := range memberIDs {
+		if m.activePodOf(id) != "" {
+			return ErrConflict
+		}
+	}
+	if m.pods == nil {
+		m.pods = map[string]Pod{}
+		m.podMembers = map[string][]PodMember{}
+	}
+	members := make([]PodMember, 0, len(memberIDs))
+	for _, id := range memberIDs {
+		members = append(members, PodMember{UserID: id, DisplayName: m.users[id].DisplayName, JoinedAt: at})
+		delete(m.pool, id)
+	}
+	pod.Members = members
+	m.pods[pod.ID] = pod
+	m.podMembers[pod.ID] = members
+	return nil
+}
+
+func (m *Memory) GetPodForMember(_ context.Context, podID, userID string) (Pod, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pod, ok := m.pods[podID]
+	if !ok {
+		return Pod{}, ErrNotFound
+	}
+	for _, member := range m.podMembers[podID] {
+		if member.UserID == userID {
+			pod.Members = m.podMembers[podID]
+			return pod, nil
+		}
+	}
+	// Not a member: the same answer as no such pod, so pod ids cannot be probed.
+	return Pod{}, ErrNotFound
+}
+
+func (m *Memory) GetActivePod(_ context.Context, userID string) (Pod, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	podID := m.activePodOf(userID)
+	if podID == "" {
+		return Pod{}, ErrNotFound
+	}
+	pod := m.pods[podID]
+	pod.Members = m.podMembers[podID]
+	return pod, nil
+}
+
+// activePodOf must be called with the lock held.
+func (m *Memory) activePodOf(userID string) string {
+	for podID, members := range m.podMembers {
+		if m.pods[podID].State == PodStateDissolved {
+			continue
+		}
+		for _, member := range members {
+			if member.UserID == userID {
+				return podID
+			}
+		}
+	}
+	return ""
+}
+
+// tenureWeeks is whole weeks between two instants, never negative.
+func tenureWeeks(since, now time.Time) int {
+	if since.IsZero() || now.Before(since) {
+		return 0
+	}
+	return int(now.Sub(since).Hours() / (24 * 7))
 }

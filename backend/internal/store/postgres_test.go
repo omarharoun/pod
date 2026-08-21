@@ -308,3 +308,226 @@ func TestMemoryAndPostgresAgree(t *testing.T) {
 		t.Run(tc.name+"/memory", func(t *testing.T) { tc.run(t, memory) })
 	}
 }
+
+// ---------------------------------------------------------------- M2: onboarding
+
+func seedUser(t testing.TB, db *store.Postgres) store.User {
+	t.Helper()
+	user, err := db.UpsertUserByEmail(context.Background(), uniqueEmail(t), time.Now().UTC().Add(-21*24*time.Hour))
+	if err != nil {
+		t.Fatalf("UpsertUserByEmail: %v", err)
+	}
+	return user
+}
+
+func seedIntent(t testing.TB, db *store.Postgres, userID string, mutate ...func(*store.Intent)) store.Intent {
+	t.Helper()
+	intent := store.Intent{
+		UserID:       userID,
+		GoalText:     "finally sort out the spare room",
+		GoalCategory: "home",
+		Intensity:    3,
+		Timezone:     "Europe/Lisbon",
+		SelfReport:   "sometimes",
+		AvailabilityWindows: []store.AvailabilityWindow{
+			{DayOfWeek: 5, StartMinute: 600, EndMinute: 720},
+		},
+		Embedding: []float32{0.1, 0.2, 0.3},
+		UpdatedAt: time.Now().UTC().Truncate(time.Microsecond),
+	}
+	for _, m := range mutate {
+		m(&intent)
+	}
+	if err := db.UpsertIntent(context.Background(), intent); err != nil {
+		t.Fatalf("UpsertIntent: %v", err)
+	}
+	return intent
+}
+
+func TestPostgresIntentRoundTripAndReplace(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	user := seedUser(t, db)
+
+	written := seedIntent(t, db, user.ID)
+	got, err := db.GetIntent(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetIntent: %v", err)
+	}
+	if got.GoalText != written.GoalText || got.Intensity != written.Intensity || got.Timezone != written.Timezone {
+		t.Fatalf("got %+v", got)
+	}
+	if len(got.AvailabilityWindows) != 1 || got.AvailabilityWindows[0].StartMinute != 600 {
+		t.Fatalf("availability round trip: %+v", got.AvailabilityWindows)
+	}
+	if len(got.Embedding) != 3 {
+		t.Fatalf("embedding round trip: %+v", got.Embedding)
+	}
+
+	// Saving an intent completes onboarding.
+	refreshed, err := db.GetUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetUser: %v", err)
+	}
+	if !refreshed.OnboardingComplete {
+		t.Error("onboarding_complete should be true once an intent exists")
+	}
+
+	// A change of mind replaces the row rather than adding a second goal.
+	seedIntent(t, db, user.ID, func(i *store.Intent) {
+		i.GoalText = "learn to make bread"
+		i.GoalCategory = "creative"
+	})
+	replaced, err := db.GetIntent(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetIntent: %v", err)
+	}
+	if replaced.GoalText != "learn to make bread" || replaced.GoalCategory != "creative" {
+		t.Fatalf("got %+v", replaced)
+	}
+}
+
+func TestPostgresPoolLifecycle(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	user := seedUser(t, db)
+	seedIntent(t, db, user.ID)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	if err := db.JoinPool(ctx, user.ID, now); err != nil {
+		t.Fatalf("JoinPool: %v", err)
+	}
+	// Re-joining loses, so the original place in the queue survives.
+	if err := db.JoinPool(ctx, user.ID, now.Add(time.Hour)); err != store.ErrConflict {
+		t.Fatalf("second JoinPool: got %v, want ErrConflict", err)
+	}
+	ticket, err := db.GetPoolTicket(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetPoolTicket: %v", err)
+	}
+	if !ticket.QueuedAt.Equal(now) {
+		t.Fatalf("queued_at moved to %v — re-joining jumped the queue", ticket.QueuedAt)
+	}
+
+	if err := db.LeavePool(ctx, user.ID); err != nil {
+		t.Fatalf("LeavePool: %v", err)
+	}
+	if err := db.LeavePool(ctx, user.ID); err != nil {
+		t.Fatalf("LeavePool should be idempotent, got %v", err)
+	}
+	if _, err := db.GetPoolTicket(ctx, user.ID); err != store.ErrNotFound {
+		t.Fatalf("got %v, want ErrNotFound", err)
+	}
+}
+
+func TestPostgresPoolCandidatesCarryEverythingMatchingNeeds(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	user := seedUser(t, db)
+	seedIntent(t, db, user.ID)
+	now := time.Now().UTC()
+	if err := db.JoinPool(ctx, user.ID, now); err != nil {
+		t.Fatalf("JoinPool: %v", err)
+	}
+
+	candidates, err := db.ListPoolCandidates(ctx, 0)
+	if err != nil {
+		t.Fatalf("ListPoolCandidates: %v", err)
+	}
+	var mine *store.PoolCandidate
+	for i := range candidates {
+		if candidates[i].UserID == user.ID {
+			mine = &candidates[i]
+		}
+	}
+	if mine == nil {
+		t.Fatal("the queued user is not in the candidate list")
+	}
+	if mine.GoalCategory != "home" || mine.Intensity != 3 || mine.Timezone != "Europe/Lisbon" || mine.SelfReport != "sometimes" {
+		t.Fatalf("got %+v", *mine)
+	}
+	if len(mine.Availability) != 1 || len(mine.Embedding) != 3 {
+		t.Fatalf("availability/embedding did not survive: %+v", *mine)
+	}
+	// Seeded three weeks ago.
+	if mine.TenureWeeks != 3 {
+		t.Errorf("tenure weeks = %d, want 3", mine.TenureWeeks)
+	}
+}
+
+func TestPostgresCreatePodDequeuesAndScopesVisibility(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	first, second := seedUser(t, db), seedUser(t, db)
+	outsider := seedUser(t, db)
+	for _, u := range []store.User{first, second} {
+		seedIntent(t, db, u.ID)
+		if err := db.JoinPool(ctx, u.ID, now); err != nil {
+			t.Fatalf("JoinPool: %v", err)
+		}
+	}
+
+	podID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatalf("ids.NewUUID: %v", err)
+	}
+	pod := store.Pod{ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: "Europe/Lisbon", CreatedAt: now}
+	if err := db.CreatePod(ctx, pod, []string{first.ID, second.ID}, now); err != nil {
+		t.Fatalf("CreatePod: %v", err)
+	}
+
+	for _, u := range []store.User{first, second} {
+		if _, err := db.GetPoolTicket(ctx, u.ID); err != store.ErrNotFound {
+			t.Errorf("%s is still queued after being matched: %v", u.ID, err)
+		}
+		got, err := db.GetActivePod(ctx, u.ID)
+		if err != nil {
+			t.Fatalf("GetActivePod: %v", err)
+		}
+		if got.ID != podID || len(got.Members) != 2 || got.StreakWeeks != 0 {
+			t.Fatalf("got %+v", got)
+		}
+	}
+
+	// Pod-only visibility, enforced in the query.
+	if _, err := db.GetPodForMember(ctx, podID, outsider.ID); err != store.ErrNotFound {
+		t.Fatalf("an outsider read the pod: %v", err)
+	}
+	if _, err := db.GetActivePod(ctx, outsider.ID); err != store.ErrNotFound {
+		t.Fatalf("an outsider has an active pod: %v", err)
+	}
+}
+
+// One free pod, forever — and until the paywall exists in M7, exactly one, enforced by a
+// partial unique index rather than trusted to a handler.
+func TestPostgresRefusesASecondActivePod(t *testing.T) {
+	db := newPostgres(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	user, other := seedUser(t, db), seedUser(t, db)
+
+	makePod := func() error {
+		podID, err := ids.NewUUID()
+		if err != nil {
+			t.Fatalf("ids.NewUUID: %v", err)
+		}
+		pod := store.Pod{ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: "UTC", CreatedAt: now}
+		return db.CreatePod(ctx, pod, []string{user.ID, other.ID}, now)
+	}
+	if err := makePod(); err != nil {
+		t.Fatalf("first pod: %v", err)
+	}
+	if err := makePod(); err != store.ErrConflict {
+		t.Fatalf("second pod: got %v, want ErrConflict", err)
+	}
+	// And the failed attempt left nothing behind.
+	pod, err := db.GetActivePod(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetActivePod: %v", err)
+	}
+	if len(pod.Members) != 2 {
+		t.Fatalf("pod has %d members after a failed second insert", len(pod.Members))
+	}
+}

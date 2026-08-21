@@ -59,7 +59,81 @@ func (t RefreshToken) Usable(now time.Time) bool {
 	return t.RotatedAt == nil && t.RevokedAt == nil && now.Before(t.ExpiresAt)
 }
 
-// Store is everything the M1 service needs from persistence. It grows a method per
+// AvailabilityWindow is a recurring window in the person's own timezone.
+type AvailabilityWindow struct {
+	DayOfWeek   int `json:"day_of_week"`
+	StartMinute int `json:"start_minute"`
+	EndMinute   int `json:"end_minute"`
+}
+
+// Intent is the one thing someone is working on. One per person: changing it replaces
+// the row, because a change of mind is not a second goal.
+type Intent struct {
+	UserID              string
+	GoalText            string
+	GoalCategory        string
+	Intensity           int
+	Timezone            string
+	SelfReport          string
+	AvailabilityWindows []AvailabilityWindow
+	Embedding           []float32
+	UpdatedAt           time.Time
+}
+
+// PoolTicket is a place in the queue for the next matching window.
+type PoolTicket struct {
+	UserID   string
+	QueuedAt time.Time
+}
+
+// PoolCandidate is one waiting person, flattened into what the matching job needs and
+// nothing else. No email, no display name, no goal text — matching does not need
+// identifying information, so it is not handed any.
+type PoolCandidate struct {
+	UserID       string
+	GoalCategory string
+	Intensity    int
+	Timezone     string
+	SelfReport   string
+	Availability []AvailabilityWindow
+	Embedding    []float32
+	// TenureWeeks is whole weeks since the account was created. It feeds the 0.10
+	// new-plus-experienced signal; once pod history exists it should count weeks in a
+	// pod instead, which is an M5 change.
+	TenureWeeks int
+	QueuedAt    time.Time
+}
+
+type PodState string
+
+const (
+	PodStateForming   PodState = "forming"
+	PodStateActive    PodState = "active"
+	PodStateDissolved PodState = "dissolved"
+)
+
+// Pod is two or three people with the same goal category and an overlapping week.
+type Pod struct {
+	ID           string
+	State        PodState
+	GoalCategory string
+	// Timezone is the pod's shared zone; cycles anchor here, never to a device.
+	Timezone string
+	// StreakWeeks is pod-level. There is no per-member equivalent anywhere in this
+	// codebase, and adding one is a product bug (CLAUDE.md §2 rule 3).
+	StreakWeeks int
+	CreatedAt   time.Time
+	DissolvedAt *time.Time
+	Members     []PodMember
+}
+
+type PodMember struct {
+	UserID      string
+	DisplayName string
+	JoinedAt    time.Time
+}
+
+// Store is everything the service needs from persistence. It grows a method per
 // milestone; it does not grow a generic query escape hatch.
 type Store interface {
 	// Ping reports whether the datastore is reachable. Used by /v1/health.
@@ -86,4 +160,32 @@ type Store interface {
 	RotateRefreshToken(ctx context.Context, oldHash string, next RefreshToken, at time.Time) error
 	// RevokeFamily revokes every token in a family. Called on reuse detection and logout.
 	RevokeFamily(ctx context.Context, familyID string, at time.Time) error
+
+	// SetDisplayName records the name a person's own pod sees. It is visible nowhere
+	// else — there are no public profiles (CLAUDE.md §2 rule 5).
+	SetDisplayName(ctx context.Context, userID, displayName string) error
+
+	// UpsertIntent replaces the caller's intent.
+	UpsertIntent(ctx context.Context, intent Intent) error
+	GetIntent(ctx context.Context, userID string) (Intent, error)
+
+	// JoinPool queues someone for the next matching window. Returns ErrConflict if they
+	// are already queued or already in an active pod.
+	JoinPool(ctx context.Context, userID string, at time.Time) error
+	LeavePool(ctx context.Context, userID string) error
+	GetPoolTicket(ctx context.Context, userID string) (PoolTicket, error)
+	// ListPoolCandidates returns everyone waiting, oldest first, capped at limit. The
+	// job reads the whole pool for a window rather than paging: pods are formed from the
+	// pool as a whole, and a page boundary would silently change who can match whom.
+	ListPoolCandidates(ctx context.Context, limit int) ([]PoolCandidate, error)
+
+	// CreatePod writes a pod, its members and their removal from the queue in one
+	// transaction. A half-formed pod would leave someone in a pod they cannot see, or in
+	// the queue for a second one.
+	CreatePod(ctx context.Context, pod Pod, memberIDs []string, at time.Time) error
+	// GetPodForMember returns a pod only if userID belongs to it. Pod-only visibility is
+	// enforced in the query, not in the handler (CLAUDE.md §2 rule 5).
+	GetPodForMember(ctx context.Context, podID, userID string) (Pod, error)
+	// GetActivePod returns the caller's current pod, or ErrNotFound.
+	GetActivePod(ctx context.Context, userID string) (Pod, error)
 }

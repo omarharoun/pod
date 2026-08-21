@@ -15,8 +15,10 @@ import (
 	"github.com/omarharoun/pod/backend/internal/auth"
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
+	"github.com/omarharoun/pod/backend/internal/embed"
 	"github.com/omarharoun/pod/backend/internal/httpapi"
 	"github.com/omarharoun/pod/backend/internal/mail"
+	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
 
@@ -51,7 +53,9 @@ func run(log *slog.Logger) error {
 	}
 
 	now := clock.System{}
-	server := httpapi.New(auth.NewService(db, mailer, now, cfg), db, now, cfg, log)
+	// The hashing embedder until the hosted one is wired in — see ADR-011.
+	onboardingService := onboarding.NewService(db, embed.Hashing{}, now)
+	server := httpapi.New(auth.NewService(db, mailer, now, cfg), onboardingService, db, now, cfg, log)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Addr,

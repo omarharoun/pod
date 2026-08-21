@@ -18,6 +18,8 @@ import (
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
 	"github.com/omarharoun/pod/backend/internal/copy"
+	"github.com/omarharoun/pod/backend/internal/embed"
+	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
 
@@ -56,7 +58,11 @@ func newHarness(t testing.TB) *harness {
 		clock:  clock.NewFixed(time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)),
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h.server = New(auth.NewService(h.store, h.mailer, h.clock, cfg), h.store, h.clock, cfg, log)
+	h.server = New(
+		auth.NewService(h.store, h.mailer, h.clock, cfg),
+		onboarding.NewService(h.store, embed.Hashing{}, h.clock),
+		h.store, h.clock, cfg, log,
+	)
 	return h
 }
 
@@ -89,6 +95,24 @@ func (h *harness) signIn(email string) api.AuthSession {
 	var session api.AuthSession
 	decode(h.t, h.do(http.MethodPost, "/v1/auth/verify", api.AuthVerifyRequest{ChallengeID: start.ChallengeID, Code: h.mailer.code}, ""), http.StatusOK, &session)
 	return session
+}
+
+// seedPod puts the caller in a real pod, so tests can exercise pod-scoped routes without
+// running a whole matching window.
+func (h *harness) seedPod(userIDs ...string) string {
+	h.t.Helper()
+	podID := "44444444-4444-4444-8444-444444444444"
+	pod := store.Pod{
+		ID:           podID,
+		State:        store.PodStateActive,
+		GoalCategory: "home",
+		Timezone:     "UTC",
+		CreatedAt:    h.clock.Now(),
+	}
+	if err := h.store.CreatePod(context.Background(), pod, userIDs, h.clock.Now()); err != nil {
+		h.t.Fatalf("CreatePod: %v", err)
+	}
+	return podID
 }
 
 func decode(t testing.TB, rec *httptest.ResponseRecorder, wantStatus int, dst any) {
@@ -393,7 +417,7 @@ func TestUnbuiltRoutesAnswer501(t *testing.T) {
 	h := newHarness(t)
 	session := h.signIn("sam@example.com")
 
-	body := decodeError(t, h.do(http.MethodGet, "/v1/pods/current", nil, session.AccessToken), http.StatusNotImplemented)
+	body := decodeError(t, h.do(http.MethodGet, "/v1/pods/11111111-1111-4111-8111-111111111111/weeks/current", nil, session.AccessToken), http.StatusNotImplemented)
 	if body.Code != api.ErrorCodeNotImplementedYet {
 		t.Errorf("code: got %q, want not_implemented_yet — a 404 here reads as a client typo (ADR-007)", body.Code)
 	}
