@@ -60,6 +60,16 @@ jobs:
       - name: Android core tests
         run: make android-core-test
 
+      - name: The scheduled jobs start and exit cleanly
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+          POD_BLOB_ROOT: ${{ runner.temp }}/blobs
+        run: |
+          cd backend
+          go run ./cmd/migrate up
+          go run ./cmd/matcher once
+          go run ./cmd/weekly once
+
   # The iOS build needs macOS and Xcode, and :app needs the Android SDK. Both run on
   # their own runners rather than holding up the checks above.
   ios:

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -65,6 +66,7 @@ data class CapturedProof(
  * a camera pointed at whatever is in front of you, and someone who wanted a voice note
  * chose it because they are not somewhere they want to photograph (docs/DESIGN.md).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProofCaptureSheet(
     onCapture: (CapturedProof) -> Unit,

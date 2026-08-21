@@ -7,7 +7,10 @@ public enum WeekPhase: Sendable, Equatable {
     case ready(Week)
     /// The pod exists but has no open week — only reachable if the server is between
     /// boundaries, and the screen shows the same thing as loading.
-    case none
+    ///
+    /// Named `empty` rather than `none`, which would collide with `Optional.none` at
+    /// every use site.
+    case empty
 }
 
 /// Drives the week screen: the action, the ring, and posting.

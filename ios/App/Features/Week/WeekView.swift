@@ -22,7 +22,7 @@ struct WeekView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: PodTokens.Spacing.xl) {
                 switch controller.phase {
-                case .loading, .none:
+                case .loading, .empty:
                     ProgressView()
                         .tint(palette(.accentPrimary))
                         .frame(maxWidth: .infinity, minHeight: PodTokens.Size.ringDiameter)

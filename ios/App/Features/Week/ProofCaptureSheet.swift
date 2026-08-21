@@ -123,7 +123,8 @@ struct ProofCaptureSheet: View {
 @MainActor
 @Observable
 final class VoiceRecorder {
-    struct Finished: Sendable {
+    // Equatable because `onChange(of:)` requires it.
+    struct Finished: Sendable, Equatable {
         let data: Data
         let durationMs: Int
     }
@@ -154,7 +155,7 @@ final class VoiceRecorder {
             try AVAudioSession.sharedInstance().setActive(true)
             #endif
             let recorder = try AVAudioRecorder(url: file, settings: settings)
-            recorder.record(forDuration: TimeInterval(Self.limit))
+            _ = recorder.record(forDuration: TimeInterval(Self.limit))
             self.recorder = recorder
             self.url = file
             isRecording = true

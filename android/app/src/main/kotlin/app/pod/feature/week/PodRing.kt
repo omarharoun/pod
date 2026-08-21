@@ -1,6 +1,7 @@
 package app.pod.feature.week
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -63,7 +64,11 @@ fun PodRing(
             .size(PodTokens.Size.RING_DIAMETER.dp)
             .clearAndSetSemantics { contentDescription = description },
     ) {
-        val segmentColors = members.map { member ->
+        // A pod is two or three people and does not change size mid-week, so animating
+        // per segment in a loop is stable. Cross-fade over `motion.settle`; nothing here
+        // is celebratory.
+        val segmentColors = ArrayList<Color>(members.size)
+        for (member in members) {
             // The palette has no error role by construction: resting is a cool grey,
             // visibly different from open and deliberately no louder.
             val target = when (member.state) {
@@ -71,7 +76,12 @@ fun PodRing(
                 MemberWeekState.RESTING -> colors.stateResting
                 else -> colors.stateOpen
             }
-            animatedColor(target)
+            val animated by animateColorAsState(
+                targetValue = target,
+                animationSpec = tween(PodTokens.DurationMs.SETTLE),
+                label = "segment",
+            )
+            segmentColors += animated
         }
 
         Canvas(Modifier.size(PodTokens.Size.RING_DIAMETER.dp)) {
@@ -112,13 +122,4 @@ fun PodRing(
             )
         }
     }
-}
-
-/** Segments cross-fade over `motion.settle`. Nothing here is celebratory. */
-@Composable
-private fun animatedColor(target: Color): Color {
-    val red by animateFloatAsState(target.red, label = "r")
-    val green by animateFloatAsState(target.green, label = "g")
-    val blue by animateFloatAsState(target.blue, label = "b")
-    return Color(red, green, blue, target.alpha)
 }

@@ -7,6 +7,7 @@ import app.pod.api.WeekPhase
 import app.pod.api.WeekRepositories
 import app.pod.api.generated.ProofKind
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,7 +32,7 @@ class WeekViewModel @Inject constructor(
 
     private val podId = MutableStateFlow<String?>(null)
 
-    @Suppress("OPT_IN_USAGE")
+    @OptIn(ExperimentalCoroutinesApi::class)
     val state: StateFlow<WeekUiState> = podId
         .flatMapLatest { id ->
             val repository = repositories.forPod(id.orEmpty())
