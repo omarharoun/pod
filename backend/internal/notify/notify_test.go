@@ -57,10 +57,10 @@ func newHarness(t *testing.T) *harness {
 	}
 	if err := memory.CreatePod(ctx, store.Pod{
 		ID: "pod-1", State: store.PodStateActive, GoalCategory: "home", Timezone: "UTC", CreatedAt: fixed.Now(),
-	}, members, fixed.Now()); err != nil {
+	}, store.FreeLane(members...), fixed.Now()); err != nil {
 		t.Fatalf("CreatePod: %v", err)
 	}
-	pod, err := memory.GetActivePod(ctx, members[0])
+	pod, err := memory.GetActivePod(ctx, members[0], 0)
 	if err != nil {
 		t.Fatalf("GetActivePod: %v", err)
 	}

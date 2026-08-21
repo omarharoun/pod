@@ -79,7 +79,9 @@ type AvailabilityWindow struct {
 // Intent is the one thing someone is working on. One per person: changing it replaces
 // the row, because a change of mind is not a second goal.
 type Intent struct {
-	UserID              string
+	UserID string
+	// Slot is which lane this goal belongs to. 0 is the free one.
+	Slot                int
 	GoalText            string
 	GoalCategory        string
 	Intensity           int
@@ -93,6 +95,7 @@ type Intent struct {
 // PoolTicket is a place in the queue for the next matching window.
 type PoolTicket struct {
 	UserID   string
+	Slot     int
 	QueuedAt time.Time
 }
 
@@ -100,7 +103,11 @@ type PoolTicket struct {
 // nothing else. No email, no display name, no goal text — matching does not need
 // identifying information, so it is not handed any.
 type PoolCandidate struct {
-	UserID       string
+	UserID string
+	// Slot is which of this person's lanes is waiting. Matching never compares it —
+	// your slot-1 goal and someone else's slot-0 goal are the same kind of thing — but
+	// creating the pod needs it, because a membership belongs to a lane (ADR-026).
+	Slot         int
 	GoalCategory string
 	Intensity    int
 	Timezone     string
@@ -163,8 +170,31 @@ type Continuation struct {
 	YouAreContinuing bool
 }
 
+// Membership is one person's place in a pod, in one of their lanes.
+//
+// The slot belongs here rather than on Pod because your slot-1 pod is somebody else's
+// slot-0 pod (ADR-026).
+type Membership struct {
+	UserID string
+	Slot   int
+}
+
+// FreeLane is every one of these people in their free lane. Most callers — and every
+// test that predates M7 — mean exactly this.
+func FreeLane(userIDs ...string) []Membership {
+	out := make([]Membership, 0, len(userIDs))
+	for _, userID := range userIDs {
+		out = append(out, Membership{UserID: userID})
+	}
+	return out
+}
+
 type PodMember struct {
-	UserID      string
+	UserID string
+	// Slot is which of *this member's* lanes the pod occupies. It is per member, not per
+	// pod: your slot-1 pod is somebody else's slot-0 pod (ADR-026). It is never sent to
+	// another member — a client only ever learns its own.
+	Slot        int
 	DisplayName string
 	JoinedAt    time.Time
 }
@@ -295,7 +325,6 @@ type Store interface {
 	// else — there are no public profiles (CLAUDE.md §2 rule 5).
 	SetDisplayName(ctx context.Context, userID, displayName string) error
 
-	// UpsertIntent replaces the caller's intent.
 	// CompleteCycle moves a pod to completed and opens the choice. It is not
 	// DissolvePod: no member carries a count and no recovery offer is made.
 	CompleteCycle(ctx context.Context, podID string, at, decideBy time.Time) error
@@ -312,14 +341,27 @@ type Store interface {
 	// StartNextCycle keeps the pod running with whoever said yes.
 	StartNextCycle(ctx context.Context, podID string, at time.Time) error
 
+	// UpsertIntent replaces the caller's intent for one lane.
 	UpsertIntent(ctx context.Context, intent Intent) error
-	GetIntent(ctx context.Context, userID string) (Intent, error)
+	GetIntent(ctx context.Context, userID string, slot int) (Intent, error)
+
+	// ListEntitlements returns which additional lanes the caller has opened.
+	//
+	// Lane 0 is deliberately absent from the result and must never be read from it: it
+	// is free forever, and making its availability depend on this query succeeding is
+	// exactly the mistake CLAUDE.md §2 rule 6 forbids (ADR-026).
+	ListEntitlements(ctx context.Context, userID string) (map[int]bool, error)
+	// GrantSlot records a verified purchase. Idempotent on (source, externalID), so
+	// replaying a receipt returns the lane it already opened.
+	GrantSlot(ctx context.Context, userID string, slot int, source, externalID string, at time.Time) error
+	// SlotForExternalID returns the lane a transaction already opened, or ErrNotFound.
+	SlotForExternalID(ctx context.Context, source, externalID string) (string, int, error)
 
 	// JoinPool queues someone for the next matching window. Returns ErrConflict if they
 	// are already queued or already in an active pod.
-	JoinPool(ctx context.Context, userID string, at time.Time) error
-	LeavePool(ctx context.Context, userID string) error
-	GetPoolTicket(ctx context.Context, userID string) (PoolTicket, error)
+	JoinPool(ctx context.Context, userID string, slot int, at time.Time) error
+	LeavePool(ctx context.Context, userID string, slot int) error
+	GetPoolTicket(ctx context.Context, userID string, slot int) (PoolTicket, error)
 	// ListPoolCandidates returns everyone waiting, oldest first, capped at limit. The
 	// job reads the whole pool for a window rather than paging: pods are formed from the
 	// pool as a whole, and a page boundary would silently change who can match whom.
@@ -328,12 +370,14 @@ type Store interface {
 	// CreatePod writes a pod, its members and their removal from the queue in one
 	// transaction. A half-formed pod would leave someone in a pod they cannot see, or in
 	// the queue for a second one.
-	CreatePod(ctx context.Context, pod Pod, memberIDs []string, at time.Time) error
+	CreatePod(ctx context.Context, pod Pod, members []Membership, at time.Time) error
 	// GetPodForMember returns a pod only if userID belongs to it. Pod-only visibility is
 	// enforced in the query, not in the handler (CLAUDE.md §2 rule 5).
 	GetPodForMember(ctx context.Context, podID, userID string) (Pod, error)
-	// GetActivePod returns the caller's current pod, or ErrNotFound.
-	GetActivePod(ctx context.Context, userID string) (Pod, error)
+	// GetActivePod returns the caller's current pod in one lane, or ErrNotFound.
+	GetActivePod(ctx context.Context, userID string, slot int) (Pod, error)
+	// ListActivePodsForUser is every lane the caller currently has a pod in.
+	ListActivePodsForUser(ctx context.Context, userID string) ([]Pod, error)
 	// ListActivePods is the weekly job's input.
 	ListActivePods(ctx context.Context) ([]Pod, error)
 

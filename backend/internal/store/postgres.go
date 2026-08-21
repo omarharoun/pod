@@ -230,10 +230,10 @@ func (p *Postgres) UpsertIntent(ctx context.Context, intent Intent) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO intents (user_id, goal_text, goal_category, intensity, timezone,
+		INSERT INTO intents (user_id, slot, goal_text, goal_category, intensity, timezone,
 		                     self_report_reliability, availability_windows, embedding, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		ON CONFLICT (user_id) DO UPDATE SET
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (user_id, slot) DO UPDATE SET
 			goal_text = EXCLUDED.goal_text,
 			goal_category = EXCLUDED.goal_category,
 			intensity = EXCLUDED.intensity,
@@ -242,8 +242,8 @@ func (p *Postgres) UpsertIntent(ctx context.Context, intent Intent) error {
 			availability_windows = EXCLUDED.availability_windows,
 			embedding = EXCLUDED.embedding,
 			updated_at = EXCLUDED.updated_at`,
-		intent.UserID, intent.GoalText, intent.GoalCategory, intent.Intensity, intent.Timezone,
-		intent.SelfReport, windows, intent.Embedding, intent.UpdatedAt); err != nil {
+		intent.UserID, intent.Slot, intent.GoalText, intent.GoalCategory, intent.Intensity,
+		intent.Timezone, intent.SelfReport, windows, intent.Embedding, intent.UpdatedAt); err != nil {
 		return wrap("upsert intent", err)
 	}
 
@@ -254,15 +254,15 @@ func (p *Postgres) UpsertIntent(ctx context.Context, intent Intent) error {
 	return wrap("commit intent upsert", tx.Commit(ctx))
 }
 
-func (p *Postgres) GetIntent(ctx context.Context, userID string) (Intent, error) {
+func (p *Postgres) GetIntent(ctx context.Context, userID string, slot int) (Intent, error) {
 	var intent Intent
 	var windows []byte
 	err := p.pool.QueryRow(ctx, `
-		SELECT user_id, goal_text, goal_category, intensity, timezone,
+		SELECT user_id, slot, goal_text, goal_category, intensity, timezone,
 		       self_report_reliability, availability_windows, embedding, updated_at
-		FROM intents WHERE user_id = $1`, userID).
-		Scan(&intent.UserID, &intent.GoalText, &intent.GoalCategory, &intent.Intensity, &intent.Timezone,
-			&intent.SelfReport, &windows, &intent.Embedding, &intent.UpdatedAt)
+		FROM intents WHERE user_id = $1 AND slot = $2`, userID, slot).
+		Scan(&intent.UserID, &intent.Slot, &intent.GoalText, &intent.GoalCategory, &intent.Intensity,
+			&intent.Timezone, &intent.SelfReport, &windows, &intent.Embedding, &intent.UpdatedAt)
 	if err != nil {
 		return Intent{}, wrap("get intent", err)
 	}
@@ -272,15 +272,20 @@ func (p *Postgres) GetIntent(ctx context.Context, userID string) (Intent, error)
 	return intent, nil
 }
 
-func (p *Postgres) JoinPool(ctx context.Context, userID string, at time.Time) error {
+func (p *Postgres) JoinPool(ctx context.Context, userID string, slot int, at time.Time) error {
 	var hasIntent bool
-	if err := p.pool.QueryRow(ctx, `SELECT true FROM intents WHERE user_id = $1`, userID).Scan(&hasIntent); err != nil {
+	if err := p.pool.QueryRow(ctx,
+		`SELECT true FROM intents WHERE user_id = $1 AND slot = $2`, userID, slot).Scan(&hasIntent); err != nil {
 		return wrap("check intent", err)
 	}
 
+	// Scoped to the lane. Being in a pod for one thing says nothing about another, which
+	// is the whole point of a lane (ADR-026).
 	var inPod bool
 	if err := p.pool.QueryRow(ctx, `
-		SELECT EXISTS (SELECT 1 FROM pod_members WHERE user_id = $1 AND left_at IS NULL)`, userID).Scan(&inPod); err != nil {
+		SELECT EXISTS (
+			SELECT 1 FROM pod_members WHERE user_id = $1 AND slot = $2 AND left_at IS NULL
+		)`, userID, slot).Scan(&inPod); err != nil {
 		return wrap("check active pod", err)
 	}
 	if inPod {
@@ -288,8 +293,8 @@ func (p *Postgres) JoinPool(ctx context.Context, userID string, at time.Time) er
 	}
 
 	tag, err := p.pool.Exec(ctx, `
-		INSERT INTO pool_tickets (user_id, queued_at) VALUES ($1, $2)
-		ON CONFLICT (user_id) DO NOTHING`, userID, at)
+		INSERT INTO pool_tickets (user_id, slot, queued_at) VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, slot) DO NOTHING`, userID, slot, at)
 	if err != nil {
 		return wrap("join pool", err)
 	}
@@ -301,16 +306,16 @@ func (p *Postgres) JoinPool(ctx context.Context, userID string, at time.Time) er
 	return nil
 }
 
-func (p *Postgres) LeavePool(ctx context.Context, userID string) error {
-	_, err := p.pool.Exec(ctx, `DELETE FROM pool_tickets WHERE user_id = $1`, userID)
+func (p *Postgres) LeavePool(ctx context.Context, userID string, slot int) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM pool_tickets WHERE user_id = $1 AND slot = $2`, userID, slot)
 	return wrap("leave pool", err)
 }
 
-func (p *Postgres) GetPoolTicket(ctx context.Context, userID string) (PoolTicket, error) {
+func (p *Postgres) GetPoolTicket(ctx context.Context, userID string, slot int) (PoolTicket, error) {
 	var ticket PoolTicket
 	err := p.pool.QueryRow(ctx, `
-		SELECT user_id, queued_at FROM pool_tickets WHERE user_id = $1`, userID).
-		Scan(&ticket.UserID, &ticket.QueuedAt)
+		SELECT user_id, slot, queued_at FROM pool_tickets WHERE user_id = $1 AND slot = $2`, userID, slot).
+		Scan(&ticket.UserID, &ticket.Slot, &ticket.QueuedAt)
 	if err != nil {
 		return PoolTicket{}, wrap("get pool ticket", err)
 	}
@@ -319,15 +324,18 @@ func (p *Postgres) GetPoolTicket(ctx context.Context, userID string) (PoolTicket
 
 func (p *Postgres) ListPoolCandidates(ctx context.Context, limit int) ([]PoolCandidate, error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT t.user_id, i.goal_category, i.intensity, i.timezone, i.self_report_reliability,
+		SELECT t.user_id, t.slot, i.goal_category, i.intensity, i.timezone, i.self_report_reliability,
 		       i.availability_windows, i.embedding, u.created_at, t.queued_at
 		FROM pool_tickets t
-		JOIN intents i ON i.user_id = t.user_id
+		JOIN intents i ON i.user_id = t.user_id AND i.slot = t.slot
 		JOIN users u ON u.id = t.user_id
+		-- Scoped to the lane: someone waiting for a second thing is a candidate even
+		-- while their first pod is running (ADR-026).
 		WHERE NOT EXISTS (
-			SELECT 1 FROM pod_members m WHERE m.user_id = t.user_id AND m.left_at IS NULL
+			SELECT 1 FROM pod_members m
+			WHERE m.user_id = t.user_id AND m.slot = t.slot AND m.left_at IS NULL
 		)
-		ORDER BY t.queued_at, t.user_id
+		ORDER BY t.queued_at, t.user_id, t.slot
 		LIMIT $1`, poolLimit(limit))
 	if err != nil {
 		return nil, wrap("list pool candidates", err)
@@ -339,7 +347,7 @@ func (p *Postgres) ListPoolCandidates(ctx context.Context, limit int) ([]PoolCan
 		var c PoolCandidate
 		var windows []byte
 		var createdAt time.Time
-		if err := rows.Scan(&c.UserID, &c.GoalCategory, &c.Intensity, &c.Timezone, &c.SelfReport,
+		if err := rows.Scan(&c.UserID, &c.Slot, &c.GoalCategory, &c.Intensity, &c.Timezone, &c.SelfReport,
 			&windows, &c.Embedding, &createdAt, &c.QueuedAt); err != nil {
 			return nil, wrap("scan pool candidate", err)
 		}
@@ -362,7 +370,7 @@ func poolLimit(limit int) int {
 	return limit
 }
 
-func (p *Postgres) CreatePod(ctx context.Context, pod Pod, memberIDs []string, at time.Time) error {
+func (p *Postgres) CreatePod(ctx context.Context, pod Pod, members []Membership, at time.Time) error {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return wrap("begin pod creation", err)
@@ -377,16 +385,19 @@ func (p *Postgres) CreatePod(ctx context.Context, pod Pod, memberIDs []string, a
 		return wrap("insert pod", err)
 	}
 
-	for _, userID := range memberIDs {
-		// The partial unique index on pod_members enforces one active pod per person, so
+	for _, member := range members {
+		// The partial unique index on pod_members enforces one active pod per *lane*, so
 		// a race with another matching window loses here rather than producing someone
-		// in two pods.
+		// in two pods for the same thing (ADR-013, narrowed by ADR-026).
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO pod_members (pod_id, user_id, joined_at) VALUES ($1, $2, $3)`,
-			pod.ID, userID, at); err != nil {
+			INSERT INTO pod_members (pod_id, user_id, slot, joined_at) VALUES ($1, $2, $3, $4)`,
+			pod.ID, member.UserID, member.Slot, at); err != nil {
 			return wrap("insert pod member", err)
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM pool_tickets WHERE user_id = $1`, userID); err != nil {
+		// Only this lane's ticket. Someone waiting for a second thing stays waiting.
+		if _, err := tx.Exec(ctx,
+			`DELETE FROM pool_tickets WHERE user_id = $1 AND slot = $2`,
+			member.UserID, member.Slot); err != nil {
 			return wrap("dequeue pod member", err)
 		}
 	}
@@ -401,12 +412,86 @@ func (p *Postgres) GetPodForMember(ctx context.Context, podID, userID string) (P
 		WHERE p.id = $1`, podID, userID)
 }
 
-func (p *Postgres) GetActivePod(ctx context.Context, userID string) (Pod, error) {
+func (p *Postgres) GetActivePod(ctx context.Context, userID string, slot int) (Pod, error) {
 	return p.loadPod(ctx, `
 		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks, p.created_at, p.completed_at, p.decide_by, p.dissolved_at
 		FROM pods p
 		JOIN pod_members m ON m.pod_id = p.id
-		WHERE m.user_id = $1 AND m.left_at IS NULL AND p.state <> 'dissolved'`, userID)
+		WHERE m.user_id = $1 AND m.slot = $2 AND m.left_at IS NULL AND p.state <> 'dissolved'`, userID, slot)
+}
+
+// ListActivePodsForUser is every lane the caller currently has a pod in.
+func (p *Postgres) ListActivePodsForUser(ctx context.Context, userID string) ([]Pod, error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT p.id, p.state, p.goal_category, p.timezone, p.streak_weeks, p.cycle_length_weeks,
+		       p.created_at, p.completed_at, p.decide_by, p.dissolved_at
+		FROM pods p
+		JOIN pod_members m ON m.pod_id = p.id
+		WHERE m.user_id = $1 AND m.left_at IS NULL AND p.state <> 'dissolved'
+		ORDER BY m.slot`, userID)
+	if err != nil {
+		return nil, wrap("list active pods for user", err)
+	}
+	defer rows.Close()
+
+	var pods []Pod
+	for rows.Next() {
+		var pod Pod
+		var state string
+		if err := rows.Scan(&pod.ID, &state, &pod.GoalCategory, &pod.Timezone, &pod.StreakWeeks,
+			&pod.CycleLengthWeeks, &pod.CreatedAt, &pod.CompletedAt, &pod.DecideBy, &pod.DissolvedAt); err != nil {
+			return nil, wrap("scan pod", err)
+		}
+		pod.State = PodState(state)
+		pods = append(pods, pod)
+	}
+	return pods, wrap("list active pods for user", rows.Err())
+}
+
+// ---------------------------------------------------------------------- M7: slots
+
+// ListEntitlements returns which additional lanes the caller has opened.
+//
+// Lane 0 is deliberately absent and must never be read from here: it is free forever, and
+// making its availability depend on this query succeeding is exactly what §2 rule 6
+// forbids (ADR-026).
+func (p *Postgres) ListEntitlements(ctx context.Context, userID string) (map[int]bool, error) {
+	rows, err := p.pool.Query(ctx, `SELECT slot FROM slot_entitlements WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, wrap("list entitlements", err)
+	}
+	defer rows.Close()
+
+	opened := map[int]bool{}
+	for rows.Next() {
+		var slot int
+		if err := rows.Scan(&slot); err != nil {
+			return nil, wrap("scan entitlement", err)
+		}
+		opened[slot] = true
+	}
+	return opened, wrap("list entitlements", rows.Err())
+}
+
+func (p *Postgres) GrantSlot(ctx context.Context, userID string, slot int, source, externalID string, at time.Time) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO slot_entitlements (user_id, slot, source, external_id, granted_at)
+		VALUES ($1, $2, $3, $4, $5)`, userID, slot, source, externalID, at)
+	return wrap("grant slot", err)
+}
+
+// SlotForExternalID returns the lane a transaction already opened, so replaying a receipt
+// returns that lane rather than opening another.
+func (p *Postgres) SlotForExternalID(ctx context.Context, source, externalID string) (string, int, error) {
+	var userID string
+	var slot int
+	err := p.pool.QueryRow(ctx, `
+		SELECT user_id, slot FROM slot_entitlements
+		WHERE source = $1 AND external_id = $2`, source, externalID).Scan(&userID, &slot)
+	if err != nil {
+		return "", 0, wrap("slot for external id", err)
+	}
+	return userID, slot, nil
 }
 
 // podCycleLength defaults an unset length rather than writing a zero. A pod with a

@@ -306,7 +306,7 @@ func TestMemoryAndPostgresAgree(t *testing.T) {
 				ID: podID, State: store.PodStateActive, GoalCategory: "home",
 				Timezone: "UTC", CreatedAt: time.Now().UTC(),
 			}
-			if err := s.CreatePod(ctx, pod, []string{owner.ID}, time.Now().UTC()); err != nil {
+			if err := s.CreatePod(ctx, pod, store.FreeLane(owner.ID), time.Now().UTC()); err != nil {
 				t.Fatalf("CreatePod: %v", err)
 			}
 			if _, err := s.ListWeeksForMember(ctx, podID, stranger.ID, 0); err != store.ErrNotFound {
@@ -388,7 +388,7 @@ func TestPostgresIntentRoundTripAndReplace(t *testing.T) {
 	user := seedUser(t, db)
 
 	written := seedIntent(t, db, user.ID)
-	got, err := db.GetIntent(ctx, user.ID)
+	got, err := db.GetIntent(ctx, user.ID, 0)
 	if err != nil {
 		t.Fatalf("GetIntent: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestPostgresIntentRoundTripAndReplace(t *testing.T) {
 		i.GoalText = "learn to make bread"
 		i.GoalCategory = "creative"
 	})
-	replaced, err := db.GetIntent(ctx, user.ID)
+	replaced, err := db.GetIntent(ctx, user.ID, 0)
 	if err != nil {
 		t.Fatalf("GetIntent: %v", err)
 	}
@@ -432,14 +432,14 @@ func TestPostgresPoolLifecycle(t *testing.T) {
 	seedIntent(t, db, user.ID)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	if err := db.JoinPool(ctx, user.ID, now); err != nil {
+	if err := db.JoinPool(ctx, user.ID, 0, now); err != nil {
 		t.Fatalf("JoinPool: %v", err)
 	}
 	// Re-joining loses, so the original place in the queue survives.
-	if err := db.JoinPool(ctx, user.ID, now.Add(time.Hour)); err != store.ErrConflict {
+	if err := db.JoinPool(ctx, user.ID, 0, now.Add(time.Hour)); err != store.ErrConflict {
 		t.Fatalf("second JoinPool: got %v, want ErrConflict", err)
 	}
-	ticket, err := db.GetPoolTicket(ctx, user.ID)
+	ticket, err := db.GetPoolTicket(ctx, user.ID, 0)
 	if err != nil {
 		t.Fatalf("GetPoolTicket: %v", err)
 	}
@@ -447,13 +447,13 @@ func TestPostgresPoolLifecycle(t *testing.T) {
 		t.Fatalf("queued_at moved to %v — re-joining jumped the queue", ticket.QueuedAt)
 	}
 
-	if err := db.LeavePool(ctx, user.ID); err != nil {
+	if err := db.LeavePool(ctx, user.ID, 0); err != nil {
 		t.Fatalf("LeavePool: %v", err)
 	}
-	if err := db.LeavePool(ctx, user.ID); err != nil {
+	if err := db.LeavePool(ctx, user.ID, 0); err != nil {
 		t.Fatalf("LeavePool should be idempotent, got %v", err)
 	}
-	if _, err := db.GetPoolTicket(ctx, user.ID); err != store.ErrNotFound {
+	if _, err := db.GetPoolTicket(ctx, user.ID, 0); err != store.ErrNotFound {
 		t.Fatalf("got %v, want ErrNotFound", err)
 	}
 }
@@ -464,7 +464,7 @@ func TestPostgresPoolCandidatesCarryEverythingMatchingNeeds(t *testing.T) {
 	user := seedUser(t, db)
 	seedIntent(t, db, user.ID)
 	now := time.Now().UTC()
-	if err := db.JoinPool(ctx, user.ID, now); err != nil {
+	if err := db.JoinPool(ctx, user.ID, 0, now); err != nil {
 		t.Fatalf("JoinPool: %v", err)
 	}
 
@@ -502,7 +502,7 @@ func TestPostgresCreatePodDequeuesAndScopesVisibility(t *testing.T) {
 	outsider := seedUser(t, db)
 	for _, u := range []store.User{first, second} {
 		seedIntent(t, db, u.ID)
-		if err := db.JoinPool(ctx, u.ID, now); err != nil {
+		if err := db.JoinPool(ctx, u.ID, 0, now); err != nil {
 			t.Fatalf("JoinPool: %v", err)
 		}
 	}
@@ -512,15 +512,15 @@ func TestPostgresCreatePodDequeuesAndScopesVisibility(t *testing.T) {
 		t.Fatalf("ids.NewUUID: %v", err)
 	}
 	pod := store.Pod{ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: "Europe/Lisbon", CreatedAt: now}
-	if err := db.CreatePod(ctx, pod, []string{first.ID, second.ID}, now); err != nil {
+	if err := db.CreatePod(ctx, pod, store.FreeLane(first.ID, second.ID), now); err != nil {
 		t.Fatalf("CreatePod: %v", err)
 	}
 
 	for _, u := range []store.User{first, second} {
-		if _, err := db.GetPoolTicket(ctx, u.ID); err != store.ErrNotFound {
+		if _, err := db.GetPoolTicket(ctx, u.ID, 0); err != store.ErrNotFound {
 			t.Errorf("%s is still queued after being matched: %v", u.ID, err)
 		}
-		got, err := db.GetActivePod(ctx, u.ID)
+		got, err := db.GetActivePod(ctx, u.ID, 0)
 		if err != nil {
 			t.Fatalf("GetActivePod: %v", err)
 		}
@@ -533,7 +533,7 @@ func TestPostgresCreatePodDequeuesAndScopesVisibility(t *testing.T) {
 	if _, err := db.GetPodForMember(ctx, podID, outsider.ID); err != store.ErrNotFound {
 		t.Fatalf("an outsider read the pod: %v", err)
 	}
-	if _, err := db.GetActivePod(ctx, outsider.ID); err != store.ErrNotFound {
+	if _, err := db.GetActivePod(ctx, outsider.ID, 0); err != store.ErrNotFound {
 		t.Fatalf("an outsider has an active pod: %v", err)
 	}
 }
@@ -552,7 +552,7 @@ func TestPostgresRefusesASecondActivePod(t *testing.T) {
 			t.Fatalf("ids.NewUUID: %v", err)
 		}
 		pod := store.Pod{ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: "UTC", CreatedAt: now}
-		return db.CreatePod(ctx, pod, []string{user.ID, other.ID}, now)
+		return db.CreatePod(ctx, pod, store.FreeLane(user.ID, other.ID), now)
 	}
 	if err := makePod(); err != nil {
 		t.Fatalf("first pod: %v", err)
@@ -561,7 +561,7 @@ func TestPostgresRefusesASecondActivePod(t *testing.T) {
 		t.Fatalf("second pod: got %v, want ErrConflict", err)
 	}
 	// And the failed attempt left nothing behind.
-	pod, err := db.GetActivePod(ctx, user.ID)
+	pod, err := db.GetActivePod(ctx, user.ID, 0)
 	if err != nil {
 		t.Fatalf("GetActivePod: %v", err)
 	}
@@ -585,7 +585,7 @@ func seedPodWith(t testing.TB, db *store.Postgres, members ...store.User) string
 		ids = append(ids, member.ID)
 	}
 	pod := store.Pod{ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: "Europe/Lisbon", CreatedAt: now}
-	if err := db.CreatePod(ctx, pod, ids, now); err != nil {
+	if err := db.CreatePod(ctx, pod, store.FreeLane(ids...), now); err != nil {
 		t.Fatalf("CreatePod: %v", err)
 	}
 	return podID
@@ -762,7 +762,7 @@ func TestPostgresCloseWeekSettlesAndMovesTheSharedStreak(t *testing.T) {
 		t.Errorf("the non-poster is %q, want resting — never missed, never failed", states[theirs.ID])
 	}
 
-	pod, err := db.GetActivePod(ctx, mine.ID)
+	pod, err := db.GetActivePod(ctx, mine.ID, 0)
 	if err != nil {
 		t.Fatalf("GetActivePod: %v", err)
 	}
@@ -1049,7 +1049,7 @@ func TestPostgresStartNextCycleKeepsTheYesesAndTheStreak(t *testing.T) {
 		t.Errorf("the next cycle has %d members, want the 2 who said yes", len(pod.Members))
 	}
 	// The one who stopped is free to be matched again, and carries nothing.
-	if _, err := db.GetActivePod(ctx, remi.ID); err == nil {
+	if _, err := db.GetActivePod(ctx, remi.ID, 0); err == nil {
 		t.Error("the member who stopped is still in the pod")
 	}
 	recovery, err := db.RecoveryFor(ctx, remi.ID)

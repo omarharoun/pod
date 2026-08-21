@@ -20,6 +20,7 @@ import (
 	"github.com/omarharoun/pod/backend/internal/config"
 	"github.com/omarharoun/pod/backend/internal/copy"
 	"github.com/omarharoun/pod/backend/internal/embed"
+	"github.com/omarharoun/pod/backend/internal/entitlement"
 	"github.com/omarharoun/pod/backend/internal/notify"
 	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
@@ -69,7 +70,7 @@ func newHarness(t testing.TB) *harness {
 	h.blobs = blobs
 	h.server = New(
 		auth.NewService(h.store, h.mailer, h.clock, cfg),
-		onboarding.NewService(h.store, embed.Hashing{}, h.clock),
+		onboarding.NewService(h.store, embed.Hashing{}, h.clock, entitlement.DevVerifier{}),
 		week.NewService(h.store, blobs, h.clock, notify.NewService(h.store, h.clock, log)),
 		h.store, h.clock, cfg, log, blobs,
 	)
@@ -119,14 +120,14 @@ func (h *harness) seedPod(userIDs ...string) string {
 		Timezone:     "UTC",
 		CreatedAt:    h.clock.Now(),
 	}
-	if err := h.store.CreatePod(context.Background(), pod, userIDs, h.clock.Now()); err != nil {
+	if err := h.store.CreatePod(context.Background(), pod, store.FreeLane(userIDs...), h.clock.Now()); err != nil {
 		h.t.Fatalf("CreatePod: %v", err)
 	}
 	// Nobody reaches a pod without first writing an intent, so the fixture writes one
 	// too. Without it the seeded state is one production can never produce. It is a
 	// floor, not an override: a test that wrote its own intent keeps it.
 	for _, userID := range userIDs {
-		if _, err := h.store.GetIntent(context.Background(), userID); err == nil {
+		if _, err := h.store.GetIntent(context.Background(), userID, 0); err == nil {
 			continue
 		}
 		if err := h.store.UpsertIntent(context.Background(), store.Intent{

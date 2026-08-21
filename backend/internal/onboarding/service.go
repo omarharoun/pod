@@ -12,6 +12,7 @@ import (
 
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/embed"
+	"github.com/omarharoun/pod/backend/internal/entitlement"
 	"github.com/omarharoun/pod/backend/internal/matching"
 	"github.com/omarharoun/pod/backend/internal/reliability"
 	"github.com/omarharoun/pod/backend/internal/store"
@@ -29,6 +30,10 @@ var (
 	ErrNoIntent            = errors.New("onboarding: no intent recorded yet")
 	ErrAlreadyInPod        = errors.New("onboarding: already in an active pod")
 	ErrAlreadyQueued       = errors.New("onboarding: already queued")
+	// ErrNoSuchLane is a slot outside the range the product has.
+	ErrNoSuchLane = errors.New("onboarding: no such lane")
+	// ErrLaneNotOpen is a lane the caller has not paid for. Never returned for lane 0.
+	ErrLaneNotOpen = errors.New("onboarding: that lane is not open")
 )
 
 // Goal text bounds, matching the contract.
@@ -90,10 +95,84 @@ type Service struct {
 	store    store.Store
 	embedder embed.Embedder
 	clock    clock.Clock
+	// verifier checks purchase receipts. A seam, for the same reason the mailer and the
+	// blob store are: verifying an App Store receipt needs credentials this repository
+	// does not and should not contain. Nil until M7 is wired, and Claim says so rather
+	// than pretending a receipt verified.
+	verifier entitlement.Verifier
 }
 
-func NewService(s store.Store, e embed.Embedder, c clock.Clock) *Service {
-	return &Service{store: s, embedder: e, clock: c}
+func NewService(s store.Store, e embed.Embedder, c clock.Clock, v entitlement.Verifier) *Service {
+	return &Service{store: s, embedder: e, clock: c, verifier: v}
+}
+
+// requireLane is the entitlement check, in one place, made by every lane-aware entry
+// point on this service.
+//
+// The free lane short-circuits *before* the store is touched. That ordering is the point:
+// CLAUDE.md §2 rule 6 gives everyone one free pod forever, and if this function read
+// entitlements first then a database blip would take the core loop away from someone who
+// never paid for it and never needed to (ADR-026).
+func (s *Service) requireLane(ctx context.Context, userID string, slot int) error {
+	if !entitlement.InRange(slot) {
+		return fmt.Errorf("%w: %d", ErrNoSuchLane, slot)
+	}
+	if entitlement.IsFree(slot) {
+		return nil
+	}
+	opened, err := s.store.ListEntitlements(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("onboarding: read entitlements: %w", err)
+	}
+	if !opened[slot] {
+		return fmt.Errorf("%w: %d", ErrLaneNotOpen, slot)
+	}
+	return nil
+}
+
+// Lanes describes every lane the caller has, for the slots screen.
+func (s *Service) Lanes(ctx context.Context, userID string) ([]Lane, error) {
+	opened, err := s.store.ListEntitlements(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("onboarding: read entitlements: %w", err)
+	}
+	lanes := make([]Lane, 0, entitlement.MaxSlots)
+	for slot := 0; slot < entitlement.MaxSlots; slot++ {
+		// Lane 0 is entitled unconditionally, whatever the map says or fails to say.
+		lane := Lane{Slot: slot, Entitled: entitlement.IsFree(slot) || opened[slot]}
+		if !lane.Entitled {
+			lanes = append(lanes, lane)
+			continue
+		}
+		if intent, err := s.store.GetIntent(ctx, userID, slot); err == nil {
+			lane.HasIntent = true
+			lane.GoalText = intent.GoalText
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("onboarding: read intent: %w", err)
+		}
+		if _, err := s.store.GetPoolTicket(ctx, userID, slot); err == nil {
+			lane.InPool = true
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("onboarding: read ticket: %w", err)
+		}
+		if _, err := s.store.GetActivePod(ctx, userID, slot); err == nil {
+			lane.HasPod = true
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return nil, fmt.Errorf("onboarding: read pod: %w", err)
+		}
+		lanes = append(lanes, lane)
+	}
+	return lanes, nil
+}
+
+// Lane is one of the caller's lanes.
+type Lane struct {
+	Slot      int
+	Entitled  bool
+	HasIntent bool
+	InPool    bool
+	HasPod    bool
+	GoalText  string
 }
 
 // Input is an unvalidated intent from the wire.
@@ -112,7 +191,10 @@ type Input struct {
 //
 // Embedding happens here rather than in the matching job so that a matching window never
 // waits on a model call, and so a model outage delays nobody's onboarding.
-func (s *Service) SaveIntent(ctx context.Context, userID string, in Input) (Intent, error) {
+func (s *Service) SaveIntent(ctx context.Context, userID string, slot int, in Input) (Intent, error) {
+	if err := s.requireLane(ctx, userID, slot); err != nil {
+		return Intent{}, err
+	}
 	goal := strings.TrimSpace(in.GoalText)
 	switch {
 	case utf8.RuneCountInString(goal) < minGoalLength:
@@ -133,7 +215,7 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, in Input) (Inte
 		// Omitted: keep the answer already on file. It is asked once, at onboarding, and
 		// nobody should have to re-answer a question about themselves in order to change
 		// how much time they have.
-		existing, err := s.store.GetIntent(ctx, userID)
+		existing, err := s.store.GetIntent(ctx, userID, slot)
 		switch {
 		case err == nil:
 			selfReport = existing.SelfReport
@@ -165,6 +247,7 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, in Input) (Inte
 	now := s.clock.Now()
 	record := store.Intent{
 		UserID:              userID,
+		Slot:                slot,
 		GoalText:            goal,
 		GoalCategory:        in.GoalCategory,
 		Intensity:           in.Intensity,
@@ -201,8 +284,11 @@ func (s *Service) SaveIntent(ctx context.Context, userID string, in Input) (Inte
 }
 
 // Intent returns what is on file, so a client can read what it can write.
-func (s *Service) Intent(ctx context.Context, userID string) (Intent, error) {
-	record, err := s.store.GetIntent(ctx, userID)
+func (s *Service) Intent(ctx context.Context, userID string, slot int) (Intent, error) {
+	if err := s.requireLane(ctx, userID, slot); err != nil {
+		return Intent{}, err
+	}
+	record, err := s.store.GetIntent(ctx, userID, slot)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return Intent{}, ErrNoIntent
@@ -223,25 +309,28 @@ func (s *Service) Intent(ctx context.Context, userID string) (Intent, error) {
 //
 // It answers with when the next window is, rather than with a pod: CLAUDE.md §5 makes
 // matching a scheduled job, so there is nothing to poll for and the client can say when.
-func (s *Service) JoinPool(ctx context.Context, userID string) (Ticket, error) {
-	if _, err := s.store.GetIntent(ctx, userID); err != nil {
+func (s *Service) JoinPool(ctx context.Context, userID string, slot int) (Ticket, error) {
+	if err := s.requireLane(ctx, userID, slot); err != nil {
+		return Ticket{}, err
+	}
+	if _, err := s.store.GetIntent(ctx, userID, slot); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return Ticket{}, ErrNoIntent
 		}
 		return Ticket{}, fmt.Errorf("onboarding: read intent: %w", err)
 	}
-	if _, err := s.store.GetActivePod(ctx, userID); err == nil {
+	if _, err := s.store.GetActivePod(ctx, userID, slot); err == nil {
 		return Ticket{}, ErrAlreadyInPod
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return Ticket{}, fmt.Errorf("onboarding: check pod: %w", err)
 	}
 
 	now := s.clock.Now()
-	if err := s.store.JoinPool(ctx, userID, now); err != nil {
+	if err := s.store.JoinPool(ctx, userID, slot, now); err != nil {
 		if errors.Is(err, store.ErrConflict) {
 			// Already queued. Report the existing ticket rather than resetting the wait —
 			// re-joining must not let anyone jump the queue.
-			ticket, ticketErr := s.store.GetPoolTicket(ctx, userID)
+			ticket, ticketErr := s.store.GetPoolTicket(ctx, userID, slot)
 			if ticketErr != nil {
 				return Ticket{}, ErrAlreadyQueued
 			}
@@ -252,15 +341,21 @@ func (s *Service) JoinPool(ctx context.Context, userID string) (Ticket, error) {
 	return Ticket{QueuedAt: now, NextWindowAt: matching.NextWindowAt(now)}, nil
 }
 
-func (s *Service) LeavePool(ctx context.Context, userID string) error {
-	if err := s.store.LeavePool(ctx, userID); err != nil {
+func (s *Service) LeavePool(ctx context.Context, userID string, slot int) error {
+	if err := s.requireLane(ctx, userID, slot); err != nil {
+		return err
+	}
+	if err := s.store.LeavePool(ctx, userID, slot); err != nil {
 		return fmt.Errorf("onboarding: leave pool: %w", err)
 	}
 	return nil
 }
 
 // State reports where someone is, which is what decides the screen they see.
-func (s *Service) State(ctx context.Context, userID string) (State, error) {
+func (s *Service) State(ctx context.Context, userID string, slot int) (State, error) {
+	if err := s.requireLane(ctx, userID, slot); err != nil {
+		return State{}, err
+	}
 	now := s.clock.Now()
 	state := State{Step: StepIntent}
 
@@ -270,7 +365,7 @@ func (s *Service) State(ctx context.Context, userID string) (State, error) {
 	}
 	state.Recovery = recovery
 
-	intent, err := s.store.GetIntent(ctx, userID)
+	intent, err := s.store.GetIntent(ctx, userID, slot)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return state, nil
@@ -285,14 +380,14 @@ func (s *Service) State(ctx context.Context, userID string) (State, error) {
 		}
 	}
 
-	if _, err := s.store.GetActivePod(ctx, userID); err == nil {
+	if _, err := s.store.GetActivePod(ctx, userID, slot); err == nil {
 		state.Step = StepReady
 		return state, nil
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return State{}, fmt.Errorf("onboarding: check pod: %w", err)
 	}
 
-	ticket, err := s.store.GetPoolTicket(ctx, userID)
+	ticket, err := s.store.GetPoolTicket(ctx, userID, slot)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			// Onboarded but not queued: the client offers the join button again.

@@ -26,12 +26,12 @@ func TestTwoQuietWeeksDissolveThePod(t *testing.T) {
 	h.closeCurrentWeekQuietly()
 	h.closeCurrentWeekQuietly()
 
-	if _, err := h.store.GetActivePod(ctx, h.members[0]); err != store.ErrNotFound {
+	if _, err := h.store.GetActivePod(ctx, h.members[0], 0); err != store.ErrNotFound {
 		t.Fatalf("the pod survived two weeks with nobody in it: %v", err)
 	}
 	// Both members are free to be matched again.
 	for _, member := range h.members {
-		if _, err := h.store.GetActivePod(ctx, member); err != store.ErrNotFound {
+		if _, err := h.store.GetActivePod(ctx, member, 0); err != store.ErrNotFound {
 			t.Errorf("member %s is still in a pod", member)
 		}
 	}
@@ -49,7 +49,7 @@ func TestAPodCarryingOnePersonIsNotDissolved(t *testing.T) {
 		h.closeCurrentWeekQuietly()
 	}
 
-	if _, err := h.store.GetActivePod(ctx, h.members[0]); err != nil {
+	if _, err := h.store.GetActivePod(ctx, h.members[0], 0); err != nil {
 		t.Fatalf("the pod was dissolved even though someone posted every week: %v", err)
 	}
 }
@@ -58,7 +58,7 @@ func TestOneQuietWeekIsNotEnough(t *testing.T) {
 	h := newHarness(t, "Europe/Lisbon")
 	h.closeCurrentWeekQuietly()
 
-	if _, err := h.store.GetActivePod(context.Background(), h.members[0]); err != nil {
+	if _, err := h.store.GetActivePod(context.Background(), h.members[0], 0); err != nil {
 		t.Fatalf("one quiet week dissolved the pod: %v", err)
 	}
 }
@@ -76,7 +76,7 @@ func TestOnlyInactiveMembersCarryTheCount(t *testing.T) {
 	h.closeCurrentWeekQuietly()
 	h.closeCurrentWeekQuietly()
 
-	if _, err := h.store.GetActivePod(ctx, h.members[0]); err != store.ErrNotFound {
+	if _, err := h.store.GetActivePod(ctx, h.members[0], 0); err != store.ErrNotFound {
 		t.Fatalf("the pod should have dissolved after two quiet weeks: %v", err)
 	}
 
@@ -128,14 +128,14 @@ func TestTheAlternatePathIsOfferedAfterThree(t *testing.T) {
 		podID := "pod-extra-" + string(rune('a'+i))
 		if err := h.store.CreatePod(ctx, store.Pod{
 			ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: "UTC", CreatedAt: h.clock.Now(),
-		}, []string{user}, h.clock.Now()); err != nil {
+		}, store.FreeLane(user), h.clock.Now()); err != nil {
 			// The first pod already holds this member; dissolve it first.
 			if err := h.store.DissolvePod(ctx, h.podID, DissolveReasonInactive, []string{user}, h.clock.Now()); err != nil {
 				t.Fatalf("DissolvePod: %v", err)
 			}
 			if err := h.store.CreatePod(ctx, store.Pod{
 				ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: "UTC", CreatedAt: h.clock.Now(),
-			}, []string{user}, h.clock.Now()); err != nil {
+			}, store.FreeLane(user), h.clock.Now()); err != nil {
 				t.Fatalf("CreatePod: %v", err)
 			}
 		}

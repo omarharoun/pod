@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,8 +20,21 @@ type Memory struct {
 	usersByKey map[string]string // normalised email -> user id
 	challenges map[string]AuthChallenge
 	tokens     map[string]RefreshToken
-	intents    map[string]Intent
-	pool       map[string]PoolTicket
+	// Keyed by lane: "<userID>/<slot>". A lane is a thing (ADR-026).
+	intents map[string]Intent
+	pool    map[string]PoolTicket
+	// entitlements is user id -> which additional lanes they have opened. Lane 0 is
+	// never in here and must never be read from here.
+	entitlements map[string]map[int]bool
+	// grants is "<source>/<externalID>" -> the lane it opened, so replaying a receipt
+	// returns that lane rather than opening another.
+	grants map[string]Membership
+
+	// FailEntitlements makes ListEntitlements fail, so a test can prove the free lane
+	// does not depend on it. Exported because that is the only way to set it, and the
+	// property it proves is the one CLAUDE.md §2 rule 6 is about.
+	FailEntitlements error
+
 	pods       map[string]Pod
 	podMembers map[string][]PodMember
 	// continuations is pod id -> user id -> carrying on. Counted, never listed: no
@@ -227,6 +241,10 @@ func (m *Memory) SetDisplayName(_ context.Context, userID, displayName string) e
 	return nil
 }
 
+func laneKey(userID string, slot int) string {
+	return userID + "/" + strconv.Itoa(slot)
+}
+
 func (m *Memory) UpsertIntent(_ context.Context, intent Intent) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -236,53 +254,54 @@ func (m *Memory) UpsertIntent(_ context.Context, intent Intent) error {
 	if m.intents == nil {
 		m.intents = map[string]Intent{}
 	}
-	m.intents[intent.UserID] = intent
+	m.intents[laneKey(intent.UserID, intent.Slot)] = intent
 	u := m.users[intent.UserID]
 	u.OnboardingComplete = true
 	m.users[intent.UserID] = u
 	return nil
 }
 
-func (m *Memory) GetIntent(_ context.Context, userID string) (Intent, error) {
+func (m *Memory) GetIntent(_ context.Context, userID string, slot int) (Intent, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	intent, ok := m.intents[userID]
+	intent, ok := m.intents[laneKey(userID, slot)]
 	if !ok {
 		return Intent{}, ErrNotFound
 	}
 	return intent, nil
 }
 
-func (m *Memory) JoinPool(_ context.Context, userID string, at time.Time) error {
+func (m *Memory) JoinPool(_ context.Context, userID string, slot int, at time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.intents[userID]; !ok {
+	if _, ok := m.intents[laneKey(userID, slot)]; !ok {
 		return ErrNotFound
 	}
-	if m.activePodOf(userID) != "" {
+	// Scoped to the lane: being in a pod for one thing says nothing about another.
+	if m.activePodOf(userID, slot) != "" {
 		return ErrConflict
 	}
 	if m.pool == nil {
 		m.pool = map[string]PoolTicket{}
 	}
-	if _, queued := m.pool[userID]; queued {
+	if _, queued := m.pool[laneKey(userID, slot)]; queued {
 		return ErrConflict
 	}
-	m.pool[userID] = PoolTicket{UserID: userID, QueuedAt: at}
+	m.pool[laneKey(userID, slot)] = PoolTicket{UserID: userID, Slot: slot, QueuedAt: at}
 	return nil
 }
 
-func (m *Memory) LeavePool(_ context.Context, userID string) error {
+func (m *Memory) LeavePool(_ context.Context, userID string, slot int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.pool, userID)
+	delete(m.pool, laneKey(userID, slot))
 	return nil
 }
 
-func (m *Memory) GetPoolTicket(_ context.Context, userID string) (PoolTicket, error) {
+func (m *Memory) GetPoolTicket(_ context.Context, userID string, slot int) (PoolTicket, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	ticket, ok := m.pool[userID]
+	ticket, ok := m.pool[laneKey(userID, slot)]
 	if !ok {
 		return PoolTicket{}, ErrNotFound
 	}
@@ -294,29 +313,39 @@ func (m *Memory) ListPoolCandidates(_ context.Context, limit int) ([]PoolCandida
 	defer m.mu.Unlock()
 
 	out := make([]PoolCandidate, 0, len(m.pool))
-	for userID, ticket := range m.pool {
-		intent, ok := m.intents[userID]
+	for key, ticket := range m.pool {
+		intent, ok := m.intents[key]
 		if !ok {
 			continue
 		}
+		// Scoped to the lane, exactly as the Postgres query is: someone waiting for a
+		// second thing is a candidate even while their first pod is running.
+		if m.activePodOf(ticket.UserID, ticket.Slot) != "" {
+			continue
+		}
 		out = append(out, PoolCandidate{
-			UserID:       userID,
+			UserID:       ticket.UserID,
+			Slot:         ticket.Slot,
 			GoalCategory: intent.GoalCategory,
 			Intensity:    intent.Intensity,
 			Timezone:     intent.Timezone,
 			SelfReport:   intent.SelfReport,
 			Availability: intent.AvailabilityWindows,
 			Embedding:    intent.Embedding,
-			TenureWeeks:  tenureWeeks(m.users[userID].CreatedAt, ticket.QueuedAt),
+			TenureWeeks:  tenureWeeks(m.users[ticket.UserID].CreatedAt, ticket.QueuedAt),
 			QueuedAt:     ticket.QueuedAt,
 		})
 	}
-	// Oldest first, then by id, so the pool order is stable and the job reproducible.
+	// Oldest first, then by id, then by lane, so the pool order is stable and the job
+	// reproducible.
 	sort.Slice(out, func(i, j int) bool {
 		if !out[i].QueuedAt.Equal(out[j].QueuedAt) {
 			return out[i].QueuedAt.Before(out[j].QueuedAt)
 		}
-		return out[i].UserID < out[j].UserID
+		if out[i].UserID != out[j].UserID {
+			return out[i].UserID < out[j].UserID
+		}
+		return out[i].Slot < out[j].Slot
 	})
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
@@ -324,12 +353,61 @@ func (m *Memory) ListPoolCandidates(_ context.Context, limit int) ([]PoolCandida
 	return out, nil
 }
 
-func (m *Memory) CreatePod(_ context.Context, pod Pod, memberIDs []string, at time.Time) error {
+// ---------------------------------------------------------------------- M7: slots
+
+func (m *Memory) ListEntitlements(_ context.Context, userID string) (map[int]bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.FailEntitlements != nil {
+		return nil, m.FailEntitlements
+	}
+	opened := map[int]bool{}
+	for slot, granted := range m.entitlements[userID] {
+		if granted {
+			opened[slot] = true
+		}
+	}
+	return opened, nil
+}
+
+func (m *Memory) GrantSlot(_ context.Context, userID string, slot int, source, externalID string, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.entitlements == nil {
+		m.entitlements = map[string]map[int]bool{}
+		m.grants = map[string]Membership{}
+	}
+	key := source + "/" + externalID
+	if existing, ok := m.grants[key]; ok && existing.UserID != userID {
+		// The same transaction opening a lane for a second account is a replay attack,
+		// not a retry.
+		return ErrConflict
+	}
+	if m.entitlements[userID] == nil {
+		m.entitlements[userID] = map[int]bool{}
+	}
+	m.entitlements[userID][slot] = true
+	m.grants[key] = Membership{UserID: userID, Slot: slot}
+	return nil
+}
+
+func (m *Memory) SlotForExternalID(_ context.Context, source, externalID string) (string, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	granted, ok := m.grants[source+"/"+externalID]
+	if !ok {
+		return "", 0, ErrNotFound
+	}
+	return granted.UserID, granted.Slot, nil
+}
+
+func (m *Memory) CreatePod(_ context.Context, pod Pod, memberships []Membership, at time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, id := range memberIDs {
-		if m.activePodOf(id) != "" {
+	// One active pod per *lane*, matching the partial unique index exactly.
+	for _, member := range memberships {
+		if m.activePodOf(member.UserID, member.Slot) != "" {
 			return ErrConflict
 		}
 	}
@@ -337,10 +415,16 @@ func (m *Memory) CreatePod(_ context.Context, pod Pod, memberIDs []string, at ti
 		m.pods = map[string]Pod{}
 		m.podMembers = map[string][]PodMember{}
 	}
-	members := make([]PodMember, 0, len(memberIDs))
-	for _, id := range memberIDs {
-		members = append(members, PodMember{UserID: id, DisplayName: m.users[id].DisplayName, JoinedAt: at})
-		delete(m.pool, id)
+	members := make([]PodMember, 0, len(memberships))
+	for _, member := range memberships {
+		members = append(members, PodMember{
+			UserID:      member.UserID,
+			Slot:        member.Slot,
+			DisplayName: m.users[member.UserID].DisplayName,
+			JoinedAt:    at,
+		})
+		// Only this lane's ticket. Someone waiting for a second thing stays waiting.
+		delete(m.pool, laneKey(member.UserID, member.Slot))
 	}
 	pod.Members = members
 	if pod.CycleLengthWeeks <= 0 {
@@ -368,10 +452,10 @@ func (m *Memory) GetPodForMember(_ context.Context, podID, userID string) (Pod, 
 	return Pod{}, ErrNotFound
 }
 
-func (m *Memory) GetActivePod(_ context.Context, userID string) (Pod, error) {
+func (m *Memory) GetActivePod(_ context.Context, userID string, slot int) (Pod, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	podID := m.activePodOf(userID)
+	podID := m.activePodOf(userID, slot)
 	if podID == "" {
 		return Pod{}, ErrNotFound
 	}
@@ -380,14 +464,45 @@ func (m *Memory) GetActivePod(_ context.Context, userID string) (Pod, error) {
 	return pod, nil
 }
 
-// activePodOf must be called with the lock held.
-func (m *Memory) activePodOf(userID string) string {
+// ListActivePodsForUser is every lane the caller currently has a pod in.
+func (m *Memory) ListActivePodsForUser(_ context.Context, userID string) ([]Pod, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	type found struct {
+		slot int
+		pod  Pod
+	}
+	var hits []found
+	for podID, members := range m.podMembers {
+		pod := m.pods[podID]
+		if pod.State == PodStateDissolved {
+			continue
+		}
+		for _, member := range members {
+			if member.UserID != userID {
+				continue
+			}
+			pod.Members = members
+			hits = append(hits, found{slot: member.Slot, pod: pod})
+		}
+	}
+	sort.Slice(hits, func(i, j int) bool { return hits[i].slot < hits[j].slot })
+	out := make([]Pod, 0, len(hits))
+	for _, hit := range hits {
+		out = append(out, hit.pod)
+	}
+	return out, nil
+}
+
+// activePodOf must be called with the lock held. It is scoped to one lane.
+// Your slot-1 pod says nothing about your slot-0 lane.
+func (m *Memory) activePodOf(userID string, slot int) string {
 	for podID, members := range m.podMembers {
 		if m.pods[podID].State == PodStateDissolved {
 			continue
 		}
 		for _, member := range members {
-			if member.UserID == userID {
+			if member.UserID == userID && member.Slot == slot {
 				return podID
 			}
 		}

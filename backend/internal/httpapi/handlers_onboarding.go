@@ -4,13 +4,21 @@ import (
 	"errors"
 	"net/http"
 
+	"strconv"
+
 	"github.com/omarharoun/pod/backend/internal/api"
+	"github.com/omarharoun/pod/backend/internal/entitlement"
 	"github.com/omarharoun/pod/backend/internal/onboarding"
 	"github.com/omarharoun/pod/backend/internal/store"
 )
 
 func (s *Server) handleOnboardingState(w http.ResponseWriter, r *http.Request) {
-	state, err := s.onboarding.State(r.Context(), UserIDFrom(r.Context()))
+	slot, ok := slotOf(r)
+	if !ok {
+		s.writeError(w, r, badRequest(), nil)
+		return
+	}
+	state, err := s.onboarding.State(r.Context(), UserIDFrom(r.Context()), slot)
 	if err != nil {
 		s.writeError(w, r, serverError(), err)
 		return
@@ -43,7 +51,12 @@ func (s *Server) handleOnboardingState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetIntent(w http.ResponseWriter, r *http.Request) {
-	intent, err := s.onboarding.Intent(r.Context(), UserIDFrom(r.Context()))
+	slot, ok := slotOf(r)
+	if !ok {
+		s.writeError(w, r, badRequest(), nil)
+		return
+	}
+	intent, err := s.onboarding.Intent(r.Context(), UserIDFrom(r.Context()), slot)
 	if err != nil {
 		if errors.Is(err, onboarding.ErrNoIntent) {
 			s.writeError(w, r, notFound(), err)
@@ -56,6 +69,11 @@ func (s *Server) handleGetIntent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePutIntent(w http.ResponseWriter, r *http.Request) {
+	slot, ok := slotOf(r)
+	if !ok {
+		s.writeError(w, r, badRequest(), nil)
+		return
+	}
 	var body api.IntentRequest
 	if err := decodeJSON(r, &body); err != nil {
 		s.writeError(w, r, badRequest(), err)
@@ -84,7 +102,7 @@ func (s *Server) handlePutIntent(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	intent, err := s.onboarding.SaveIntent(r.Context(), UserIDFrom(r.Context()), input)
+	intent, err := s.onboarding.SaveIntent(r.Context(), UserIDFrom(r.Context()), slot, input)
 	if err != nil {
 		s.writeError(w, r, onboardingFailure(err), err)
 		return
@@ -93,7 +111,12 @@ func (s *Server) handlePutIntent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleJoinPool(w http.ResponseWriter, r *http.Request) {
-	ticket, err := s.onboarding.JoinPool(r.Context(), UserIDFrom(r.Context()))
+	slot, ok := slotOf(r)
+	if !ok {
+		s.writeError(w, r, badRequest(), nil)
+		return
+	}
+	ticket, err := s.onboarding.JoinPool(r.Context(), UserIDFrom(r.Context()), slot)
 	switch {
 	case errors.Is(err, onboarding.ErrAlreadyQueued):
 		// Already in the queue is the state the caller wanted, so answer with the
@@ -112,7 +135,12 @@ func (s *Server) handleJoinPool(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLeavePool(w http.ResponseWriter, r *http.Request) {
-	if err := s.onboarding.LeavePool(r.Context(), UserIDFrom(r.Context())); err != nil {
+	slot, ok := slotOf(r)
+	if !ok {
+		s.writeError(w, r, badRequest(), nil)
+		return
+	}
+	if err := s.onboarding.LeavePool(r.Context(), UserIDFrom(r.Context()), slot); err != nil {
 		s.writeError(w, r, serverError(), err)
 		return
 	}
@@ -153,7 +181,81 @@ func onboardingFailure(err error) failure {
 		return badRequest()
 	case errors.Is(err, onboarding.ErrAlreadyInPod):
 		return alreadyInPod()
+	case errors.Is(err, onboarding.ErrNoSuchLane):
+		return badRequest()
+	case errors.Is(err, onboarding.ErrLaneNotOpen):
+		// Not found, not forbidden. A 403 would confirm the lane exists and is merely
+		// closed, which is a fact about somebody's purchases that nothing needs to
+		// disclose — and the client's response to the two is identical anyway.
+		return notFound()
 	default:
 		return serverError()
 	}
+}
+
+// slotOf reads the `slot` query parameter, defaulting to the free lane.
+//
+// Absent means 0, so a client that has never heard of lanes behaves exactly as it did
+// before M7 — the core loop is never gated by a parameter nobody sent (CLAUDE.md §2
+// rule 6, ADR-026). A malformed value is a 400 rather than a silent 0: quietly writing
+// someone's second goal over their first would be worse than refusing.
+func slotOf(r *http.Request) (int, bool) {
+	raw := r.URL.Query().Get("slot")
+	if raw == "" {
+		return entitlement.FreeSlot, true
+	}
+	slot, err := strconv.Atoi(raw)
+	if err != nil || !entitlement.InRange(slot) {
+		return 0, false
+	}
+	return slot, true
+}
+
+func (s *Server) handleListSlots(w http.ResponseWriter, r *http.Request) {
+	lanes, err := s.onboarding.Lanes(r.Context(), UserIDFrom(r.Context()))
+	if err != nil {
+		s.writeError(w, r, serverError(), err)
+		return
+	}
+	body := api.SlotList{MaxSlots: entitlement.MaxSlots}
+	for _, lane := range lanes {
+		body.Slots = append(body.Slots, slotResponse(lane))
+	}
+	s.writeJSON(w, r, http.StatusOK, body)
+}
+
+func (s *Server) handleClaimSlot(w http.ResponseWriter, r *http.Request) {
+	var body api.ClaimSlotRequest
+	if err := decodeJSON(r, &body); err != nil {
+		s.writeError(w, r, badRequest(), err)
+		return
+	}
+	lane, err := s.onboarding.Claim(r.Context(), UserIDFrom(r.Context()), string(body.Source), body.Receipt)
+	switch {
+	case errors.Is(err, entitlement.ErrReceiptRejected):
+		s.writeError(w, r, receiptRejected(), err)
+		return
+	case errors.Is(err, entitlement.ErrAtCeiling):
+		s.writeError(w, r, atSlotCeiling(), err)
+		return
+	case err != nil:
+		s.writeError(w, r, serverError(), err)
+		return
+	}
+	s.writeJSON(w, r, http.StatusOK, slotResponse(lane))
+}
+
+func slotResponse(lane onboarding.Lane) api.Slot {
+	out := api.Slot{
+		Slot:      lane.Slot,
+		Entitled:  lane.Entitled,
+		HasIntent: lane.HasIntent,
+		InPool:    lane.InPool,
+		HasPod:    lane.HasPod,
+	}
+	if lane.GoalText != "" {
+		goal := lane.GoalText
+		out.GoalText = &goal
+	}
+	return out
 }

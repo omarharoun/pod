@@ -39,6 +39,10 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}/commit", s.requireAuth(s.handleCommitProof))
 	mux.HandleFunc("GET /v1/pods/{podId}/weeks/{weekId}/proof/{proofId}", s.requireAuth(s.handleGetProof))
 
+	// ---- M7: implemented ------------------------------------------------------
+	mux.HandleFunc("GET /v1/slots", s.requireAuth(s.handleListSlots))
+	mux.HandleFunc("POST /v1/slots", s.requireAuth(s.handleClaimSlot))
+
 	// ---- M6: implemented ------------------------------------------------------
 	mux.HandleFunc("POST /v1/pods/{podId}/continue", s.requireAuth(s.handleContinueCycle))
 

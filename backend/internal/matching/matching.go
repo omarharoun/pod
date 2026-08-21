@@ -55,7 +55,11 @@ func (w Window) minutes() int {
 // identifying information, so it does not receive any — which also means a matching log
 // line cannot leak it.
 type Candidate struct {
-	UserID                string
+	UserID string
+	// Slot is which of this person's lanes is waiting. Matching never compares it — your
+	// slot-1 goal and someone else's slot-0 goal are the same kind of thing — but
+	// creating the pod needs it, because a membership belongs to a lane (ADR-026).
+	Slot                  int
 	GoalCategory          string
 	Intensity             int
 	TimezoneOffsetMinutes int

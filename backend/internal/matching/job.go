@@ -113,9 +113,9 @@ func (j *Job) persist(ctx context.Context, pod Pod, waiting []store.PoolCandidat
 	if err != nil {
 		return false, err
 	}
-	memberIDs := make([]string, 0, len(pod.Members))
+	memberships := make([]store.Membership, 0, len(pod.Members))
 	for _, m := range pod.Members {
-		memberIDs = append(memberIDs, m.UserID)
+		memberships = append(memberships, store.Membership{UserID: m.UserID, Slot: m.Slot})
 	}
 
 	record := store.Pod{
@@ -125,7 +125,7 @@ func (j *Job) persist(ctx context.Context, pod Pod, waiting []store.PoolCandidat
 		Timezone:     podTimezone(pod, waiting),
 		CreatedAt:    now,
 	}
-	if err := j.store.CreatePod(ctx, record, memberIDs, now); err != nil {
+	if err := j.store.CreatePod(ctx, record, memberships, now); err != nil {
 		if err == store.ErrConflict {
 			// Someone was matched by a concurrent window. Not an error worth alarming
 			// about; they have a pod, which is the point.
@@ -137,8 +137,8 @@ func (j *Job) persist(ctx context.Context, pod Pod, waiting []store.PoolCandidat
 
 	// The offer to lower the bar was about the pod that ended. Being in a new one
 	// answers it.
-	for _, userID := range memberIDs {
-		if err := j.store.ClearRecoveryOffer(ctx, userID); err != nil {
+	for _, member := range memberships {
+		if err := j.store.ClearRecoveryOffer(ctx, member.UserID); err != nil {
 			j.log.ErrorContext(ctx, "could not clear a recovery offer", slog.Any("error", err))
 		}
 	}
@@ -146,7 +146,7 @@ func (j *Job) persist(ctx context.Context, pod Pod, waiting []store.PoolCandidat
 	if j.notifier != nil {
 		// Read the pod back so the notification can name people, which needs the
 		// display names the matcher deliberately never sees.
-		if formed, err := j.store.GetActivePod(ctx, memberIDs[0]); err == nil {
+		if formed, err := j.store.GetActivePod(ctx, memberships[0].UserID, memberships[0].Slot); err == nil {
 			j.notifier.PodFormed(ctx, formed)
 		}
 	}
@@ -185,6 +185,7 @@ func toCandidate(w store.PoolCandidate, outcomes []store.WeekOutcome, now time.T
 	}
 	return Candidate{
 		UserID:                w.UserID,
+		Slot:                  w.Slot,
 		GoalCategory:          w.GoalCategory,
 		Intensity:             w.Intensity,
 		TimezoneOffsetMinutes: OffsetMinutes(w.Timezone, now),

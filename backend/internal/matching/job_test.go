@@ -72,7 +72,7 @@ func (h *jobHarness) queue(p person) string {
 	}); err != nil {
 		h.t.Fatalf("UpsertIntent: %v", err)
 	}
-	if err := h.store.JoinPool(ctx, user.ID, h.clock.Now()); err != nil {
+	if err := h.store.JoinPool(ctx, user.ID, 0, h.clock.Now()); err != nil {
 		h.t.Fatalf("JoinPool: %v", err)
 	}
 	return user.ID
@@ -103,7 +103,7 @@ func TestRunWindowFormsAPodAndDequeuesIt(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	pod, err := h.store.GetActivePod(ctx, a)
+	pod, err := h.store.GetActivePod(ctx, a, 0)
 	if err != nil {
 		t.Fatalf("GetActivePod: %v", err)
 	}
@@ -115,11 +115,11 @@ func TestRunWindowFormsAPodAndDequeuesIt(t *testing.T) {
 	}
 	// Both are out of the queue, and the other member sees the same pod.
 	for _, id := range []string{a, b} {
-		if _, err := h.store.GetPoolTicket(ctx, id); err != store.ErrNotFound {
+		if _, err := h.store.GetPoolTicket(ctx, id, 0); err != store.ErrNotFound {
 			t.Errorf("%s is still queued after being matched: %v", id, err)
 		}
 	}
-	other, err := h.store.GetActivePod(ctx, b)
+	other, err := h.store.GetActivePod(ctx, b, 0)
 	if err != nil || other.ID != pod.ID {
 		t.Fatalf("the two members are not in the same pod: %v / %v", pod.ID, other.ID)
 	}
@@ -138,10 +138,10 @@ func TestRunWindowLeavesTheUnmatchableQueued(t *testing.T) {
 	if result.LeftWaiting != 1 {
 		t.Fatalf("got %+v, want one person left waiting", result)
 	}
-	if _, err := h.store.GetPoolTicket(context.Background(), lonely); err != nil {
+	if _, err := h.store.GetPoolTicket(context.Background(), lonely, 0); err != nil {
 		t.Fatalf("the unmatched person should still be queued: %v", err)
 	}
-	if _, err := h.store.GetActivePod(context.Background(), lonely); err != store.ErrNotFound {
+	if _, err := h.store.GetActivePod(context.Background(), lonely, 0); err != store.ErrNotFound {
 		t.Fatal("the unmatched person must not have been forced into a pod")
 	}
 }
@@ -174,7 +174,7 @@ func TestPodTimezoneIsTheEarliestQueuedMembersRealZone(t *testing.T) {
 	if _, err := h.job.RunWindow(context.Background()); err != nil {
 		t.Fatalf("RunWindow: %v", err)
 	}
-	pod, err := h.store.GetActivePod(context.Background(), first)
+	pod, err := h.store.GetActivePod(context.Background(), first, 0)
 	if err != nil {
 		t.Fatalf("GetActivePod: %v", err)
 	}

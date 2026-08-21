@@ -17,6 +17,7 @@ import (
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
 	"github.com/omarharoun/pod/backend/internal/embed"
+	"github.com/omarharoun/pod/backend/internal/entitlement"
 	"github.com/omarharoun/pod/backend/internal/httpapi"
 	"github.com/omarharoun/pod/backend/internal/mail"
 	"github.com/omarharoun/pod/backend/internal/notify"
@@ -61,8 +62,13 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
+	verifier, err := selectReceiptVerifier(cfg, log)
+	if err != nil {
+		return err
+	}
+
 	// The hashing embedder until the hosted one is wired in — see ADR-011.
-	onboardingService := onboarding.NewService(db, embed.Hashing{}, now)
+	onboardingService := onboarding.NewService(db, embed.Hashing{}, now, verifier)
 	// The API queues notifications; cmd/weekly drains the outbox.
 	weekService := week.NewService(db, blobs, now, notify.NewService(db, now, log))
 	server := httpapi.New(
@@ -117,6 +123,20 @@ func selectBlobStore(cfg config.Config, log *slog.Logger) (blob.Store, *blob.Loc
 	log.Warn("development blob store selected — proof bytes are on this machine's disk, not in object storage",
 		slog.String("root", cfg.BlobRoot))
 	return local, local, nil
+}
+
+// selectReceiptVerifier refuses to start outside development without a real one, the same
+// seam as the mailer (ADR-002) and the blob store (ADR-015).
+//
+// A stub that accepted every receipt in production would hand out paid lanes for free,
+// which is a smaller problem than the reverse but still a lie the server would be telling
+// itself. Refusing to start is the only honest default.
+func selectReceiptVerifier(cfg config.Config, log *slog.Logger) (entitlement.Verifier, error) {
+	if cfg.IsDevelopment() {
+		log.Warn("development receipt verifier selected — any receipt beginning \"dev:\" opens a lane")
+		return entitlement.DevVerifier{}, nil
+	}
+	return nil, fmt.Errorf("config: no purchase verifier is configured for env %q; wire StoreKit and Play into selectReceiptVerifier before deploying", cfg.Env)
 }
 
 // selectMailer refuses to start outside development without a real provider, rather than

@@ -102,6 +102,17 @@ func uploadIncomplete() failure {
 	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorUploadIncompleteBody}
 }
 
+// receiptRejected is 402: the store did not verify the receipt. Deliberately not 400 —
+// the request was well-formed, the purchase was not confirmed, and the client's response
+// to the two is different.
+func receiptRejected() failure {
+	return failure{status: http.StatusPaymentRequired, code: api.ErrorCodeBadRequest, copyKey: copy.KeyErrorReceiptRejectedBody}
+}
+
+func atSlotCeiling() failure {
+	return failure{status: http.StatusConflict, code: api.ErrorCodeConflict, copyKey: copy.KeyErrorSlotCeilingBody}
+}
+
 func notFound() failure {
 	return failure{status: http.StatusNotFound, code: api.ErrorCodeNotFound, copyKey: copy.KeyErrorServerBody}
 }

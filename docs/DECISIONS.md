@@ -1022,3 +1022,69 @@ environment can check: `:app` needs the Android SDK and iOS needs Xcode. `:core:
 compiles and its 52 tests pass, so the client changes inside it are verified; the Compose
 and SwiftUI ones are not. That is the standing trade — the alternative was to leave a
 known app-terminating bug in the tree until a Mac was available.
+
+---
+
+## ADR-026 — A paid slot is a second *thing*, not a second pod for the same goal
+
+**Date:** 2026-08-21 · **Status:** accepted · **Escalated under §8** · **Milestone:** M7
+
+**Context.** `CLAUDE.md` §2 rule 6 says "one free pod, forever; the paywall gates
+*additional* pods, never the core loop". §1 says a user names **one** thing. Those two
+sentences do not by themselves say what an additional pod is *for*, and the answer changes
+the schema, the matching filter and the effort budget. This was escalated rather than
+decided, and the decision below is the answer that came back.
+
+**Decision — a slot is a lane, and each lane is its own thing.**
+
+`slot 0` is the free thing. `slot N` is an additional thing with its own goal text, its own
+category, its own intensity, its own queue ticket and its own pod.
+
+The rejected alternative was a second pod drawn from the *same* intent — more witness for
+the one thing you named. It loses on three counts:
+
+1. **Effort.** Two check-ins a week against one goal spends §2 rule 7's budget twice for
+   one outcome. The rule says a flow over ~15 seconds is wrong; two flows for one goal is
+   the same mistake in a different shape.
+2. **Matching.** Both pods would be drawn from the same candidate set under the same hard
+   filters, so the second pod is systematically the *worse* half of the first pod's
+   shortlist — and the person paid for it.
+3. **It is not what a rut looks like.** Someone who has broken one thing loose and wants to
+   start another is the case the paywall is actually for.
+
+**What this widens.** §1 becomes "one **free** thing". That is a real change to the
+product's first paragraph and it is named here so nobody has to infer it from a migration.
+The core loop is untouched: slot 0 needs no entitlement, ever, and no code path may make
+the free pod's existence depend on a payment record.
+
+**Consequences for the schema.**
+
+* `intents` is re-keyed from `(user_id)` to `(user_id, slot)`. So is `pool_tickets`.
+* `pod_members` gains `slot`, and the invariant narrows rather than disappearing:
+  ```sql
+  DROP INDEX pod_members_one_active_per_user;
+  CREATE UNIQUE INDEX pod_members_one_active_per_slot
+      ON pod_members (user_id, slot) WHERE left_at IS NULL;
+  ```
+  Dropping it outright would delete the ADR-013 guarantee — that index is what makes two
+  concurrent matching windows lose the race cleanly instead of producing someone in two
+  pods, and it is cited by name in `CreatePod`. The replacement keeps the same failure mode
+  at a finer grain.
+* **`slot` belongs to the membership, not to the pod.** Your slot-1 pod is somebody else's
+  slot-0 pod. There is no `slot` column on `pods`, and on the wire `Pod.slot` is the
+  *caller's* slot in it, computed per viewer exactly like `PodMember.is_you`.
+* **The index says nothing about entitlement and must never be made to.** It caps pods per
+  slot at one; it does not cap slots. A constraint of the shape "you may have as many
+  active memberships as you have grant rows" would make the free pod's existence depend on
+  a payment record, and one missing or badly-migrated row would take the core loop away
+  from someone who never paid for it and never needed to.
+
+**Two more decisions, recorded here so they are not silent.**
+
+* **`MaxSlots = 5`.** A structural ceiling *above* the paywall and unrelated to what anyone
+  paid: someone running six small things a week is not doing the product in §1. A
+  judgement, not a weight or a band, so not itself a §8 item — but said out loud.
+* **Data minimisation (§8, fourth bullet).** An entitlement row stores `source` and an
+  opaque provider transaction id, and nothing else. No name, no card, no address, no price,
+  no country. Prices come from StoreKit and Play at render time and never from this API.
+  The server needs to know *that* a slot is paid for, not who paid or what it cost.

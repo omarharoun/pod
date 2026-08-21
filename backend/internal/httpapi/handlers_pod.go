@@ -37,8 +37,13 @@ func (s *Server) handleContinueCycle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCurrentPod(w http.ResponseWriter, r *http.Request) {
+	slot, ok := slotOf(r)
+	if !ok {
+		s.writeError(w, r, badRequest(), nil)
+		return
+	}
 	userID := UserIDFrom(r.Context())
-	pod, err := s.store.GetActivePod(r.Context(), userID)
+	pod, err := s.store.GetActivePod(r.Context(), userID, slot)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			// No pod yet is a state, not a failure: the client shows the waiting screen.

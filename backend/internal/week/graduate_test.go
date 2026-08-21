@@ -86,7 +86,7 @@ func TestAQuietPodDissolvesRatherThanGraduating(t *testing.T) {
 	// asserts on what is observable: nobody is in it, and it is not asking anyone to
 	// choose whether to carry on.
 	for _, member := range h.members {
-		if _, err := h.store.GetActivePod(context.Background(), member); err == nil {
+		if _, err := h.store.GetActivePod(context.Background(), member, 0); err == nil {
 			t.Errorf("member %s is still in a pod that went quiet for two weeks", member)
 		}
 	}
@@ -166,7 +166,7 @@ func TestOneContinuingClosesThePod(t *testing.T) {
 		t.Fatal("one member carrying on restarted the pod")
 	}
 	for _, member := range h.members {
-		if _, err := h.store.GetActivePod(ctx, member); err == nil {
+		if _, err := h.store.GetActivePod(ctx, member, 0); err == nil {
 			t.Errorf("member %s is still in a pod after it closed", member)
 		}
 	}

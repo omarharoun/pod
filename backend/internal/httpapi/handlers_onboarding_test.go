@@ -1,12 +1,17 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/omarharoun/pod/backend/internal/api"
 	"github.com/omarharoun/pod/backend/internal/copy"
+	"github.com/omarharoun/pod/backend/internal/entitlement"
 )
 
 func validIntent() api.IntentRequest {
@@ -251,7 +256,7 @@ func TestOmittingTheSelfReportKeepsTheStoredOne(t *testing.T) {
 	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", lowered, session.AccessToken), http.StatusOK, nil)
 
 	// The score is never exposed, so read the effect through what the pool sees.
-	candidate, err := h.store.GetIntent(t.Context(), session.User.ID)
+	candidate, err := h.store.GetIntent(t.Context(), session.User.ID, 0)
 	if err != nil {
 		t.Fatalf("GetIntent: %v", err)
 	}
@@ -322,5 +327,236 @@ func TestNothingSmallerIsOfferedOnTheSmallestRung(t *testing.T) {
 	}
 	if recovery.CurrentIntensity == nil || *recovery.CurrentIntensity != 1 {
 		t.Errorf("current_intensity: got %v, want 1", recovery.CurrentIntensity)
+	}
+}
+
+// ---- M7: lanes ---------------------------------------------------------------------
+
+// The most important test in M7. CLAUDE.md §2 rule 6 gives everyone one free pod forever,
+// so every free-lane path must work with no entitlement rows in existence.
+func TestTheFreeLaneWorksWithNoEntitlementsAtAll(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	// The whole free loop, without ever touching /v1/slots.
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", validIntent(), session.AccessToken), http.StatusOK, nil)
+	decode(t, h.do(http.MethodPost, "/v1/pool", nil, session.AccessToken), http.StatusAccepted, nil)
+
+	var state api.OnboardingState
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/state", nil, session.AccessToken), http.StatusOK, &state)
+	if !state.IntentComplete || !state.InPool {
+		t.Fatalf("the free lane did not work: %+v", state)
+	}
+}
+
+// And explicitly asking for lane 0 is the same as not asking.
+func TestAskingForTheFreeLaneExplicitlyIsTheSame(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent?slot=0", validIntent(), session.AccessToken), http.StatusOK, nil)
+
+	var got api.Intent
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/intent", nil, session.AccessToken), http.StatusOK, &got)
+	if got.GoalText != validIntent().GoalText {
+		t.Errorf("slot=0 and no slot disagree: %q", got.GoalText)
+	}
+}
+
+// A lane nobody has paid for is refused, and refused as a *not found*: a 403 would confirm
+// the lane exists and is merely closed, which is a fact about somebody's purchases.
+func TestAnUnopenedLaneIsRefused(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	rec := h.do(http.MethodPut, "/v1/onboarding/intent?slot=1", validIntent(), session.AccessToken)
+	if rec.Code == http.StatusOK {
+		t.Fatal("an unopened lane accepted an intent")
+	}
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status: got %d, want 404", rec.Code)
+	}
+}
+
+func TestASlotOutsideTheRangeIsABadRequest(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+	for _, raw := range []string{"9", "-1", "one", "0.5", ""} {
+		rec := h.do(http.MethodGet, "/v1/onboarding/state?slot="+raw, nil, session.AccessToken)
+		want := http.StatusBadRequest
+		if raw == "" {
+			// An empty value means the parameter was not really given: the free lane.
+			want = http.StatusOK
+		}
+		if rec.Code != want {
+			t.Errorf("slot=%q: got %d, want %d", raw, rec.Code, want)
+		}
+	}
+}
+
+func TestSlotsListsEveryLaneAndAlwaysEntitlesTheFirst(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	var body api.SlotList
+	decode(t, h.do(http.MethodGet, "/v1/slots", nil, session.AccessToken), http.StatusOK, &body)
+	if body.MaxSlots < 2 {
+		t.Fatalf("max_slots: got %d", body.MaxSlots)
+	}
+	if len(body.Slots) != body.MaxSlots {
+		t.Fatalf("listed %d lanes, want %d", len(body.Slots), body.MaxSlots)
+	}
+	if !body.Slots[0].Entitled {
+		t.Error("the free lane is not entitled")
+	}
+	for _, slot := range body.Slots[1:] {
+		if slot.Entitled {
+			t.Errorf("lane %d is entitled without a purchase", slot.Slot)
+		}
+	}
+	// Nothing about money reaches the client beyond `entitled`.
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, leak := range []string{"price", "currency", "receipt", "transaction", "external_id", "source", "expires"} {
+		if strings.Contains(string(encoded), leak) {
+			t.Errorf("the slot list carries %q: %s", leak, encoded)
+		}
+	}
+}
+
+// A verified receipt opens the next lane, and the lane then works like any other.
+func TestClaimingALaneOpensItAndItThenWorks(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	var slot api.Slot
+	decode(t, h.do(http.MethodPost, "/v1/slots", api.ClaimSlotRequest{
+		Source: api.PurchaseSourceAppStore, Receipt: "dev:order-1",
+	}, session.AccessToken), http.StatusOK, &slot)
+	if slot.Slot != 1 || !slot.Entitled {
+		t.Fatalf("claimed lane: %+v", slot)
+	}
+
+	second := validIntent()
+	second.GoalText = "learn to make bread properly"
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent?slot=1", second, session.AccessToken), http.StatusOK, nil)
+
+	// The two lanes hold different things — that is the whole point (ADR-026).
+	var first, other api.Intent
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/intent?slot=1", nil, session.AccessToken), http.StatusOK, &other)
+	if other.GoalText != second.GoalText {
+		t.Errorf("lane 1 holds %q", other.GoalText)
+	}
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", validIntent(), session.AccessToken), http.StatusOK, nil)
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/intent", nil, session.AccessToken), http.StatusOK, &first)
+	if first.GoalText == other.GoalText {
+		t.Error("writing lane 0 overwrote lane 1")
+	}
+}
+
+// Every store SDK retries. Replaying a receipt must return the lane it already opened
+// rather than spending another one.
+func TestReplayingAReceiptDoesNotOpenASecondLane(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+	claim := api.ClaimSlotRequest{Source: api.PurchaseSourceAppStore, Receipt: "dev:order-1"}
+
+	var first, again api.Slot
+	decode(t, h.do(http.MethodPost, "/v1/slots", claim, session.AccessToken), http.StatusOK, &first)
+	decode(t, h.do(http.MethodPost, "/v1/slots", claim, session.AccessToken), http.StatusOK, &again)
+
+	if first.Slot != again.Slot {
+		t.Errorf("a replayed receipt opened lane %d then lane %d", first.Slot, again.Slot)
+	}
+	var body api.SlotList
+	decode(t, h.do(http.MethodGet, "/v1/slots", nil, session.AccessToken), http.StatusOK, &body)
+	opened := 0
+	for _, slot := range body.Slots {
+		if slot.Entitled {
+			opened++
+		}
+	}
+	if opened != 2 {
+		t.Errorf("%d lanes are open after one receipt claimed twice", opened)
+	}
+}
+
+// One receipt must not open a lane for a second account.
+func TestAReceiptCannotOpenALaneForSomebodyElse(t *testing.T) {
+	h := newHarness(t)
+	sam := h.signIn("sam@example.com")
+	alex := h.signIn("alex@example.com")
+	claim := api.ClaimSlotRequest{Source: api.PurchaseSourceAppStore, Receipt: "dev:order-1"}
+
+	decode(t, h.do(http.MethodPost, "/v1/slots", claim, sam.AccessToken), http.StatusOK, nil)
+	rec := h.do(http.MethodPost, "/v1/slots", claim, alex.AccessToken)
+	if rec.Code == http.StatusOK {
+		t.Fatal("one receipt opened a lane for two accounts")
+	}
+
+	// And Alex still has their free lane, which no purchase can take away.
+	var body api.SlotList
+	decode(t, h.do(http.MethodGet, "/v1/slots", nil, alex.AccessToken), http.StatusOK, &body)
+	if !body.Slots[0].Entitled {
+		t.Error("a rejected receipt took away somebody's free lane")
+	}
+}
+
+func TestAnUnverifiableReceiptIsRefusedWithoutEchoingIt(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	rec := h.do(http.MethodPost, "/v1/slots", api.ClaimSlotRequest{
+		Source: api.PurchaseSourceAppStore, Receipt: "forged-receipt-abc123",
+	}, session.AccessToken)
+	body := decodeError(t, rec, http.StatusPaymentRequired)
+	if !copy.Has(copy.Key(body.CopyKey)) {
+		t.Errorf("copy_key %q does not resolve", body.CopyKey)
+	}
+	// The receipt must not come back in the error.
+	if strings.Contains(rec.Body.String(), "forged-receipt-abc123") {
+		t.Errorf("the error echoed the receipt: %s", rec.Body.String())
+	}
+}
+
+func TestClaimingPastTheCeilingIsAConflict(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+
+	for i := 1; i < entitlement.MaxSlots; i++ {
+		decode(t, h.do(http.MethodPost, "/v1/slots", api.ClaimSlotRequest{
+			Source: api.PurchaseSourceAppStore, Receipt: fmt.Sprintf("dev:order-%d", i),
+		}, session.AccessToken), http.StatusOK, nil)
+	}
+	decodeError(t, h.do(http.MethodPost, "/v1/slots", api.ClaimSlotRequest{
+		Source: api.PurchaseSourceAppStore, Receipt: "dev:one-too-many",
+	}, session.AccessToken), http.StatusConflict)
+}
+
+// The free lane must survive the entitlements store being broken.
+//
+// This is CLAUDE.md §2 rule 6 taken literally: "one free pod, forever" cannot be
+// conditional on a query succeeding. `requireLane` short-circuits before touching the
+// store for exactly this reason, and this test is what stops someone reordering it.
+func TestTheFreeLaneSurvivesABrokenEntitlementsStore(t *testing.T) {
+	h := newHarness(t)
+	session := h.signIn("sam@example.com")
+	h.store.FailEntitlements = errors.New("entitlements table is on fire")
+
+	decode(t, h.do(http.MethodPut, "/v1/onboarding/intent", validIntent(), session.AccessToken), http.StatusOK, nil)
+	decode(t, h.do(http.MethodPost, "/v1/pool", nil, session.AccessToken), http.StatusAccepted, nil)
+
+	var state api.OnboardingState
+	decode(t, h.do(http.MethodGet, "/v1/onboarding/state", nil, session.AccessToken), http.StatusOK, &state)
+	if !state.IntentComplete || !state.InPool {
+		t.Fatalf("a broken entitlements store took away the free lane: %+v", state)
+	}
+
+	// A paid lane, by contrast, is refused rather than granted when the store is down.
+	// Failing open here would hand out lanes nobody paid for.
+	rec := h.do(http.MethodPut, "/v1/onboarding/intent?slot=1", validIntent(), session.AccessToken)
+	if rec.Code == http.StatusOK {
+		t.Error("a broken entitlements store granted an unpaid lane")
 	}
 }

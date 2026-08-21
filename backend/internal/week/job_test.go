@@ -74,7 +74,7 @@ func newHarnessOf(t *testing.T, zone string, size int) *harness {
 	podID := "pod-1"
 	if err := memory.CreatePod(ctx, store.Pod{
 		ID: podID, State: store.PodStateActive, GoalCategory: "home", Timezone: zone, CreatedAt: fixed.Now(),
-	}, members, fixed.Now()); err != nil {
+	}, store.FreeLane(members...), fixed.Now()); err != nil {
 		t.Fatalf("CreatePod: %v", err)
 	}
 
@@ -279,7 +279,7 @@ func TestUnknownPodTimezoneDoesNotStopTheWholeTick(t *testing.T) {
 	if err := h.store.CreatePod(ctx, store.Pod{
 		ID: "pod-broken", State: store.PodStateActive, GoalCategory: "home",
 		Timezone: "Not/AZone", CreatedAt: h.clock.Now(),
-	}, []string{broken.ID}, h.clock.Now()); err != nil {
+	}, store.FreeLane(broken.ID), h.clock.Now()); err != nil {
 		t.Fatalf("CreatePod: %v", err)
 	}
 
