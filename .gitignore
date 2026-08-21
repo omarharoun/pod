@@ -26,3 +26,6 @@ android/.idea/
 .DS_Store
 node_modules/
 .blobs/
+
+# Kotlin compiler scratch, written by any gradle invocation.
+android/.kotlin/
