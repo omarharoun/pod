@@ -1157,3 +1157,64 @@ case, and the mistake was in what the client decided to show. Rules kept in the 
 broken in the view are still broken. Both clients now assert their phase decisions, and the
 graduation copy is checked against a count with a defined meaning rather than the nearest
 number that looked like one.
+
+---
+
+## ADR-028 — The API had never run against Postgres, and two bugs were waiting there
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M7
+
+**Context.** Every test in `internal/httpapi` ran the server against `store.Memory`. That
+is fast, and it is also precisely the arrangement that let ADR-024's bug ship: a rule
+enforced in the double and not in production, with the whole suite reporting it held.
+
+So the API had been exercised thousands of times and **never once against a real
+database**. `TestAWholeCycleAgainstPostgres` wires the real server to Postgres and walks
+two people from signing in through six weeks to graduation and a second cycle. It found two
+bugs in its first run, and neither was subtle once seen.
+
+**1. Every pod dissolved after two weeks, whoever showed up.**
+
+`ListWeeksForMemberless` returned weeks *without their members* on Postgres.
+
+"Memberless" means **not scoped to a member** — it is the weekly job's view, and it
+deliberately skips the membership check the caller-facing list makes. It does not mean the
+weeks come back stripped of who was in them. `dissolveIfInactive` asks each week whether
+anyone posted; a week with no members answers no; so a pod where everybody posted every
+week looked exactly like a pod nobody had touched.
+
+`Memory` loaded the members. Every dissolve test — including the one specifically about a
+pod where one person keeps showing up — ran against `Memory` and passed. In production this
+would have dissolved every pod in the product on its second week.
+
+**2. No graduated pod ever restarted or closed.**
+
+The weekly job asks for continuation counts with no caller, so it passed `""` as the user
+id. Postgres rejects an empty string as a `uuid` — `22P02` — and ADR-024's own fix maps
+that to `ErrNotFound` so a malformed path id answers 404 rather than 500. The job caught
+the error, logged, and skipped. Forever. `NULL` is the honest way to say "no caller", and
+that is what it passes now.
+
+Note the shape of this one: a correct fix (`22P02` → not found) turned a loud failure into
+a silent one somewhere else. Mapping an error class is never local.
+
+**Decision.** One end-to-end test, against Postgres, covering the whole journey. It is
+deliberately a single long test rather than several: the value is in the sequence, each
+step depending on the last having really happened, and splitting it would mean seeding the
+middle — which is exactly where these two were hiding.
+
+Both bugs are also pinned in `TestMemoryAndPostgresAgree`, which is where they should have
+been caught. That table is now the standing answer to this class: **every rule enforced in
+one store implementation belongs in it.**
+
+**Consequences.**
+* `week.Service.Open` is exported and the matching job opens a new pod's first week in the
+  same breath as forming it. Found by the same test: a pod had no week until the weekly
+  job's next tick, so its members were told "you've got a pod" and then opened the app to a
+  404 — which the client renders as *"Something's off on our end"*, on the best moment in
+  the product.
+* `cmd/matcher` therefore needs a week service, which needs a blob store it must never use.
+  It gets `blob.Unavailable`, whose every method fails loudly: a process that has no
+  business touching proof bytes should not be handed something that quietly can.
+* The journey test clears the database it runs against. It is the only test that does, and
+  it must stay that way — it is why it can assert that *no* proof survived the cycle.

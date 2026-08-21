@@ -113,6 +113,18 @@ func (s *Service) Current(ctx context.Context, podID, userID string) (store.Week
 }
 
 // open creates the week containing `now` for a pod, with its members.
+// Open creates a pod's week for the window containing `now`, if it has none.
+//
+// Exported so the matching job can open a pod's first week in the same breath as forming
+// it. A pod with no week is a pod whose members were told "you've got a pod" and then
+// opened the app to a 404 — up to an hour of it, until the weekly job's next tick.
+//
+// Idempotent: EnsureWeek is keyed on the opening instant, so the weekly job running
+// immediately afterwards finds this week rather than making a second one.
+func (s *Service) Open(ctx context.Context, pod store.Pod, now time.Time) (store.Week, error) {
+	return s.open(ctx, pod, now)
+}
+
 func (s *Service) open(ctx context.Context, pod store.Pod, now time.Time) (store.Week, error) {
 	location, err := cycle.Load(pod.Timezone)
 	if err != nil {

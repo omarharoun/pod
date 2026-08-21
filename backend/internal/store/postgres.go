@@ -768,7 +768,26 @@ func (p *Postgres) ListWeeksForMemberless(ctx context.Context, podID string, lim
 		}
 		weeks = append(weeks, week)
 	}
-	return weeks, wrap("list weeks", rows.Err())
+	if err := rows.Err(); err != nil {
+		return nil, wrap("list weeks", err)
+	}
+
+	// Members are loaded, despite the name.
+	//
+	// "Memberless" means *not scoped to a member* — it is the job's view, not a caller's,
+	// and it deliberately skips the membership check the caller-facing list makes. It
+	// does NOT mean the weeks come back without their members, and reading it that way
+	// was catastrophic: `dissolveIfInactive` asks each week whether anyone posted, and a
+	// week with no members answers no. Every pod dissolved after two weeks no matter who
+	// showed up. The Memory implementation loaded them, so every dissolve test passed.
+	for i, week := range weeks {
+		hydrated, err := p.withMembers(ctx, week)
+		if err != nil {
+			return nil, err
+		}
+		weeks[i] = hydrated
+	}
+	return weeks, nil
 }
 
 func (p *Postgres) SetWeekAction(ctx context.Context, weekID, actionText string) error {
@@ -1235,13 +1254,21 @@ func (p *Postgres) ContinuationFor(ctx context.Context, podID, userID string) (C
 	var out Continuation
 	var members int
 	var youContinuing *bool
+	// The weekly job asks for the counts with no caller, so `userID` is empty there.
+	// Passing "" as a uuid parameter is an invalid_text_representation, which `wrap`
+	// turns into ErrNotFound — the job then logged and skipped, and no graduated pod
+	// ever restarted or closed. NULL is the honest way to say "no caller".
+	var caller *string
+	if userID != "" {
+		caller = &userID
+	}
 	err := p.pool.QueryRow(ctx, `
 		SELECT
 			(SELECT count(*) FROM pod_members WHERE pod_id = $1 AND left_at IS NULL),
 			(SELECT count(*) FROM pod_continuations WHERE pod_id = $1 AND continuing),
 			(SELECT count(*) FROM pod_continuations WHERE pod_id = $1 AND NOT continuing),
 			(SELECT continuing FROM pod_continuations WHERE pod_id = $1 AND user_id = $2)`,
-		podID, userID).Scan(&members, &out.Continuing, &out.Declined, &youContinuing)
+		podID, caller).Scan(&members, &out.Continuing, &out.Declined, &youContinuing)
 	if err != nil {
 		return Continuation{}, wrap("read continuation", err)
 	}

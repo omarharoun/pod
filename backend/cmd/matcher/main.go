@@ -17,11 +17,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/omarharoun/pod/backend/internal/blob"
 	"github.com/omarharoun/pod/backend/internal/clock"
 	"github.com/omarharoun/pod/backend/internal/config"
 	"github.com/omarharoun/pod/backend/internal/matching"
 	"github.com/omarharoun/pod/backend/internal/notify"
 	"github.com/omarharoun/pod/backend/internal/store"
+	"github.com/omarharoun/pod/backend/internal/week"
 )
 
 func main() {
@@ -57,7 +59,11 @@ func run(log *slog.Logger) error {
 
 	now := clock.System{}
 	notifier := notify.NewService(db, now, log)
-	job := matching.NewJob(db, now, log, matching.Options{}, notifier)
+	// The week service is here only to open a new pod's first week in the same breath as
+	// forming it. It never posts, sweeps or notifies from this process — cmd/weekly owns
+	// all of that — so the blob store it is given is the one this command will not use.
+	weeks := week.NewService(db, blob.Unavailable{}, now, notifier)
+	job := matching.NewJob(db, now, log, matching.Options{}, notifier, weeks)
 
 	if command == "once" {
 		_, err := job.RunWindow(ctx)

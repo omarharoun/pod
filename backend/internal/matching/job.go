@@ -36,16 +36,27 @@ type Result struct {
 }
 
 // Job runs one matching window.
+// WeekOpener opens a pod's first week. Satisfied by *week.Service.
+//
+// An interface rather than the concrete type so that matching keeps depending on nothing
+// but the store and its own arithmetic — the package is deliberately blind to display
+// names, emails and everything else it does not need, and importing the week service
+// wholesale would start to erode that.
+type WeekOpener interface {
+	Open(ctx context.Context, pod store.Pod, now time.Time) (store.Week, error)
+}
+
 type Job struct {
 	store    store.Store
 	clock    clock.Clock
 	log      *slog.Logger
 	opts     Options
 	notifier *notify.Service
+	weeks    WeekOpener
 }
 
-func NewJob(s store.Store, c clock.Clock, log *slog.Logger, opts Options, n *notify.Service) *Job {
-	return &Job{store: s, clock: c, log: log, opts: opts, notifier: n}
+func NewJob(s store.Store, c clock.Clock, log *slog.Logger, opts Options, n *notify.Service, w WeekOpener) *Job {
+	return &Job{store: s, clock: c, log: log, opts: opts, notifier: n, weeks: w}
 }
 
 // RunWindow reads the whole pool, forms what pods it can, and leaves the rest queued.
@@ -143,12 +154,30 @@ func (j *Job) persist(ctx context.Context, pod Pod, waiting []store.PoolCandidat
 		}
 	}
 
-	if j.notifier != nil {
-		// Read the pod back so the notification can name people, which needs the
-		// display names the matcher deliberately never sees.
-		if formed, err := j.store.GetActivePod(ctx, memberships[0].UserID, memberships[0].Slot); err == nil {
-			j.notifier.PodFormed(ctx, formed)
+	// Read the pod back so the notification can name people, which needs the display
+	// names the matcher deliberately never sees — and so the first week can be opened
+	// against real membership.
+	formed, readErr := j.store.GetActivePod(ctx, memberships[0].UserID, memberships[0].Slot)
+	if readErr != nil {
+		// The pod exists; the week job will open its week within the hour. Not worth
+		// failing the window over.
+		j.log.ErrorContext(ctx, "could not read back a new pod", slog.Any("error", readErr))
+		return true, nil
+	}
+
+	// The first week opens now, not on the weekly job's next tick. Otherwise a pod's
+	// members are told "you've got a pod" and then open the app to a 404 for up to an
+	// hour — which the client renders as a server error, on the best moment in the
+	// product. EnsureWeek is keyed on the opening instant, so the weekly job finds this
+	// week rather than making a second one.
+	if j.weeks != nil {
+		if _, err := j.weeks.Open(ctx, formed, now); err != nil {
+			j.log.ErrorContext(ctx, "could not open a new pod's first week", slog.Any("error", err))
 		}
+	}
+
+	if j.notifier != nil {
+		j.notifier.PodFormed(ctx, formed)
 	}
 	return true, nil
 }

@@ -410,6 +410,88 @@ func TestMemoryAndPostgresAgree(t *testing.T) {
 				t.Errorf("ClearRecoveryOffer lane 0: %v", err)
 			}
 		}},
+		// ListWeeksForMemberless must return weeks WITH their members. "Memberless"
+		// means not scoped to a member — the job's view rather than a caller's — and
+		// reading it as "without members" was catastrophic: dissolveIfInactive asks each
+		// week whether anyone posted, and a week with no members answers no, so every pod
+		// dissolved after two weeks no matter who showed up. Memory loaded them; Postgres
+		// did not; every dissolve test ran against Memory and passed.
+		{"the job's week list carries members", func(t *testing.T, s store.Store) {
+			ctx := context.Background()
+			sam, err := s.UpsertUserByEmail(ctx, uniqueEmail(t), time.Now().UTC())
+			if err != nil {
+				t.Fatalf("user: %v", err)
+			}
+			podID, err := ids.NewUUID()
+			if err != nil {
+				t.Fatalf("ids.NewUUID: %v", err)
+			}
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			if err := s.CreatePod(ctx, store.Pod{
+				ID: podID, State: store.PodStateActive, GoalCategory: "home",
+				Timezone: "UTC", CreatedAt: now,
+			}, store.FreeLane(sam.ID), now); err != nil {
+				t.Fatalf("CreatePod: %v", err)
+			}
+			weekID, err := ids.NewUUID()
+			if err != nil {
+				t.Fatalf("ids.NewUUID: %v", err)
+			}
+			if _, err := s.EnsureWeek(ctx, store.Week{
+				ID: weekID, PodID: podID, ActionIsDefault: true,
+				OpensAt: now.Add(-24 * time.Hour), ClosesAt: now.Add(5 * 24 * time.Hour),
+			}, []string{sam.ID}); err != nil {
+				t.Fatalf("EnsureWeek: %v", err)
+			}
+
+			weeks, err := s.ListWeeksForMemberless(ctx, podID, 0)
+			if err != nil {
+				t.Fatalf("ListWeeksForMemberless: %v", err)
+			}
+			if len(weeks) != 1 {
+				t.Fatalf("listed %d weeks, want 1", len(weeks))
+			}
+			if len(weeks[0].Members) != 1 {
+				t.Fatalf("the week came back with %d members — the job cannot tell who posted",
+					len(weeks[0].Members))
+			}
+		}},
+		// The weekly job asks for continuation counts with no caller. Passing "" as a
+		// uuid parameter was an invalid_text_representation, which wrap turns into
+		// ErrNotFound — so the job logged and skipped, and no graduated pod ever
+		// restarted or closed.
+		{"continuation counts with no caller", func(t *testing.T, s store.Store) {
+			ctx := context.Background()
+			sam, err := s.UpsertUserByEmail(ctx, uniqueEmail(t), time.Now().UTC())
+			if err != nil {
+				t.Fatalf("user: %v", err)
+			}
+			podID, err := ids.NewUUID()
+			if err != nil {
+				t.Fatalf("ids.NewUUID: %v", err)
+			}
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			if err := s.CreatePod(ctx, store.Pod{
+				ID: podID, State: store.PodStateActive, GoalCategory: "home",
+				Timezone: "UTC", CreatedAt: now,
+			}, store.FreeLane(sam.ID), now); err != nil {
+				t.Fatalf("CreatePod: %v", err)
+			}
+			if err := s.AnswerContinuation(ctx, podID, sam.ID, true, now); err != nil {
+				t.Fatalf("AnswerContinuation: %v", err)
+			}
+
+			counts, err := s.ContinuationFor(ctx, podID, "")
+			if err != nil {
+				t.Fatalf("ContinuationFor with no caller: %v", err)
+			}
+			if counts.Continuing != 1 {
+				t.Errorf("continuing: got %d, want 1", counts.Continuing)
+			}
+			if counts.YouAnswered {
+				t.Error("there is no caller, so nobody's own answer should be reported")
+			}
+		}},
 		{"missing refresh token", func(t *testing.T, s store.Store) {
 			if _, err := s.GetRefreshToken(context.Background(), "nope"); err != store.ErrNotFound {
 				t.Errorf("got %v, want ErrNotFound", err)
