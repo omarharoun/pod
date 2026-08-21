@@ -36,7 +36,7 @@ public actor APIClient {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let text = try decoder.singleValueContainer().decode(String.self)
-            guard let date = ISO8601DateFormatter.podParsers.lazy.compactMap({ $0.date(from: text) }).first else {
+            guard let date = PodTimestamp.parse(text) else {
                 throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "not an RFC 3339 timestamp: \(text)"))
             }
             return date
@@ -425,16 +425,28 @@ public actor APIClient {
     }
 }
 
-private extension ISO8601DateFormatter {
-    /// The API sends RFC 3339 with or without fractional seconds depending on the value,
-    /// and `.iso8601` only accepts one of those shapes.
-    static let podParsers: [ISO8601DateFormatter] = {
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        return [withFraction, plain]
-    }()
+/// The API sends RFC 3339 with or without fractional seconds depending on the value,
+/// and a single strategy only accepts one of those shapes, so we try both.
+///
+/// These are `Date.ISO8601FormatStyle` rather than `ISO8601DateFormatter` because the
+/// format style is a `Sendable` value type: a shared `static let` of reference-type
+/// formatters is not concurrency-safe under Swift 6, and the alternative — opting the
+/// check out with `nonisolated(unsafe)` — would be asserting a thread-safety guarantee
+/// Foundation does not document for that class.
+enum PodTimestamp {
+    static let parsers: [Date.ISO8601FormatStyle] = [
+        .init(includingFractionalSeconds: true),
+        .init(includingFractionalSeconds: false),
+    ]
+
+    static func parse(_ text: String) -> Date? {
+        for parser in parsers {
+            if let date = try? parser.parse(text) {
+                return date
+            }
+        }
+        return nil
+    }
 }
 
 private extension String {
