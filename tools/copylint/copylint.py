@@ -7,6 +7,7 @@ Checks:
   2. Every key a client references (Copy.key("...") / copy("...")) exists.
   3. Placeholder sets are internally consistent for plural forms.
   4. No exclamation marks, no ALL-CAPS shouting.
+  5. The intensity rungs name increasing amounts of time (ADR-010, ADR-020).
 
 Usage: python3 tools/copylint/copylint.py [--root .]
 Exit code 1 on any violation.
@@ -53,6 +54,45 @@ def flatten(obj, prefix=""):
             yield path, v
 
 
+# The five intensity rungs are ordinal — the hard filter compares them as integers and
+# the M5 recovery flow offers rung N-1 as "smaller". The phrases must therefore increase.
+# Renaming a rung means giving it a duration here, which is the step that was skipped when
+# rung 4 ("Half a day") was briefly larger than rung 5 ("Several hours").
+INTENSITY_MINUTES = {
+    "A few minutes": 10,
+    "Half an hour": 30,
+    "An hour or two": 90,
+    "A few hours": 210,
+    "Half a day": 300,
+}
+
+
+def check_intensity_rungs(strings: dict[str, str]) -> list[str]:
+    problems: list[str] = []
+    previous_key = previous_minutes = None
+    for rung in range(1, 6):
+        key = f"onboarding.intensity.{rung}"
+        phrase = strings.get(key)
+        if phrase is None:
+            problems.append(f"{key}: missing — the rungs are 1..5 (ADR-010)")
+            continue
+        minutes = INTENSITY_MINUTES.get(phrase)
+        if minutes is None:
+            problems.append(
+                f'{key}: "{phrase}" has no duration in copylint\'s INTENSITY_MINUTES. '
+                f"The rungs are ordinal; adding one means saying how long it is."
+            )
+            continue
+        if previous_minutes is not None and minutes <= previous_minutes:
+            problems.append(
+                f'{key}: "{phrase}" is not longer than {previous_key} '
+                f'("{strings[previous_key]}") — the scale must increase, or "make it '
+                f'smaller" offers something bigger (ADR-020)'
+            )
+        previous_key, previous_minutes = key, minutes
+    return problems
+
+
 def placeholders(s: str) -> set[str]:
     return set(re.findall(r"\{([a-zA-Z0-9_]+)\}", s))
 
@@ -91,6 +131,8 @@ def main() -> int:
             sets = {k: placeholders(v) for k, v in forms.items()}
             if len(set(map(frozenset, sets.values()))) > 1:
                 problems.append(f"{key}: plural forms disagree on placeholders: {sets}")
+
+    problems.extend(check_intensity_rungs(strings))
 
     # keys referenced from client code must exist
     missing: dict[str, set[str]] = {}

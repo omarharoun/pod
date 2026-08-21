@@ -677,3 +677,46 @@ people who carry it are the ones who never posted at all.
 * `dissolveIfInactive` reads the pod's whole history to decide who carries the count, not
   just the trigger weeks. That is a longer query for a rarer event, which is the right way
   round.
+
+---
+
+## ADR-020 — The intensity rungs must name increasing amounts of time
+
+**Date:** 2026-08-21 · **Status:** accepted · **Amends ADR-010** · **Milestone:** M5
+
+**Context.** ADR-010 fixed the five rungs. Its table named rung 4 *Half a day* and rung 5
+*Several hours* — so the scale went up in the integer and down in the English. Nothing
+caught it: the integer is what the hard filter compares, and no test reads the phrases as
+durations.
+
+It surfaced building the M5 recovery screen, whose entire premise is that rung N−1 is
+*smaller* than rung N. For someone on rung 5 the offer would have read "you picked several
+hours; half a day is also a real week" — a bigger commitment, presented as a smaller one,
+to the person in the product least able to take it.
+
+**Decision.** The rungs are:
+
+| | | filter admits |
+|---|---|---|
+| 1 | A few minutes | 1, 2 |
+| 2 | Half an hour | 1, 2, 3 |
+| 3 | An hour or two | 2, 3, 4 |
+| 4 | A few hours | 3, 4, 5 |
+| 5 | Half a day | 4, 5 |
+
+Rung 4 becomes *A few hours* and rung 5 becomes *Half a day*. The filter arithmetic is
+unchanged — this is a copy correction, not a scale change, so it is not a §8 escalation.
+
+`tools/copylint` now holds a phrase → minutes table and fails if the five rungs are not
+strictly increasing. Renaming a rung means stating how long it is, which is the step that
+was skipped.
+
+**Consequences.**
+* The rungs are ordinal in three places — the hard filter, the ±1 admission table, and the
+  recovery offer. Only the third one reads the words, which is why the third one found it.
+* Anyone who answered before this lands keeps their integer. Rungs 4 and 5 now describe
+  slightly different amounts of time than the person picked. That is a real but small
+  wrong-by-one-notch, and it is the smaller harm than leaving the scale inverted.
+
+---
+

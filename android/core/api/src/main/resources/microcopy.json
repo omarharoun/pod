@@ -6,10 +6,8 @@
     "placeholders": "Interpolation uses {braced} names. The same placeholder set must appear in every locale of a key.",
     "voice": "Plain, warm, short. Second person. No exclamation marks. No streaks-as-pressure. Nothing a person would be embarrassed to have read over their shoulder."
   },
-
   "app.name": "Pod",
   "app.tagline": "Two or three people. One small thing a week.",
-
   "auth.start.title": "Let's get you in",
   "auth.start.body": "We'll email you a 6-digit code. No password to remember.",
   "auth.start.emailLabel": "Email",
@@ -30,7 +28,6 @@
   "auth.signedOut.title": "You're signed out",
   "auth.signedOut.body": "Your pod is still there when you come back.",
   "auth.signOut.action": "Sign out",
-
   "onboarding.intent.title": "What have you been putting off?",
   "onboarding.intent.body": "One thing. The one that's been sitting there.",
   "onboarding.goal.label": "In your words",
@@ -51,8 +48,8 @@
   "onboarding.intensity.1": "A few minutes",
   "onboarding.intensity.2": "Half an hour",
   "onboarding.intensity.3": "An hour or two",
-  "onboarding.intensity.4": "Half a day",
-  "onboarding.intensity.5": "Several hours",
+  "onboarding.intensity.4": "A few hours",
+  "onboarding.intensity.5": "Half a day",
   "onboarding.reliability.title": "One last thing",
   "onboarding.reliability.body": "How often do you keep commitments you make to yourself? There's no right answer — it only helps us pick who you'd get on with.",
   "onboarding.reliability.rarely": "Not as often as I'd like",
@@ -62,12 +59,10 @@
   "onboarding.timezone.body": "So your pod's week lines up with yours.",
   "onboarding.submit": "Find me a pod",
   "onboarding.continue": "Continue",
-
   "pool.waiting.title": "Looking for your pod",
   "pool.waiting.body": "We match every hour, so you're not waiting long. We'll let you know.",
   "pool.waiting.nextWindow": "Next match at {time}",
   "pool.waiting.leave": "Leave the queue",
-
   "recovery.podEnded.title": "That pod has wound down",
   "recovery.podEnded.body": "It happens. We'll find you another one whenever you're ready.",
   "recovery.lowerBar.title": "Want to make it smaller?",
@@ -78,10 +73,8 @@
   "recovery.alternate.title": "There's another way to do this",
   "recovery.alternate.body": "Some people do better one-to-one than in a group. We can set that up when it's ready.",
   "recovery.alternate.notYet": "We'll let you know",
-
   "pod.you": "You",
   "pod.someone": "Someone in your pod",
-
   "push.podFormed.title": "You've got a pod",
   "push.podFormed.body": "{names} are in it with you.",
   "push.weekOpened.title": "New week",
@@ -94,16 +87,13 @@
   "push.podCompleted.body": "{count} weeks together.",
   "push.proofExpiring.title": "This week's proof goes tonight",
   "push.proofExpiring.body": "Have a look before it does.",
-
   "notifications.title": "Notifications",
   "notifications.permission.title": "Can we let you know?",
   "notifications.permission.body": "Only when your pod does something. Never to chase you.",
   "notifications.permission.allow": "Allow",
   "notifications.permission.notNow": "Not now",
-
   "pod.newlyFormed.title": "You're matched",
   "pod.newlyFormed.body": "Same goal, same kind of week. Your first action lands soon.",
-
   "week.defaultAction": "One small thing towards it this week.",
   "week.title": "This week",
   "week.actionLabel": "The one thing",
@@ -131,7 +121,6 @@
   "week.proof.view": "See it",
   "week.podCompleted": "Everyone was in this week.",
   "week.podPartial": "The pod carries on.",
-
   "error.weekClosed.title": "That week has closed",
   "error.weekClosed.body": "This week's open now, whenever you're ready.",
   "error.alreadyPosted.title": "You're already in",
@@ -144,22 +133,17 @@
   "error.proofTooLarge.body": "Try a shorter clip or a smaller photo.",
   "error.uploadIncomplete.title": "That didn't send",
   "error.uploadIncomplete.body": "Nothing arrived. Give it another go.",
-
   "a11y.ringPosted": "{count} of {total} in this week",
   "a11y.postProof": "Post your ten seconds of proof",
-
   "error.alreadyInPod.title": "You're already in a pod",
   "error.alreadyInPod.body": "One pod at a time, and yours is waiting for you.",
   "error.goalTooShort.title": "A few more words",
   "error.goalTooShort.body": "Tell us a little more so we can match you well.",
-
   "a11y.intensityOption": "{label}, option {index} of 5",
   "a11y.selected": "Selected",
-
   "email.loginCode.subject": "Your Pod code: {code}",
   "email.loginCode.preheader": "It's good for {minutes} minutes.",
   "email.loginCode.body": "Here's your sign-in code: {code}. It's good for {minutes} minutes. If you didn't ask for it, you can ignore this.",
-
   "state.member.posted.short": "In",
   "state.member.posted.detail": "{name} is in this week.",
   "state.member.open.short": "Not yet",
@@ -174,7 +158,6 @@
     "other": "{count} weeks together"
   },
   "state.pod.restartingNote": "The pod picks back up this week.",
-
   "error.network.title": "Can't reach Pod",
   "error.network.body": "Check your connection and try again.",
   "error.network.retry": "Try again",
@@ -184,12 +167,10 @@
   "error.rateLimited.body": "Too many tries just now. Try again in {seconds}s.",
   "error.sessionExpired.title": "Time to sign in again",
   "error.sessionExpired.body": "For your security we sign you out after a while.",
-
   "common.cancel": "Cancel",
   "common.done": "Done",
   "common.back": "Back",
   "common.loading": "One second",
-
   "a11y.codeField": "Six digit sign-in code",
   "a11y.loading": "Loading",
   "a11y.memberPosted": "{name}, posted this week",
