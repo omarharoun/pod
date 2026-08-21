@@ -49,6 +49,7 @@ sentence is in this file.
 | Proof capture | camera and microphone permissions on a real device | **Medium.** A simulator does not exercise TCC. |
 | A notification refusal | Android 13+ on a real device | Medium |
 | Anything behind a seam | credentials — see the last section | by design |
+| Goals outside the lexicon's English | a hosted embedding model (ADR-031) | Low. Unknown vocabulary scores on words, as it did before. |
 
 Everything else that used to be in this table is now in the one above it.
 
@@ -147,12 +148,18 @@ Six seams are deliberately empty, and each refuses to start rather than pretendi
 | Receipt verification | `cmd/api` `selectReceiptVerifier` (ADR-026) | StoreKit and Play credentials |
 | Purchase sheet | `PurchaseBroker` on both clients | the same, client-side |
 | Push delivery | `push.Sender`, `PushTokenSource` | APNs and FCM credentials |
-| Embeddings | `internal/embed` (ADR-011) | a real model — the hashing stand-in **scores a synonym pair at −0.07**, which is worse than random, and ADR-011 says so |
+| Embeddings | `internal/embed` (ADR-011, ADR-031) | a hosted model would still be better than the lexicon — but the lexicon is no longer *wrong* |
 
 Every one of these is wired so that the product works without it. An app with no billing
 behaves like someone who cancelled; an account with no push behaves like someone who
 declined. None of them can take away the free pod.
 
-**The embedder is the one to fix first.** It is not a seam that degrades gracefully — it
-feeds the 0.40-weight similarity signal with numbers that are actively wrong, so matching
-is currently running on three signals and noise.
+**The embedder used to be the one to fix first, and it is fixed.** ADR-011's hashed
+bag-of-words scored the synonym pair "run every morning" / "start jogging daily" at −0.07 —
+worse than random on the signal carrying 0.40 of the match. `embed.Lexical` scores it 0.801,
+and a strict ordering over 55 goals is asserted on every run (ADR-031). A hosted model would
+still be better; the difference is that the seam now degrades rather than misleads.
+
+**Any change to `internal/embed` is a backfill.** Run `cmd/reembed` after one. Until it has
+run, a stale vector scores 0 and the signal drops out — no wrong answers, just three
+signals instead of four.

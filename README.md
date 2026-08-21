@@ -82,6 +82,22 @@ cd android
 ./gradlew test
 ```
 
+**Installing it on a phone.** `:app:assembleDebug` produces
+`android/app/build/outputs/apk/debug/app-debug.apk`, signed with the standard debug key, so
+it installs on a device with "install unknown apps" allowed. Every CI run keeps one as an
+artefact, downloadable from the run page.
+
+By default a debug build points at `http://10.0.2.2:8080`, which is the *emulator's* alias
+for your host machine and means nothing on a real phone. Tell it where the backend is:
+
+```bash
+./gradlew :app:assembleDebug -PpodApiBaseUrl=http://192.168.1.5:8080   # or POD_API_BASE_URL
+```
+
+That address has to be reachable from the phone — the machine's address on the same
+network, not `localhost`. Cleartext HTTP is permitted for the debug build only; a release
+build sends a session token on every request and will not send one over plain HTTP.
+
 ## Milestones
 
 M1 contract + auth · M2 onboarding + matching · M3 the week loop · M4 ephemerality +
@@ -89,12 +105,18 @@ notifications · M5 recovery + dissolution · M6 cycle completion · M7 paywall.
 
 M3 is the product. Nothing after it starts until it feels finished on both platforms.
 
-**Where we are: M3 — the week loop, which is the product.** Sign in, name the thing
-you've been putting off, wait for the next matching window, land in a pod, and then every
-week: one small action, ten seconds of proof, and a ring that closes only when everyone is
-in. Proof is deleted when the week closes, server-side, and there is a test that says so.
+**Where we are: M1 through M7 are built.** Sign in, name the thing you've been putting off,
+wait for the next matching window, land in a pod, and then every week: one small action,
+ten seconds of proof, and a ring that closes only when everyone is in. Proof is deleted
+when the week closes, server-side, and there is a test that says so. Past that: a missed
+week that offers a smaller rung rather than a verdict, a pod that winds down and puts
+everyone back in the pool, a six-week cycle that graduates, and a second lane you can buy
+for a second thing.
 
 Every operation in `openapi.yaml` is implemented. Nothing answers `501` any more.
+
+Built is not the same as run. `docs/VERIFYING.md` says exactly what has been executed, by
+what, and what is left — read it before trusting any of the above.
 
 Two scheduled jobs, neither of which ever runs on request (`CLAUDE.md` §5):
 
@@ -105,3 +127,14 @@ cd backend && go run ./cmd/weekly once  # turn weeks over, sweep expired proof
 ```
 
 Both take `serve` instead of `once` to run on their own schedule.
+
+One more, run by hand rather than on a schedule:
+
+```bash
+cd backend && go run ./cmd/reembed      # after any change to internal/embed (ADR-031)
+```
+
+A stored goal vector is the output of whatever the embedder was on the day it was saved.
+Change the lexicon and every vector is stale — `embed.Similarity` answers 0 for a stale
+width, so the signal drops out rather than going wrong, and this is how it comes back.
+`--dry-run` reports what would change without writing.

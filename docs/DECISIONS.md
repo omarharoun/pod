@@ -1348,3 +1348,72 @@ not another test; it is that every test must be somewhere that runs it.
   camera and microphone permissions, and a notification refusal on Android 13+.
 * ADR-029 closes by pointing at this ADR for the two findings it deferred. Both are fixed:
   the lane switcher landed before this, and the lane's requests work as of this.
+
+---
+
+## ADR-031 — The embedder knows what words mean, inside a category
+
+**Date:** 2026-08-21 · **Status:** accepted, replaces the decision in ADR-011 · **Milestone:** M2
+
+**Context.** ADR-011 shipped hashed bag-of-words as the 0.40 semantic-similarity signal and
+recorded its own expiry: "run every morning" and "start jogging daily" scored **−0.07**,
+which is worse than random. The largest single weight in matching was noise for anybody who
+did not happen to use the same words as their future pod-mate, and the other three signals
+were quietly carrying the match. It was the only knowingly-wrong component in the
+repository, and unlike everything else on the not-verified list it needed neither a Mac nor
+a device to fix.
+
+A hosted model is still the right long-term answer and still needs a vendor, a key and a
+cost per call. This is what can be done without one.
+
+**Decision.** `embed.Lexical`: a curated concept lexicon over the goal domain, a
+conservative stemmer, and the old hashed word features underneath as backoff. The same
+synonym pair now scores **0.801**.
+
+The backoff is the part that makes this safe. Vocabulary the lexicon has never seen behaves
+exactly as it did before — the hashed features *are* the old embedder — so this raises a
+floor rather than placing a bet. Nobody is worse off than they were and most people are
+much better off.
+
+**Three things fell out of building it that were not obvious going in.**
+
+* **The category was known and being wasted.** Matching hard-filters on goal category
+  before it scores anything (CLAUDE.md §6), so this signal only ever compares two goals
+  already in the same category. Looking up only that category's concepts is what stops
+  "clear" in "clear my overdraft" spending half its weight on decluttering, and "boxes" in
+  a home goal on boxing. `Embedder` takes a `Goal` rather than a string now; a hosted
+  implementation ignores the category, and the one-line swap ADR-011 promised survives.
+* **Some concepts are settings, not topics.** "Sort out the spare room" and "repair the
+  bathroom door" are both about rooms and are not the same goal. "Visit my sister" and
+  "meet a friend for coffee" are both a meeting, and what makes two connection goals alike
+  is *who*, not whether it happens by phone. A setting narrows a topic; it is not one, and
+  it is scored as weaker evidence.
+* **Goals overlap, and an evaluation set that denies it lies.** "Stop scrolling before bed"
+  is a screen goal and a sleep goal. The first version of the test gave every goal one
+  topic and that pair read as a failure at 0.637 — which is the correct score for two
+  people who would make perfectly good pod-mates. Topics are a list; a pair counts as near
+  when they intersect.
+
+**The guard.** ADR-011's test printed the bad number and passed. This one asserts: inside a
+category, over 55 goals, every same-topic pair outscores every different-topic pair, with a
+margin floor so an edit that keeps the ordering while grinding the gap to nothing fails
+too. As this landed: same-topic mean 0.800, different-topic mean 0.072, worst same-topic
+0.549, best different-topic 0.414, margin 0.134.
+
+**Consequences.**
+* **Any change to `internal/embed` is a backfill.** `cmd/reembed` walks every intent,
+  keyset-paged and interruptible, and rewrites the vector through a store method that
+  touches that column and nothing else — `updated_at` included, because a backfill that
+  moves it tells somebody they edited their intent when they did not (ADR-021).
+* A stale-width vector scores 0 rather than something wrong, so between a lexicon change
+  and the backfill the signal drops out instead of misleading. That is the failure to
+  prefer, and it is now pinned by a test.
+* Adding the two backfill methods to the agreement test found a divergence on the spot: a
+  zero cursor is an empty string, which is not a uuid, so Postgres answered 22P02 —
+  mapped to ErrNotFound — and the first page of every backfill reported an empty table.
+  Memory, comparing strings, was fine. ADR-024's pattern, for the fourth time.
+* **Coverage is English and finite.** The lexicon is about 82 concepts over the nine
+  categories in the spec. A category the spec gains before this file does falls back to
+  every concept at once, which is the pre-category behaviour rather than no lexicon at all.
+* ADR-011's replacement clause stands, narrowed: this is good enough to match real people
+  on, and a hosted model would still be better. What it is no longer is *wrong*.
