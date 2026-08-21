@@ -83,10 +83,23 @@ fun ProofCaptureSheet(
     var isRecording by remember { mutableStateOf(false) }
     var secondsRemaining by remember { mutableIntStateOf(VoiceRecorder.LIMIT_SECONDS) }
 
-    DisposableEffect(Unit) { onDispose { recorder.cancel() } }
+    // Nothing about proof outlives the week it belongs to, and that includes the frame a
+    // camera app wrote before the person backed out of it (CLAUDE.md §2 rule 4). The
+    // voice path already deletes on every exit; the photo path only did so on success.
+    DisposableEffect(Unit) {
+        onDispose {
+            recorder.cancel()
+            photoFile.delete()
+        }
+    }
 
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-        if (!saved) return@rememberLauncherForActivityResult
+        if (!saved) {
+            // Some camera apps write the frame before the user cancels. Whether one is
+            // there or not, this is where it stops existing.
+            photoFile.delete()
+            return@rememberLauncherForActivityResult
+        }
         val bytes = runCatching { photoFile.readBytes() }.getOrNull()
         photoFile.delete()
         if (bytes != null && bytes.isNotEmpty()) {

@@ -634,6 +634,26 @@ public object CopyKey {
     public const val WEEK_POST_VOICE: String = "week.post.voice"
 
     /**
+     * "Pod uses the camera for your ten-second proof. It goes to your pod and is deleted at the end of the week."
+     */
+    public const val PERMISSION_CAMERA: String = "permission.camera"
+
+    /**
+     * "Pod uses the microphone for a ten-second voice note. It goes to your pod and is deleted at the end of the week."
+     */
+    public const val PERMISSION_MICROPHONE: String = "permission.microphone"
+
+    /**
+     * "Pod can use a photo you already have as this week's proof. It goes to your pod and is deleted at the end of the week."
+     */
+    public const val PERMISSION_PHOTO_LIBRARY: String = "permission.photoLibrary"
+
+    /**
+     * "Pod can let you know when someone in your pod is in, and when a new week opens."
+     */
+    public const val PERMISSION_NOTIFICATIONS: String = "permission.notifications"
+
+    /**
      * "Not now"
      */
     public const val WEEK_POST_CANCEL: String = "week.post.cancel"
@@ -1085,6 +1105,10 @@ public object CopyKey {
         WEEK_POST_CTA,
         WEEK_POST_PHOTO,
         WEEK_POST_VOICE,
+        PERMISSION_CAMERA,
+        PERMISSION_MICROPHONE,
+        PERMISSION_PHOTO_LIBRARY,
+        PERMISSION_NOTIFICATIONS,
         WEEK_POST_CANCEL,
         WEEK_POST_UPLOADING,
         WEEK_POST_DONE,

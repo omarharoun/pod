@@ -55,7 +55,10 @@ public final class PushRegistrar {
             try? await client.registerDevice(
                 token: token,
                 platform: .ios,
-                locale: Locale.current.identifier
+                // BCP 47, as the contract specifies. `Locale.identifier` is the ICU
+                // form — `en_US` — which is not the same string and is what Android
+                // already sends correctly.
+                locale: Locale.current.identifier(.bcp47)
             )
         }
     }

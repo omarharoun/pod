@@ -1,5 +1,10 @@
 package app.pod.feature.week
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,10 +33,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -52,6 +59,28 @@ import app.pod.ui.components.PodPrimaryButton
 import app.pod.ui.theme.LocalCopywriter
 import app.pod.ui.theme.LocalPodColors
 
+/**
+ * Requests POST_NOTIFICATIONS on the versions that need it, once per composition.
+ *
+ * A refusal is a normal outcome and produces nothing: the week loop does not depend on
+ * push, and someone who declined notifications must not be nagged about it.
+ */
+@Composable
+private fun AskForNotificationsOnce() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    val context = LocalContext.current
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+}
+
 /** The week. This is the product (CLAUDE.md §7). */
 @Composable
 fun WeekScreen(
@@ -64,6 +93,14 @@ fun WeekScreen(
     val copy = LocalCopywriter.current
     val colors = LocalPodColors.current
     var capturing by remember { mutableStateOf(false) }
+
+    // Asked here, not at launch: this is the first moment "can we let you know when your
+    // pod does something" has a subject, which is the same moment iOS asks.
+    //
+    // Declaring POST_NOTIFICATIONS in the manifest is not asking for it. On API 33+ it is
+    // denied until requested, so every notification the backend sent was being dropped on
+    // the floor while the manifest comment said it was asked for when a pod forms.
+    AskForNotificationsOnce()
 
     LaunchedEffect(pod.id) { viewModel.start(pod.id) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }

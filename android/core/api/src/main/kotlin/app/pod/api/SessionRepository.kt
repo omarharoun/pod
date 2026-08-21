@@ -35,6 +35,11 @@ public class SessionRepository(
         }
         try {
             _state.value = SessionState.SignedIn(client.currentUser())
+        } catch (_: ApiException.NotSignedIn) {
+            // The stored session could not be renewed. That is an ordinary signed-out
+            // state, not something to show a notice about — the sign-in screen already
+            // says everything there is to say.
+            _state.value = SessionState.SignedOut
         } catch (failure: ApiException) {
             // A restored session that cannot be confirmed right now is not a reason to
             // sign someone out — they may just be on a train.

@@ -235,7 +235,12 @@ public class PodApiClient(
         val stored = tokens.load()
         try {
             if (stored != null) {
-                sendUnit("/v1/auth/logout", HttpMethod.Post, AuthRefreshRequest(refreshToken = stored.refreshToken))
+                sendUnit(
+                    "/v1/auth/logout",
+                    HttpMethod.Post,
+                    AuthRefreshRequest(refreshToken = stored.refreshToken),
+                    retryAfterRefresh = false,
+                )
             }
         } catch (_: ApiException) {
             // Nothing useful to do: the local state is what matters here.
@@ -265,9 +270,29 @@ public class PodApiClient(
         }
     }
 
-    private suspend fun sendUnit(path: String, method: HttpMethod, body: Any?) {
+    // The same one-refresh-one-retry as [send]. Without it, leavePool, registerDevice and
+    // unregisterDevice were the three calls that simply failed on a token rejected for
+    // clock skew — quietly, since none of them surfaces its failure.
+    //
+    // `retryAfterRefresh` is false for exactly one caller. Refreshing rotates the refresh
+    // token, so retrying sign-out would mint a fresh session moments before the local
+    // tokens are thrown away — leaving a live one on the server that nothing will ever
+    // revoke, and sending a body carrying a token the refresh just consumed.
+    private suspend fun sendUnit(
+        path: String,
+        method: HttpMethod,
+        body: Any?,
+        retryAfterRefresh: Boolean = true,
+    ) {
         val accessToken = validAccessToken()
-        perform(path, method, body, accessToken)
+        try {
+            perform(path, method, body, accessToken)
+        } catch (failure: ApiException.Problem) {
+            if (!retryAfterRefresh || failure.status != 401 || failure.error.code != ErrorCode.SESSION_EXPIRED) {
+                throw failure
+            }
+            perform(path, method, body, refreshSession().accessToken)
+        }
     }
 
     /** Like [send], but maps a 204 onto null instead of trying to decode an empty body. */

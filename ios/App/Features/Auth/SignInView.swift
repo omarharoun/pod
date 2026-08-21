@@ -14,7 +14,10 @@ struct SignInView: View {
     @FocusState private var isFieldFocused: Bool
 
     private var canSubmit: Bool {
-        email.contains("@") && !email.hasSuffix("@") && email.count > 3
+        // `isWorking` belongs here, not only on the button. The keyboard's Go key goes
+        // through `.onSubmit`, which the button's disabled state does not reach, so a
+        // second sign-in could be fired while the first was still in flight.
+        !session.isWorking && email.contains("@") && !email.hasSuffix("@") && email.count > 3
     }
 
     var body: some View {

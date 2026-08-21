@@ -180,7 +180,11 @@ final class VoiceRecorder {
 
     func stop() {
         guard isRecording, let recorder, let url else { return }
-        let elapsed = Self.limit - secondsRemaining
+        // The recorder's own position, read before stopping — not the countdown. The
+        // countdown ticks in whole seconds, so a 3.4-second note reported 3000ms here
+        // and 3400ms on Android, and the two clients disagreed either side of the
+        // server's ten-second limit.
+        let elapsedMs = Int((recorder.currentTime * 1000).rounded())
         recorder.stop()
         countdown?.cancel()
         isRecording = false
@@ -188,7 +192,7 @@ final class VoiceRecorder {
 
         defer { try? FileManager.default.removeItem(at: url) }
         guard let data = try? Data(contentsOf: url), !data.isEmpty else { return }
-        finished = Finished(data: data, durationMs: max(elapsed, 1) * 1000)
+        finished = Finished(data: data, durationMs: max(elapsedMs, 1))
     }
 
     func cancel() {

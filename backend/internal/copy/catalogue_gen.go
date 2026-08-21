@@ -392,6 +392,18 @@ const (
 	// "Record a voice note"
 	KeyWeekPostVoice Key = "week.post.voice"
 
+	// "Pod uses the camera for your ten-second proof. It goes to your pod and is deleted at the end of the week."
+	KeyPermissionCamera Key = "permission.camera"
+
+	// "Pod uses the microphone for a ten-second voice note. It goes to your pod and is deleted at the end of the week."
+	KeyPermissionMicrophone Key = "permission.microphone"
+
+	// "Pod can use a photo you already have as this week's proof. It goes to your pod and is deleted at the end of the week."
+	KeyPermissionPhotoLibrary Key = "permission.photoLibrary"
+
+	// "Pod can let you know when someone in your pod is in, and when a new week opens."
+	KeyPermissionNotifications Key = "permission.notifications"
+
 	// "Not now"
 	KeyWeekPostCancel Key = "week.post.cancel"
 
@@ -719,6 +731,10 @@ var AllKeys = []Key{
 	KeyWeekPostCta,
 	KeyWeekPostPhoto,
 	KeyWeekPostVoice,
+	KeyPermissionCamera,
+	KeyPermissionMicrophone,
+	KeyPermissionPhotoLibrary,
+	KeyPermissionNotifications,
 	KeyWeekPostCancel,
 	KeyWeekPostUploading,
 	KeyWeekPostDone,
@@ -908,6 +924,10 @@ var catalogue = map[Key]map[string]string{
 	KeyWeekPostCta:                    {"other": "Post your 10 seconds"},
 	KeyWeekPostPhoto:                  {"other": "Take a photo"},
 	KeyWeekPostVoice:                  {"other": "Record a voice note"},
+	KeyPermissionCamera:               {"other": "Pod uses the camera for your ten-second proof. It goes to your pod and is deleted at the end of the week."},
+	KeyPermissionMicrophone:           {"other": "Pod uses the microphone for a ten-second voice note. It goes to your pod and is deleted at the end of the week."},
+	KeyPermissionPhotoLibrary:         {"other": "Pod can use a photo you already have as this week's proof. It goes to your pod and is deleted at the end of the week."},
+	KeyPermissionNotifications:        {"other": "Pod can let you know when someone in your pod is in, and when a new week opens."},
 	KeyWeekPostCancel:                 {"other": "Not now"},
 	KeyWeekPostUploading:              {"other": "Sending"},
 	KeyWeekPostDone:                   {"other": "That's you in"},

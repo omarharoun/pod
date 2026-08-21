@@ -958,3 +958,67 @@ standing decision to defer client builds): iOS declares no `NSCameraUsageDescrip
 paths terminate the app on a real device — M3's central action; Android never requests
 `POST_NOTIFICATIONS`, so push is dead on Android 13+; the Android camera path leaves its
 temp file on cancel; and several smaller parity gaps in auth and locale formatting.
+
+---
+
+## ADR-025 — The client fixes from the audit, and where copy lives when a plist reads it
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M6
+
+**Context.** ADR-024 covers the backend half of the audit. This is the client half. Two of
+these were blocking and neither was catchable on a machine without a device.
+
+**iOS declared no usage descriptions.** No `NSCameraUsageDescription`, no
+`NSMicrophoneUsageDescription`, no `NSPhotoLibraryUsageDescription`. iOS *terminates* a
+process that touches the camera, the microphone or the library without them — there is no
+exception to catch and no error to render, so both proof-capture paths killed the app the
+instant they were tapped. That is M3's central action, and M3 is the product.
+
+The strings are user-facing, so `content/microcopy.json` is their source of truth. But an
+`Info.plist` cannot resolve a copy key: the OS reads the literal string out of the bundle.
+So the rule is kept by **checking rather than resolving** — `tools/copylint` fails if
+`ios/project.yml` is missing one of the three keys, or if its value has drifted from the
+matching `permission.*` string. Verified by breaking it both ways.
+
+This is the general answer for copy that a platform reads statically. Where a key can be
+resolved, resolve it; where it cannot, the literal is checked against the key it came from
+and the check is part of `make verify`.
+
+**Android never requested `POST_NOTIFICATIONS`.** It was declared in the manifest, with a
+comment saying it was asked for when a pod forms. Declaring it is not asking for it: on API
+33+ it is denied until requested, so every notification the backend sent was dropped on the
+floor. It is now requested at the moment a pod forms — the same moment iOS asks, and the
+first moment "can we let you know when your pod does something" has a subject. A refusal
+produces nothing: the week loop does not depend on push.
+
+**Smaller things, each a real divergence.**
+
+* The Android camera path deleted its temp file on success but not on cancel, and not on
+  dismissal. A camera app that writes the frame before the user backs out left a real proof
+  image in the app cache with no expiry and no sweep — against §2 rule 4 and against the
+  manifest's own stated promise. It now deletes on both.
+* `sendUnit` had no refresh-and-retry, so `leavePool`, `registerDevice` and
+  `unregisterDevice` were the three calls that simply failed on a token rejected for clock
+  skew — quietly, since none of them surfaces its failure. Sign-out is deliberately
+  excluded: refreshing rotates the refresh token, so retrying it would mint a fresh session
+  moments before the local tokens are discarded, leaving a live one nothing will revoke.
+* An expired session at launch rendered a server-error notice on Android's sign-in screen.
+  iOS distinguishes "could not be renewed" from "could not be reached"; Android did not.
+* The Android code field used `NumberPassword`, masking the digits. The code arrives by
+  email (ADR-002), so the person is reading it off one screen and typing it into another —
+  masking hides the one thing they need to check. It also lost the typed code and restarted
+  the resend countdown on rotation; both are `rememberSaveable` now.
+* iOS's keyboard Go key went through `.onSubmit`, which the button's disabled state does
+  not reach, so a second sign-in could fire while the first was in flight.
+* iOS sent `en_US` where the contract specifies BCP 47. `Locale.identifier` is the ICU
+  form; `.identifier(.bcp47)` is the contract's.
+* The two clients reported different durations for the same voice note — iOS from a
+  whole-second countdown, Android from real elapsed time. A 3.4-second note was 3000ms on
+  one and 3400ms on the other, and they disagreed either side of the server's ten-second
+  limit. iOS now reads the recorder's own position.
+
+**What is still unverified.** These are reasoned changes to code no compiler in this
+environment can check: `:app` needs the Android SDK and iOS needs Xcode. `:core:api`
+compiles and its 52 tests pass, so the client changes inside it are verified; the Compose
+and SwiftUI ones are not. That is the standing trade — the alternative was to leave a
+known app-terminating bug in the tree until a Mac was available.

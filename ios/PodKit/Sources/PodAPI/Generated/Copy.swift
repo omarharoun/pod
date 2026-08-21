@@ -397,6 +397,18 @@ public extension CopyKey {
     /// "Record a voice note"
     static let weekPostVoice = CopyKey(rawValue: "week.post.voice")
 
+    /// "Pod uses the camera for your ten-second proof. It goes to your pod and is deleted at the end of the week."
+    static let permissionCamera = CopyKey(rawValue: "permission.camera")
+
+    /// "Pod uses the microphone for a ten-second voice note. It goes to your pod and is deleted at the end of the week."
+    static let permissionMicrophone = CopyKey(rawValue: "permission.microphone")
+
+    /// "Pod can use a photo you already have as this week's proof. It goes to your pod and is deleted at the end of the week."
+    static let permissionPhotoLibrary = CopyKey(rawValue: "permission.photoLibrary")
+
+    /// "Pod can let you know when someone in your pod is in, and when a new week opens."
+    static let permissionNotifications = CopyKey(rawValue: "permission.notifications")
+
     /// "Not now"
     static let weekPostCancel = CopyKey(rawValue: "week.post.cancel")
 
@@ -723,6 +735,10 @@ public extension CopyKey {
         .weekPostCta,
         .weekPostPhoto,
         .weekPostVoice,
+        .permissionCamera,
+        .permissionMicrophone,
+        .permissionPhotoLibrary,
+        .permissionNotifications,
         .weekPostCancel,
         .weekPostUploading,
         .weekPostDone,

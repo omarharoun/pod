@@ -8,6 +8,7 @@ Checks:
   3. Placeholder sets are internally consistent for plural forms.
   4. No exclamation marks, no ALL-CAPS shouting.
   5. The intensity rungs name increasing amounts of time (ADR-010, ADR-020).
+  6. The iOS usage descriptions match their microcopy keys (ADR-025).
 
 Usage: python3 tools/copylint/copylint.py [--root .]
 Exit code 1 on any violation.
@@ -93,6 +94,44 @@ def check_intensity_rungs(strings: dict[str, str]) -> list[str]:
     return problems
 
 
+# An Info.plist cannot resolve a copy key at runtime — the OS reads the literal string out
+# of the bundle — so the two are kept in step by checking rather than by resolving.
+# Without these keys the app is terminated the instant proof capture is tapped, and no test
+# on any machine without a device catches it.
+IOS_USAGE_DESCRIPTIONS = {
+    "NSCameraUsageDescription": "permission.camera",
+    "NSMicrophoneUsageDescription": "permission.microphone",
+    "NSPhotoLibraryUsageDescription": "permission.photoLibrary",
+}
+
+
+def check_ios_usage_descriptions(root: pathlib.Path, strings: dict[str, str]) -> list[str]:
+    project = root / "ios" / "project.yml"
+    if not project.exists():
+        return []
+    text = project.read_text()
+    problems: list[str] = []
+    for plist_key, copy_key in IOS_USAGE_DESCRIPTIONS.items():
+        expected = strings.get(copy_key)
+        if expected is None:
+            problems.append(f"{copy_key}: missing, but ios/project.yml needs it for {plist_key}")
+            continue
+        match = re.search(rf"^\s*{plist_key}:\s*\"(.*)\"\s*$", text, re.M)
+        if match is None:
+            problems.append(
+                f"ios/project.yml declares no {plist_key} — the app is terminated by the OS "
+                f"the instant the matching capture path is tapped"
+            )
+            continue
+        if match.group(1) != expected:
+            problems.append(
+                f"ios/project.yml {plist_key} does not match {copy_key}:\n"
+                f"      plist: {match.group(1)}\n"
+                f"      copy:  {expected}"
+            )
+    return problems
+
+
 def placeholders(s: str) -> set[str]:
     return set(re.findall(r"\{([a-zA-Z0-9_]+)\}", s))
 
@@ -133,6 +172,7 @@ def main() -> int:
                 problems.append(f"{key}: plural forms disagree on placeholders: {sets}")
 
     problems.extend(check_intensity_rungs(strings))
+    problems.extend(check_ios_usage_descriptions(root, strings))
 
     # keys referenced from client code must exist
     missing: dict[str, set[str]] = {}

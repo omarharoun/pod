@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -22,12 +23,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.pod.api.ApiException
@@ -36,9 +39,9 @@ import app.pod.api.generated.PodTokens
 import app.pod.ui.components.PodNotice
 import app.pod.ui.theme.LocalCopywriter
 import app.pod.ui.theme.LocalPodColors
-import kotlinx.coroutines.delay
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlinx.coroutines.delay
 
 private const val CODE_LENGTH = 6
 
@@ -62,8 +65,10 @@ fun VerifyCodeScreen(
     val copy = LocalCopywriter.current
     val colors = LocalPodColors.current
     val focus = remember { FocusRequester() }
-    var code by remember { mutableStateOf("") }
-    var secondsUntilResend by remember { mutableIntStateOf(resendAfterSeconds) }
+    // rememberSaveable, not remember: rotating the phone used to clear the typed code and
+    // restart the resend countdown, which reads as the app having lost the code.
+    var code by rememberSaveable { mutableStateOf("") }
+    var secondsUntilResend by rememberSaveable { mutableIntStateOf(resendAfterSeconds) }
 
     // Rounded up, and never below one: "0 minutes" is not a thing to tell someone.
     val minutesRemaining = max(1, ceil((expiresAtMillis - nowMillis()) / 60_000.0).toInt())
@@ -111,7 +116,16 @@ fun VerifyCodeScreen(
             singleLine = true,
             label = { Text(copy(CopyKey.AUTH_VERIFY_CODE_LABEL)) },
             textStyle = MaterialTheme.typography.displaySmall,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            // Number, not NumberPassword. The code arrives by email (ADR-002), so the
+            // person is reading it off one screen and typing it into another — masking
+            // the digits hides the one thing they need to check.
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = { if (code.length == CODE_LENGTH && !working) onSubmit(code) },
+            ),
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focus)
