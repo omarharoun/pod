@@ -30,12 +30,12 @@ public object CopyKey {
     /**
      * "Email"
      */
-    public const val AUTH_START_EMAILLABEL: String = "auth.start.emailLabel"
+    public const val AUTH_START_EMAIL_LABEL: String = "auth.start.emailLabel"
 
     /**
      * "you@example.com"
      */
-    public const val AUTH_START_EMAILPLACEHOLDER: String = "auth.start.emailPlaceholder"
+    public const val AUTH_START_EMAIL_PLACEHOLDER: String = "auth.start.emailPlaceholder"
 
     /**
      * "Send code"
@@ -50,7 +50,7 @@ public object CopyKey {
     /**
      * "That doesn't look like an email address yet."
      */
-    public const val AUTH_START_ERROR_EMAILINVALID: String = "auth.start.error.emailInvalid"
+    public const val AUTH_START_ERROR_EMAIL_INVALID: String = "auth.start.error.emailInvalid"
 
     /**
      * "Check your email"
@@ -66,7 +66,7 @@ public object CopyKey {
     /**
      * "6-digit code"
      */
-    public const val AUTH_VERIFY_CODELABEL: String = "auth.verify.codeLabel"
+    public const val AUTH_VERIFY_CODE_LABEL: String = "auth.verify.codeLabel"
 
     /**
      * "Continue"
@@ -82,60 +82,60 @@ public object CopyKey {
      * "You can resend in {seconds}s"
      * Placeholders: seconds
      */
-    public const val AUTH_VERIFY_RESENDCOUNTDOWN: String = "auth.verify.resendCountdown"
+    public const val AUTH_VERIFY_RESEND_COUNTDOWN: String = "auth.verify.resendCountdown"
 
     /**
      * "Use a different email"
      */
-    public const val AUTH_VERIFY_CHANGEEMAIL: String = "auth.verify.changeEmail"
+    public const val AUTH_VERIFY_CHANGE_EMAIL: String = "auth.verify.changeEmail"
 
     /**
      * "That code didn't match. Give it another go."
      */
-    public const val AUTH_VERIFY_ERROR_CODEINCORRECT: String = "auth.verify.error.codeIncorrect"
+    public const val AUTH_VERIFY_ERROR_CODE_INCORRECT: String = "auth.verify.error.codeIncorrect"
 
     /**
      * "That code has expired. We can send a fresh one."
      */
-    public const val AUTH_VERIFY_ERROR_CODEEXPIRED: String = "auth.verify.error.codeExpired"
+    public const val AUTH_VERIFY_ERROR_CODE_EXPIRED: String = "auth.verify.error.codeExpired"
 
     /**
      * "Let's start over with a new code."
      */
-    public const val AUTH_VERIFY_ERROR_TOOMANYATTEMPTS: String = "auth.verify.error.tooManyAttempts"
+    public const val AUTH_VERIFY_ERROR_TOO_MANY_ATTEMPTS: String = "auth.verify.error.tooManyAttempts"
 
     /**
      * "You're signed out"
      */
-    public const val AUTH_SIGNEDOUT_TITLE: String = "auth.signedOut.title"
+    public const val AUTH_SIGNED_OUT_TITLE: String = "auth.signedOut.title"
 
     /**
      * "Your pod is still there when you come back."
      */
-    public const val AUTH_SIGNEDOUT_BODY: String = "auth.signedOut.body"
+    public const val AUTH_SIGNED_OUT_BODY: String = "auth.signedOut.body"
 
     /**
      * "Sign out"
      */
-    public const val AUTH_SIGNOUT_ACTION: String = "auth.signOut.action"
+    public const val AUTH_SIGN_OUT_ACTION: String = "auth.signOut.action"
 
     /**
      * "Your Pod code: {code}"
      * Placeholders: code
      */
-    public const val EMAIL_LOGINCODE_SUBJECT: String = "email.loginCode.subject"
+    public const val EMAIL_LOGIN_CODE_SUBJECT: String = "email.loginCode.subject"
 
     /**
      * "It's good for {minutes} minutes."
      * Placeholders: minutes
      */
-    public const val EMAIL_LOGINCODE_PREHEADER: String = "email.loginCode.preheader"
+    public const val EMAIL_LOGIN_CODE_PREHEADER: String = "email.loginCode.preheader"
 
     /**
      * "Here's your sign-in code: {code}. It's good for {minutes} minutes. If you didn't ask for it, you can ignore this."
      * Placeholders: code, minutes
      */
-    public const val EMAIL_LOGINCODE_BODY: String = "email.loginCode.body"
+    public const val EMAIL_LOGIN_CODE_BODY: String = "email.loginCode.body"
 
     /**
      * "You're in"
@@ -151,7 +151,7 @@ public object CopyKey {
      * "Signed in as {email}"
      * Placeholders: email
      */
-    public const val HOME_SIGNEDINAS: String = "home.signedInAs"
+    public const val HOME_SIGNED_IN_AS: String = "home.signedInAs"
 
     /**
      * "In"
@@ -205,12 +205,12 @@ public object CopyKey {
      * "{count} weeks together" (plural key — resolve with a count)
      * Placeholders: count
      */
-    public const val STATE_POD_WEEKSTOGETHER: String = "state.pod.weeksTogether"
+    public const val STATE_POD_WEEKS_TOGETHER: String = "state.pod.weeksTogether"
 
     /**
      * "The pod picks back up this week."
      */
-    public const val STATE_POD_RESTARTINGNOTE: String = "state.pod.restartingNote"
+    public const val STATE_POD_RESTARTING_NOTE: String = "state.pod.restartingNote"
 
     /**
      * "Can't reach Pod"
@@ -240,23 +240,23 @@ public object CopyKey {
     /**
      * "Hang on a moment"
      */
-    public const val ERROR_RATELIMITED_TITLE: String = "error.rateLimited.title"
+    public const val ERROR_RATE_LIMITED_TITLE: String = "error.rateLimited.title"
 
     /**
      * "Too many tries just now. Try again in {seconds}s."
      * Placeholders: seconds
      */
-    public const val ERROR_RATELIMITED_BODY: String = "error.rateLimited.body"
+    public const val ERROR_RATE_LIMITED_BODY: String = "error.rateLimited.body"
 
     /**
      * "Time to sign in again"
      */
-    public const val ERROR_SESSIONEXPIRED_TITLE: String = "error.sessionExpired.title"
+    public const val ERROR_SESSION_EXPIRED_TITLE: String = "error.sessionExpired.title"
 
     /**
      * "For your security we sign you out after a while."
      */
-    public const val ERROR_SESSIONEXPIRED_BODY: String = "error.sessionExpired.body"
+    public const val ERROR_SESSION_EXPIRED_BODY: String = "error.sessionExpired.body"
 
     /**
      * "Cancel"
@@ -281,7 +281,7 @@ public object CopyKey {
     /**
      * "Six digit sign-in code"
      */
-    public const val A11Y_CODEFIELD: String = "a11y.codeField"
+    public const val A11Y_CODE_FIELD: String = "a11y.codeField"
 
     /**
      * "Loading"
@@ -292,19 +292,19 @@ public object CopyKey {
      * "{name}, posted this week"
      * Placeholders: name
      */
-    public const val A11Y_MEMBERPOSTED: String = "a11y.memberPosted"
+    public const val A11Y_MEMBER_POSTED: String = "a11y.memberPosted"
 
     /**
      * "{name}, not posted yet"
      * Placeholders: name
      */
-    public const val A11Y_MEMBEROPEN: String = "a11y.memberOpen"
+    public const val A11Y_MEMBER_OPEN: String = "a11y.memberOpen"
 
     /**
      * "{name}, resting this week"
      * Placeholders: name
      */
-    public const val A11Y_MEMBERRESTING: String = "a11y.memberResting"
+    public const val A11Y_MEMBER_RESTING: String = "a11y.memberResting"
 
     /** Every key in the catalogue. `CopyTest` asserts each one resolves. */
     public val all: List<String> = listOf(
@@ -312,30 +312,30 @@ public object CopyKey {
         APP_TAGLINE,
         AUTH_START_TITLE,
         AUTH_START_BODY,
-        AUTH_START_EMAILLABEL,
-        AUTH_START_EMAILPLACEHOLDER,
+        AUTH_START_EMAIL_LABEL,
+        AUTH_START_EMAIL_PLACEHOLDER,
         AUTH_START_SUBMIT,
         AUTH_START_LEGAL,
-        AUTH_START_ERROR_EMAILINVALID,
+        AUTH_START_ERROR_EMAIL_INVALID,
         AUTH_VERIFY_TITLE,
         AUTH_VERIFY_BODY,
-        AUTH_VERIFY_CODELABEL,
+        AUTH_VERIFY_CODE_LABEL,
         AUTH_VERIFY_SUBMIT,
         AUTH_VERIFY_RESEND,
-        AUTH_VERIFY_RESENDCOUNTDOWN,
-        AUTH_VERIFY_CHANGEEMAIL,
-        AUTH_VERIFY_ERROR_CODEINCORRECT,
-        AUTH_VERIFY_ERROR_CODEEXPIRED,
-        AUTH_VERIFY_ERROR_TOOMANYATTEMPTS,
-        AUTH_SIGNEDOUT_TITLE,
-        AUTH_SIGNEDOUT_BODY,
-        AUTH_SIGNOUT_ACTION,
-        EMAIL_LOGINCODE_SUBJECT,
-        EMAIL_LOGINCODE_PREHEADER,
-        EMAIL_LOGINCODE_BODY,
+        AUTH_VERIFY_RESEND_COUNTDOWN,
+        AUTH_VERIFY_CHANGE_EMAIL,
+        AUTH_VERIFY_ERROR_CODE_INCORRECT,
+        AUTH_VERIFY_ERROR_CODE_EXPIRED,
+        AUTH_VERIFY_ERROR_TOO_MANY_ATTEMPTS,
+        AUTH_SIGNED_OUT_TITLE,
+        AUTH_SIGNED_OUT_BODY,
+        AUTH_SIGN_OUT_ACTION,
+        EMAIL_LOGIN_CODE_SUBJECT,
+        EMAIL_LOGIN_CODE_PREHEADER,
+        EMAIL_LOGIN_CODE_BODY,
         HOME_PLACEHOLDER_TITLE,
         HOME_PLACEHOLDER_BODY,
-        HOME_SIGNEDINAS,
+        HOME_SIGNED_IN_AS,
         STATE_MEMBER_POSTED_SHORT,
         STATE_MEMBER_POSTED_DETAIL,
         STATE_MEMBER_OPEN_SHORT,
@@ -345,25 +345,25 @@ public object CopyKey {
         STATE_MEMBER_YOU_POSTED_DETAIL,
         STATE_MEMBER_YOU_OPEN_DETAIL,
         STATE_MEMBER_YOU_RESTING_DETAIL,
-        STATE_POD_WEEKSTOGETHER,
-        STATE_POD_RESTARTINGNOTE,
+        STATE_POD_WEEKS_TOGETHER,
+        STATE_POD_RESTARTING_NOTE,
         ERROR_NETWORK_TITLE,
         ERROR_NETWORK_BODY,
         ERROR_NETWORK_RETRY,
         ERROR_SERVER_TITLE,
         ERROR_SERVER_BODY,
-        ERROR_RATELIMITED_TITLE,
-        ERROR_RATELIMITED_BODY,
-        ERROR_SESSIONEXPIRED_TITLE,
-        ERROR_SESSIONEXPIRED_BODY,
+        ERROR_RATE_LIMITED_TITLE,
+        ERROR_RATE_LIMITED_BODY,
+        ERROR_SESSION_EXPIRED_TITLE,
+        ERROR_SESSION_EXPIRED_BODY,
         COMMON_CANCEL,
         COMMON_DONE,
         COMMON_BACK,
         COMMON_LOADING,
-        A11Y_CODEFIELD,
+        A11Y_CODE_FIELD,
         A11Y_LOADING,
-        A11Y_MEMBERPOSTED,
-        A11Y_MEMBEROPEN,
-        A11Y_MEMBERRESTING,
+        A11Y_MEMBER_POSTED,
+        A11Y_MEMBER_OPEN,
+        A11Y_MEMBER_RESTING,
     )
 }

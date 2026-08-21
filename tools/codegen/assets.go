@@ -351,6 +351,14 @@ func num(v float64) string {
 	return fmt.Sprintf("%g", v)
 }
 
+// decimal always renders a fractional part, for languages where `0` is not a Double.
+func decimal(v float64) string {
+	if v == float64(int64(v)) {
+		return fmt.Sprintf("%d.0", int64(v))
+	}
+	return fmt.Sprintf("%g", v)
+}
+
 func emitSwiftTokens(t *Tokens) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, banner, "design/tokens.json")
@@ -472,7 +480,7 @@ public object PodTokens {
 		if ty.Role != "" {
 			b.WriteString(kdoc("        ", ty.Role))
 		}
-		fmt.Fprintf(&b, "        public val %s: PodTypeStyle = PodTypeStyle(size = %d, lineHeight = %d, weight = %d, tracking = %s)\n", screamingSnake(ty.Name), int(ty.Size), int(ty.LineHeight), ty.Weight, num(ty.Tracking))
+		fmt.Fprintf(&b, "        public val %s: PodTypeStyle = PodTypeStyle(size = %d, lineHeight = %d, weight = %d, tracking = %s)\n", screamingSnake(ty.Name), int(ty.Size), int(ty.LineHeight), ty.Weight, decimal(ty.Tracking))
 	}
 	b.WriteString("    }\n}\n")
 	return b.String()

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The only strings that live here are the ones the platform reads before the app runs.
+  Everything a person sees inside the app comes from content/microcopy.json through
+  Copywriter — see CLAUDE.md §2 rule 1.
+-->
+<resources>
+    <string name="app_name">Pod</string>
+</resources>

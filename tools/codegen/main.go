@@ -120,7 +120,7 @@ func (g *generator) run() error {
 	}
 	for _, dst := range []string{
 		"ios/PodKit/Sources/PodAPI/Resources/microcopy.json",
-		"android/core/api/src/main/res/raw/microcopy.json",
+		"android/core/api/src/main/resources/microcopy.json",
 	} {
 		if err := g.write(dst, string(microcopy)); err != nil {
 			return err
@@ -609,12 +609,33 @@ func camel(s string) string {
 	return strings.ToLower(p[:1]) + p[1:]
 }
 
+// screamingSnake also breaks camelCase, so `screenGutter` becomes SCREEN_GUTTER rather
+// than SCREENGUTTER — which is what anyone reading the constant would expect to type.
 func screamingSnake(s string) string {
 	var parts []string
 	for _, w := range splitWords(s) {
-		parts = append(parts, strings.ToUpper(w))
+		parts = append(parts, splitCamel(w)...)
+	}
+	for i, p := range parts {
+		parts[i] = strings.ToUpper(p)
 	}
 	return strings.Join(parts, "_")
+}
+
+func splitCamel(word string) []string {
+	var out []string
+	start := 0
+	runes := []rune(word)
+	for i := 1; i < len(runes); i++ {
+		lower := runes[i-1] >= 'a' && runes[i-1] <= 'z'
+		digit := runes[i-1] >= '0' && runes[i-1] <= '9'
+		upper := runes[i] >= 'A' && runes[i] <= 'Z'
+		if (lower || digit) && upper {
+			out = append(out, string(runes[start:i]))
+			start = i
+		}
+	}
+	return append(out, string(runes[start:]))
 }
 
 // docComment wraps text as a comment with the given prefix, one sentence-ish per line.

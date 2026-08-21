@@ -28,16 +28,16 @@ public object PodTokens {
         CONTENT_PRIMARY("content.primary"),
         CONTENT_SECONDARY("content.secondary"),
         CONTENT_TERTIARY("content.tertiary"),
-        CONTENT_ONACCENT("content.onAccent"),
+        CONTENT_ON_ACCENT("content.onAccent"),
         ACCENT_PRIMARY("accent.primary"),
         ACCENT_PRESSED("accent.pressed"),
         ACCENT_SUBTLE("accent.subtle"),
         STATE_POSTED("state.posted"),
-        STATE_POSTEDSUBTLE("state.postedSubtle"),
+        STATE_POSTED_SUBTLE("state.postedSubtle"),
         STATE_OPEN("state.open"),
-        STATE_OPENSUBTLE("state.openSubtle"),
+        STATE_OPEN_SUBTLE("state.openSubtle"),
         STATE_RESTING("state.resting"),
-        STATE_RESTINGSUBTLE("state.restingSubtle"),
+        STATE_RESTING_SUBTLE("state.restingSubtle"),
         BORDER_HAIRLINE("border.hairline"),
         BORDER_STRONG("border.strong"),
         FOCUS_RING("focus.ring"),
@@ -55,16 +55,16 @@ public object PodTokens {
         ColorRole.CONTENT_PRIMARY to 0xFF1A1714L,
         ColorRole.CONTENT_SECONDARY to 0xFF5C544BL,
         ColorRole.CONTENT_TERTIARY to 0xFF8C8177L,
-        ColorRole.CONTENT_ONACCENT to 0xFFFFFBF6L,
+        ColorRole.CONTENT_ON_ACCENT to 0xFFFFFBF6L,
         ColorRole.ACCENT_PRIMARY to 0xFFC2603CL,
         ColorRole.ACCENT_PRESSED to 0xFFA24E2FL,
         ColorRole.ACCENT_SUBTLE to 0xFFF6E2D8L,
         ColorRole.STATE_POSTED to 0xFF4F7A5BL,
-        ColorRole.STATE_POSTEDSUBTLE to 0xFFDFEAE0L,
+        ColorRole.STATE_POSTED_SUBTLE to 0xFFDFEAE0L,
         ColorRole.STATE_OPEN to 0xFFB9AFA3L,
-        ColorRole.STATE_OPENSUBTLE to 0xFFEDE6DDL,
+        ColorRole.STATE_OPEN_SUBTLE to 0xFFEDE6DDL,
         ColorRole.STATE_RESTING to 0xFF8C93A8L,
-        ColorRole.STATE_RESTINGSUBTLE to 0xFFE4E6ECL,
+        ColorRole.STATE_RESTING_SUBTLE to 0xFFE4E6ECL,
         ColorRole.BORDER_HAIRLINE to 0x1A1A1714L,
         ColorRole.BORDER_STRONG to 0x381A1714L,
         ColorRole.FOCUS_RING to 0xFF2F6F8FL,
@@ -78,16 +78,16 @@ public object PodTokens {
         ColorRole.CONTENT_PRIMARY to 0xFFF4EFE8L,
         ColorRole.CONTENT_SECONDARY to 0xFFB7ADA1L,
         ColorRole.CONTENT_TERTIARY to 0xFF877D72L,
-        ColorRole.CONTENT_ONACCENT to 0xFF14120FL,
+        ColorRole.CONTENT_ON_ACCENT to 0xFF14120FL,
         ColorRole.ACCENT_PRIMARY to 0xFFE68A62L,
         ColorRole.ACCENT_PRESSED to 0xFFC97049L,
         ColorRole.ACCENT_SUBTLE to 0xFF3A2A22L,
         ColorRole.STATE_POSTED to 0xFF8FBE9CL,
-        ColorRole.STATE_POSTEDSUBTLE to 0xFF26332AL,
+        ColorRole.STATE_POSTED_SUBTLE to 0xFF26332AL,
         ColorRole.STATE_OPEN to 0xFF6E655CL,
-        ColorRole.STATE_OPENSUBTLE to 0xFF262220L,
+        ColorRole.STATE_OPEN_SUBTLE to 0xFF262220L,
         ColorRole.STATE_RESTING to 0xFF9AA1B5L,
-        ColorRole.STATE_RESTINGSUBTLE to 0xFF232630L,
+        ColorRole.STATE_RESTING_SUBTLE to 0xFF232630L,
         ColorRole.BORDER_HAIRLINE to 0x1FF4EFE8L,
         ColorRole.BORDER_STRONG to 0x3DF4EFE8L,
         ColorRole.FOCUS_RING to 0xFF7FB6D4L,
@@ -105,8 +105,8 @@ public object PodTokens {
         public const val XL: Int = 24
         public const val XXL: Int = 32
         public const val XXXL: Int = 48
-        public const val SCREENGUTTER: Int = 20
-        public const val SECTIONGAP: Int = 32
+        public const val SCREEN_GUTTER: Int = 20
+        public const val SECTION_GAP: Int = 32
     }
 
     /**
@@ -123,12 +123,12 @@ public object PodTokens {
      * Fixed sizes, in dp.
      */
     public object Size {
-        public const val MINTOUCHTARGET: Int = 44
-        public const val RINGSTROKE: Int = 10
-        public const val RINGDIAMETER: Int = 176
-        public const val AVATARSM: Int = 32
-        public const val AVATARMD: Int = 44
-        public const val PRIMARYBUTTONHEIGHT: Int = 52
+        public const val MIN_TOUCH_TARGET: Int = 44
+        public const val RING_STROKE: Int = 10
+        public const val RING_DIAMETER: Int = 176
+        public const val AVATAR_SM: Int = 32
+        public const val AVATAR_MD: Int = 44
+        public const val PRIMARY_BUTTON_HEIGHT: Int = 52
     }
 
     public object Opacity {
@@ -153,9 +153,9 @@ public object PodTokens {
          */
         public val DISPLAY: PodTypeStyle = PodTypeStyle(size = 34, lineHeight = 40, weight = 600, tracking = -0.4)
         public val TITLE: PodTypeStyle = PodTypeStyle(size = 24, lineHeight = 30, weight = 600, tracking = -0.2)
-        public val HEADING: PodTypeStyle = PodTypeStyle(size = 19, lineHeight = 25, weight = 600, tracking = 0)
-        public val BODY: PodTypeStyle = PodTypeStyle(size = 16, lineHeight = 23, weight = 400, tracking = 0)
-        public val BODYSTRONG: PodTypeStyle = PodTypeStyle(size = 16, lineHeight = 23, weight = 600, tracking = 0)
+        public val HEADING: PodTypeStyle = PodTypeStyle(size = 19, lineHeight = 25, weight = 600, tracking = 0.0)
+        public val BODY: PodTypeStyle = PodTypeStyle(size = 16, lineHeight = 23, weight = 400, tracking = 0.0)
+        public val BODY_STRONG: PodTypeStyle = PodTypeStyle(size = 16, lineHeight = 23, weight = 600, tracking = 0.0)
         public val CAPTION: PodTypeStyle = PodTypeStyle(size = 13, lineHeight = 18, weight = 400, tracking = 0.1)
         public val MICRO: PodTypeStyle = PodTypeStyle(size = 11, lineHeight = 15, weight = 500, tracking = 0.4)
     }

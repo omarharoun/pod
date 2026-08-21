@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- accent.subtle from design/tokens.json. The launcher icon is the one surface the
+         app cannot paint itself, so the value is mirrored here rather than generated. -->
+    <color name="ic_launcher_background">#F6E2D8</color>
+</resources>

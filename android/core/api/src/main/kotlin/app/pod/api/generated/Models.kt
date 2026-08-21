@@ -233,9 +233,11 @@ internal object GoalCategorySerializer : WireEnumSerializer<GoalCategory>(
     { value -> GoalCategory.fromWire(value) },
 )
 
-/** How much the person can realistically give in a week, 1 (a few minutes) to 5
-/** (several hours). The matching hard filter is ±1 (`CLAUDE.md` §6); see ADR-005 for
-/** why the scale has five points rather than three.
+/**
+ * How much the person can realistically give in a week, 1 (a few minutes) to 5
+ * (several hours). The matching hard filter is ±1 (`CLAUDE.md` §6); see ADR-005 for
+ * why the scale has five points rather than three.
+ */
 public typealias Intensity = Int
 
 /**

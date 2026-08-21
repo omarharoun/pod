@@ -21,7 +21,7 @@ func emitKotlinModels(s *Spec) string {
 		case sc.Type == "object" || len(sc.Props) > 0:
 			b.WriteString(kotlinDataClass(s, sc))
 		default:
-			b.WriteString(docComment("", "/** ", strings.ReplaceAll(sc.Description, "*/", "*\\/")))
+			b.WriteString(kdoc("", sc.Description))
 			fmt.Fprintf(&b, "public typealias %s = %s\n", sc.Name, kotlinScalar(sc.Type, sc.Format))
 		}
 		b.WriteString("\n")

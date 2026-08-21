@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Pod" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#14120F</item>
+        <item name="android:statusBarColor">#14120F</item>
+    </style>
+</resources>

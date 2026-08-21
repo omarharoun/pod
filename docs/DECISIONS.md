@@ -260,3 +260,42 @@ is swept too and never becomes visible.
 * `view_url` lifetime is a real leak window: anyone holding the URL can fetch it until it
   expires. Keep it to minutes and never log it.
 * Storage credentials become a production dependency of the proof flow in M3.
+
+---
+
+## ADR-009 — `:core:api` is a plain Kotlin/JVM module, not an Android library
+
+**Date:** 2026-08-21 · **Status:** accepted · **Milestone:** M1
+
+**Context.** The obvious shape for the Android side is one Android library module holding
+the generated models, the HTTP client, the copy catalogue, the tokens and the sign-in
+state machine. But none of those things are about Android, and making the module an
+Android library means its tests need either an emulator or Robolectric — which is the
+difference between a suite that runs in seconds on every save and one that nobody runs.
+
+**Decision.** `:core:api` applies `org.jetbrains.kotlin.jvm`, not
+`com.android.library`. It depends on kotlinx-serialization, kotlinx-datetime, coroutines
+and `ktor-client-core` — nothing from the platform. Its tests are ordinary JUnit tests.
+
+Two consequences fall out of that, and both are improvements:
+
+* The one piece that genuinely needs a `Context` — `EncryptedTokenStore` — lives in
+  `:app` and implements the `TokenStore` interface `:core:api` defines. The dependency
+  points the right way.
+* The Ktor engine is supplied by `:app` (OkHttp) rather than baked in, so tests inject
+  `MockEngine` without an engine conflict.
+
+The root `build.gradle.kts` deliberately declares no plugins, so `:core:api` can be
+configured and tested on a machine with no Android SDK at all:
+
+```bash
+./gradlew :core:api:test --configure-on-demand
+```
+
+**Consequences.**
+* Anything added to `:core:api` that reaches for `android.*` is in the wrong module. That
+  is the constraint, and it is a useful one — it keeps platform concerns at the edges.
+* Compose UI, Hilt wiring and the encrypted store are only covered by `:app`'s own tests,
+  which do need the SDK.
+* If a second consumer ever appears — a desktop tool, a test harness — it can use
+  `:core:api` unchanged.

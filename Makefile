@@ -27,8 +27,11 @@ backend-run: ## Run the API against a local Postgres
 migrate: ## Apply pending migrations to $$DATABASE_URL
 	@cd backend && go run ./cmd/migrate up
 
-verify: spec copylint backend-test ## Everything that can run on a Linux CI box
-	@echo "verify: ok — note that iOS and Android builds need macOS / the Android SDK"
+android-core-test: ## Kotlin core tests — plain JVM, no Android SDK needed (ADR-009)
+	@cd android && ./gradlew :core:api:test --configure-on-demand
+
+verify: spec copylint backend-test android-core-test ## Everything that runs without macOS or the Android SDK
+	@echo "verify: ok — the iOS build needs Xcode; :app needs the Android SDK"
 
 clean:
 	@rm -rf backend/bin

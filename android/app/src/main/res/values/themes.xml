@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose paints everything; this exists so the window has the right background
+         before the first frame. The value mirrors surface.canvas in design/tokens.json. -->
+    <style name="Theme.Pod" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FBF7F2</item>
+        <item name="android:statusBarColor">#FBF7F2</item>
+    </style>
+</resources>
