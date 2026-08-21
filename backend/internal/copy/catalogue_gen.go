@@ -233,16 +233,6 @@ const (
 	// Placeholders: code, minutes
 	KeyEmailLoginCodeBody Key = "email.loginCode.body"
 
-	// "You're in"
-	KeyHomePlaceholderTitle Key = "home.placeholder.title"
-
-	// "Nothing to do yet — we'll set up your pod next."
-	KeyHomePlaceholderBody Key = "home.placeholder.body"
-
-	// "Signed in as {email}"
-	// Placeholders: email
-	KeyHomeSignedInAs Key = "home.signedInAs"
-
 	// "In"
 	KeyStateMemberPostedShort Key = "state.member.posted.short"
 
@@ -413,9 +403,6 @@ var AllKeys = []Key{
 	KeyEmailLoginCodeSubject,
 	KeyEmailLoginCodePreheader,
 	KeyEmailLoginCodeBody,
-	KeyHomePlaceholderTitle,
-	KeyHomePlaceholderBody,
-	KeyHomeSignedInAs,
 	KeyStateMemberPostedShort,
 	KeyStateMemberPostedDetail,
 	KeyStateMemberOpenShort,
@@ -521,9 +508,6 @@ var catalogue = map[Key]map[string]string{
 	KeyEmailLoginCodeSubject:          {"other": "Your Pod code: {code}"},
 	KeyEmailLoginCodePreheader:        {"other": "It's good for {minutes} minutes."},
 	KeyEmailLoginCodeBody:             {"other": "Here's your sign-in code: {code}. It's good for {minutes} minutes. If you didn't ask for it, you can ignore this."},
-	KeyHomePlaceholderTitle:           {"other": "You're in"},
-	KeyHomePlaceholderBody:            {"other": "Nothing to do yet — we'll set up your pod next."},
-	KeyHomeSignedInAs:                 {"other": "Signed in as {email}"},
 	KeyStateMemberPostedShort:         {"other": "In"},
 	KeyStateMemberPostedDetail:        {"other": "{name} is in this week."},
 	KeyStateMemberOpenShort:           {"other": "Not yet"},

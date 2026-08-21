@@ -87,10 +87,6 @@
   "email.loginCode.preheader": "It's good for {minutes} minutes.",
   "email.loginCode.body": "Here's your sign-in code: {code}. It's good for {minutes} minutes. If you didn't ask for it, you can ignore this.",
 
-  "home.placeholder.title": "You're in",
-  "home.placeholder.body": "Nothing to do yet — we'll set up your pod next.",
-  "home.signedInAs": "Signed in as {email}",
-
   "state.member.posted.short": "In",
   "state.member.posted.detail": "{name} is in this week.",
   "state.member.open.short": "Not yet",

@@ -8,6 +8,11 @@ import app.pod.api.generated.AuthStartResponse
 import app.pod.api.generated.AuthVerifyRequest
 import app.pod.api.generated.ErrorCode
 import app.pod.api.generated.Health
+import app.pod.api.generated.Intent
+import app.pod.api.generated.IntentRequest
+import app.pod.api.generated.OnboardingState
+import app.pod.api.generated.Pod
+import app.pod.api.generated.PoolTicket
 import app.pod.api.generated.User
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
@@ -21,6 +26,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.sync.Mutex
@@ -88,6 +94,30 @@ public class PodApiClient(
 
     public suspend fun currentUser(): User = send("/v1/me", HttpMethod.Get)
 
+    // ---- Onboarding ------------------------------------------------------------
+
+    public suspend fun onboardingState(): OnboardingState =
+        send("/v1/onboarding/state", HttpMethod.Get)
+
+    public suspend fun saveIntent(intent: IntentRequest): Intent =
+        send("/v1/onboarding/intent", HttpMethod.Put, intent)
+
+    public suspend fun joinPool(): PoolTicket = send("/v1/pool", HttpMethod.Post)
+
+    public suspend fun leavePool() {
+        perform("/v1/pool", HttpMethod.Delete, body = null, accessToken = validAccessToken())
+    }
+
+    // ---- Pod -------------------------------------------------------------------
+
+    /**
+     * The caller's active pod, or null when they have not been matched yet.
+     *
+     * The server answers 204 rather than 404 for "no pod": not being matched yet is a
+     * state, not a failure, and the two must not look the same to the client.
+     */
+    public suspend fun currentPod(): Pod? = sendOrNull("/v1/pods/current", HttpMethod.Get)
+
     /**
      * Ends this device's session. The local tokens are cleared even if the call fails —
      * someone who asked to sign out is signed out.
@@ -129,6 +159,22 @@ public class PodApiClient(
     private suspend fun sendUnit(path: String, method: HttpMethod, body: Any?) {
         val accessToken = validAccessToken()
         perform(path, method, body, accessToken)
+    }
+
+    /** Like [send], but maps a 204 onto null instead of trying to decode an empty body. */
+    private suspend inline fun <reified Response> sendOrNull(
+        path: String,
+        method: HttpMethod,
+    ): Response? {
+        val accessToken = validAccessToken()
+        val response = try {
+            perform(path, method, null, accessToken)
+        } catch (failure: ApiException.Problem) {
+            if (failure.status != 401 || failure.error.code != ErrorCode.SESSION_EXPIRED) throw failure
+            perform(path, method, null, refreshSession().accessToken)
+        }
+        if (response.status == HttpStatusCode.NoContent) return null
+        return decode(response)
     }
 
     private suspend fun perform(

@@ -375,22 +375,6 @@ public object CopyKey {
     public const val EMAIL_LOGIN_CODE_BODY: String = "email.loginCode.body"
 
     /**
-     * "You're in"
-     */
-    public const val HOME_PLACEHOLDER_TITLE: String = "home.placeholder.title"
-
-    /**
-     * "Nothing to do yet — we'll set up your pod next."
-     */
-    public const val HOME_PLACEHOLDER_BODY: String = "home.placeholder.body"
-
-    /**
-     * "Signed in as {email}"
-     * Placeholders: email
-     */
-    public const val HOME_SIGNED_IN_AS: String = "home.signedInAs"
-
-    /**
      * "In"
      */
     public const val STATE_MEMBER_POSTED_SHORT: String = "state.member.posted.short"
@@ -617,9 +601,6 @@ public object CopyKey {
         EMAIL_LOGIN_CODE_SUBJECT,
         EMAIL_LOGIN_CODE_PREHEADER,
         EMAIL_LOGIN_CODE_BODY,
-        HOME_PLACEHOLDER_TITLE,
-        HOME_PLACEHOLDER_BODY,
-        HOME_SIGNED_IN_AS,
         STATE_MEMBER_POSTED_SHORT,
         STATE_MEMBER_POSTED_DETAIL,
         STATE_MEMBER_OPEN_SHORT,

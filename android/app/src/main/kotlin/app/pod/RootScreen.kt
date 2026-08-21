@@ -25,7 +25,11 @@ import app.pod.api.generated.PodTokens
 import app.pod.feature.auth.AuthViewModel
 import app.pod.feature.auth.SignInScreen
 import app.pod.feature.auth.VerifyCodeScreen
-import app.pod.feature.home.HomeScreen
+import app.pod.api.OnboardingPhase
+import app.pod.feature.onboarding.OnboardingScreen
+import app.pod.feature.onboarding.OnboardingViewModel
+import app.pod.feature.onboarding.WaitingScreen
+import app.pod.feature.pod.PodScreen
 import app.pod.ui.theme.LocalCopywriter
 import app.pod.ui.theme.LocalPodColors
 
@@ -81,7 +85,51 @@ fun RootScreen(viewModel: AuthViewModel = hiltViewModel()) {
                 )
 
             is SessionState.SignedIn ->
-                HomeScreen(user = session.user, onSignOut = viewModel::signOut)
+                SignedInScreen(onSignOut = viewModel::signOut)
         }
+    }
+}
+
+/** Everything after sign-in: still answering, waiting for a window, or in a pod. */
+@Composable
+private fun SignedInScreen(
+    onSignOut: () -> Unit,
+    viewModel: OnboardingViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val copy = LocalCopywriter.current
+
+    LaunchedEffect(Unit) { viewModel.load() }
+
+    when (val phase = state.phase) {
+        is OnboardingPhase.Loading ->
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.semantics { contentDescription = copy(CopyKey.A11Y_LOADING) },
+                )
+            }
+
+        is OnboardingPhase.Questions ->
+            OnboardingScreen(
+                question = phase.question,
+                draft = state.draft,
+                working = state.working,
+                failure = state.failure,
+                onDraftChange = viewModel::updateDraft,
+                onAdvance = viewModel::advance,
+                onBack = viewModel::back,
+            )
+
+        is OnboardingPhase.Waiting ->
+            WaitingScreen(
+                ticket = phase.ticket,
+                failure = state.failure,
+                onCheckForPod = viewModel::checkForPod,
+                onLeaveQueue = viewModel::leaveQueue,
+            )
+
+        is OnboardingPhase.Matched ->
+            PodScreen(pod = phase.pod, onSignOut = onSignOut)
     }
 }

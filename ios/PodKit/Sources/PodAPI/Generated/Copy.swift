@@ -238,16 +238,6 @@ public extension CopyKey {
     /// Placeholders: code, minutes
     static let emailLoginCodeBody = CopyKey(rawValue: "email.loginCode.body")
 
-    /// "You're in"
-    static let homePlaceholderTitle = CopyKey(rawValue: "home.placeholder.title")
-
-    /// "Nothing to do yet — we'll set up your pod next."
-    static let homePlaceholderBody = CopyKey(rawValue: "home.placeholder.body")
-
-    /// "Signed in as {email}"
-    /// Placeholders: email
-    static let homeSignedInAs = CopyKey(rawValue: "home.signedInAs")
-
     /// "In"
     static let stateMemberPostedShort = CopyKey(rawValue: "state.member.posted.short")
 
@@ -417,9 +407,6 @@ public extension CopyKey {
         .emailLoginCodeSubject,
         .emailLoginCodePreheader,
         .emailLoginCodeBody,
-        .homePlaceholderTitle,
-        .homePlaceholderBody,
-        .homeSignedInAs,
         .stateMemberPostedShort,
         .stateMemberPostedDetail,
         .stateMemberOpenShort,

@@ -78,6 +78,39 @@ public actor APIClient {
         try await send(Request(method: "GET", path: "/v1/me"))
     }
 
+    // MARK: - Onboarding
+
+    public func onboardingState() async throws -> OnboardingState {
+        try await send(Request(method: "GET", path: "/v1/onboarding/state"))
+    }
+
+    public func saveIntent(_ intent: IntentRequest) async throws -> Intent {
+        try await send(Request(
+            method: "PUT",
+            path: "/v1/onboarding/intent",
+            body: try encoder.encode(intent)
+        ))
+    }
+
+    public func joinPool() async throws -> PoolTicket {
+        try await send(Request(method: "POST", path: "/v1/pool"))
+    }
+
+    public func leavePool() async throws {
+        let _: EmptyResponse = try await send(Request(method: "DELETE", path: "/v1/pool"))
+    }
+
+    // MARK: - Pod
+
+    /// The caller's active pod, or `nil` when they have not been matched yet.
+    ///
+    /// The server answers 204 rather than 404 for "no pod": not being matched yet is a
+    /// state, not a failure, and the two should not look the same to the client.
+    public func currentPod() async throws -> Pod? {
+        let response: PodOrNothing = try await send(Request(method: "GET", path: "/v1/pods/current"))
+        return response.pod
+    }
+
     /// Ends this device's session. The local tokens are cleared even if the call fails —
     /// someone who asked to sign out is signed out.
     public func signOut() async {
@@ -104,6 +137,20 @@ public actor APIClient {
 
     /// A 204 has no body; `EmptyResponse` gives `send` something to decode into.
     private struct EmptyResponse: Decodable {}
+
+    /// Carries the difference between "here is your pod" and "you do not have one yet",
+    /// which arrive as 200 and 204 on the same route.
+    private struct PodOrNothing: Decodable {
+        let pod: Pod?
+
+        init(from decoder: Decoder) throws {
+            pod = try Pod(from: decoder)
+        }
+
+        init() {
+            pod = nil
+        }
+    }
 
     private func send<Response: Decodable>(_ request: Request) async throws -> Response {
         var accessToken: String?
@@ -150,7 +197,12 @@ public actor APIClient {
             throw APIError.api(problem, status: http.statusCode)
         }
 
-        if Response.self == EmptyResponse.self || data.isEmpty {
+        if http.statusCode == 204 || data.isEmpty {
+            if let nothing = PodOrNothing() as? Response { return nothing }
+            guard let empty = EmptyResponse() as? Response else { throw APIError.malformedResponse }
+            return empty
+        }
+        if Response.self == EmptyResponse.self {
             guard let empty = EmptyResponse() as? Response else { throw APIError.malformedResponse }
             return empty
         }

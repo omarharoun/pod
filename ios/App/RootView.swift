@@ -29,8 +29,8 @@ struct RootView: View {
                 expiresAt: expiresAt,
                 resendAfter: resendAfter
             )
-        case .signedIn(let user):
-            HomeView(session: environment.session, user: user)
+        case .signedIn:
+            SignedInView(environment: environment)
         }
     }
 
@@ -42,6 +42,30 @@ struct RootView: View {
         case .signedOut: 1
         case .awaitingCode: 2
         case .signedIn: 3
+        }
+    }
+}
+
+/// Everything after sign-in: still answering, waiting for a window, or in a pod.
+private struct SignedInView: View {
+    let environment: PodEnvironment
+
+    var body: some View {
+        content
+            .task { await environment.onboarding.load() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch environment.onboarding.phase {
+        case .loading:
+            LoadingView()
+        case .questions(let question):
+            OnboardingFlowView(controller: environment.onboarding, question: question)
+        case .waiting(let ticket):
+            WaitingView(controller: environment.onboarding, ticket: ticket)
+        case .matched(let pod):
+            PodView(pod: pod, session: environment.session)
         }
     }
 }

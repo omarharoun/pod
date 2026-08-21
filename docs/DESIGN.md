@@ -92,6 +92,66 @@ product — `CLAUDE.md` §7 says nothing after it starts until it feels finished
 
 ---
 
+## M2 — Onboarding
+
+**Variant A — "one page."** Goal, category, intensity and the self-report question on a
+single scrolling form with one submit button at the bottom.
+
+**Variant B — "one question at a time."** Four screens, each with one question, advancing
+on selection. A progress row of four dots. Back is always available.
+
+**Picked: B.** A is fewer taps and looks shorter, and that is the trap: a single screen
+with four unanswered questions is a screen someone has to *read* before they can start,
+and the goal field is the hardest question of the four sitting at the top of it. B asks
+one thing at a time, each answerable in a couple of seconds, and the category, intensity
+and reliability screens advance on tap with no button to find.
+
+What B gives up: you cannot see your earlier answers while making a later one, and it is
+four navigation transitions instead of none. Back covers the first; the transitions are
+`motion.quick`, so they cost about 160ms each.
+
+The goal screen keeps its Continue button — it is the one answer that is typed rather than
+tapped, and auto-advancing out of a text field the moment someone pauses would be hostile.
+
+**On the intensity screen**, the five rungs (ADR-010) are shown as phrases only. No
+numbers, no scale, no position indicator. A person picks "half an hour", never "3 of 5" —
+seeing where you sit relative to others is the beginning of the comparison this product
+exists to avoid.
+
+**On the self-report screen**, the question is `CLAUDE.md` §6's own wording, softened by
+the line beneath it: "there's no right answer — it only helps us pick who you'd get on
+with." The three answers are phrased as circumstances rather than character
+("Not as often as I'd like", not "Rarely"). This screen is the single most likely place in
+the whole product to make someone feel judged before they have done anything, and it is
+answered before they have any evidence to the contrary.
+
+## M2 — Waiting for a pod
+
+**Variant A — a spinner and "finding your pod…".** Indeterminate, no end in sight.
+
+**Variant B — the next window, stated.** "We match every hour, so you're not waiting long"
+plus the actual time from `pool_ticket.next_window_at`, and a quiet way to leave the queue.
+
+**Picked: B.** Matching is a scheduled job by design (`CLAUDE.md` §5, ADR-013), so the wait
+is a known quantity and pretending otherwise with a spinner would be a lie that also
+invites pull-to-refresh. Telling someone the time lets them close the app, which is the
+correct behaviour here.
+
+The server sends the window time; the client never computes it. An hour is the server's
+policy, not a client constant.
+
+## M2 — The pod
+
+Deliberately thin for now: who is in it, and that is all. The week loop is M3 and it owns
+this screen; anything richer built here is built to be replaced.
+
+What is **not** on it, and will not be: any per-member figure, any ordering that implies
+rank, any "joined first" precedence. Members render in join order because that is stable,
+not because it means anything. `streak_weeks` is pod-level and reads as "N weeks
+together", never as a number next to a person.
+
+---
+
 ## Errors
 
 Failures render as a calm block under the content: a title, a line of explanation, and a

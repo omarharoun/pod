@@ -3,6 +3,7 @@ package app.pod.di
 import android.content.Context
 import app.pod.BuildConfig
 import app.pod.api.Copywriter
+import app.pod.api.OnboardingRepository
 import app.pod.api.PodApiClient
 import app.pod.api.SessionRepository
 import app.pod.api.TokenStore
@@ -39,4 +40,13 @@ object AppModule {
     @Singleton
     fun sessionRepository(client: PodApiClient): SessionRepository =
         SessionRepository(client, deviceName = android.os.Build.MODEL)
+
+    /**
+     * One repository for the whole process: a configuration change must not discard a
+     * half-answered intent or restart the flow.
+     */
+    @Provides
+    @Singleton
+    fun onboardingRepository(client: PodApiClient): OnboardingRepository =
+        OnboardingRepository(client)
 }

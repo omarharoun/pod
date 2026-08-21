@@ -10,11 +10,13 @@ public final class PodEnvironment {
     public let client: APIClient
     public let copy: Copywriter
     public let session: SessionController
+    public let onboarding: OnboardingController
 
     public init(client: APIClient, copy: Copywriter = .bundled, deviceName: String? = nil) {
         self.client = client
         self.copy = copy
         self.session = SessionController(client: client, deviceName: deviceName)
+        self.onboarding = OnboardingController(client: client)
     }
 
     /// The app's real environment.
@@ -31,11 +33,15 @@ public final class PodEnvironment {
     }
 
     /// An environment backed by nothing, for previews.
-    public static func preview(state: SessionState = .signedOut) -> PodEnvironment {
+    public static func preview(
+        state: SessionState = .signedOut,
+        onboarding phase: OnboardingPhase = .questions(.goal)
+    ) -> PodEnvironment {
         let environment = PodEnvironment(
             client: APIClient(baseURL: URL(string: "https://preview.invalid")!, tokens: InMemoryTokenStore())
         )
         environment.session.preview(state: state)
+        environment.onboarding.preview(phase: phase)
         return environment
     }
 }
