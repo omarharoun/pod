@@ -17,19 +17,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.pod.api.OnboardingPhase
 import app.pod.api.SessionState
 import app.pod.api.generated.CopyKey
+import app.pod.api.generated.PodState
 import app.pod.api.generated.PodTokens
 import app.pod.feature.auth.AuthViewModel
 import app.pod.feature.auth.SignInScreen
 import app.pod.feature.auth.VerifyCodeScreen
-import app.pod.api.OnboardingPhase
 import app.pod.feature.onboarding.OnboardingScreen
 import app.pod.feature.onboarding.OnboardingViewModel
 import app.pod.feature.onboarding.RecoveryScreen
 import app.pod.feature.onboarding.WaitingScreen
+import app.pod.feature.week.GraduationScreen
 import app.pod.feature.week.WeekScreen
 import app.pod.ui.theme.LocalCopywriter
 import app.pod.ui.theme.LocalPodColors
@@ -140,6 +142,13 @@ private fun SignedInScreen(
             )
 
         is OnboardingPhase.Matched ->
-            WeekScreen(pod = phase.pod, onSignOut = onSignOut)
+            // A graduated pod has no week. Showing the week screen would show a proof grid
+            // whose proof was deleted and an action nobody can post against, and would
+            // leave the choice somewhere the person has to go looking for it.
+            if (phase.pod.state == PodState.COMPLETED) {
+                GraduationScreen(pod = phase.pod)
+            } else {
+                WeekScreen(pod = phase.pod, onSignOut = onSignOut)
+            }
     }
 }

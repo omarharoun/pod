@@ -8,6 +8,7 @@ import app.pod.api.generated.AuthStartResponse
 import app.pod.api.generated.AuthVerifyRequest
 import app.pod.api.generated.DevicePlatform
 import app.pod.api.generated.DeviceRequest
+import app.pod.api.generated.ContinueRequest
 import app.pod.api.generated.ErrorCode
 import app.pod.api.generated.Health
 import app.pod.api.generated.Intent
@@ -148,6 +149,16 @@ public class PodApiClient(
      * state, not a failure, and the two must not look the same to the client.
      */
     public suspend fun currentPod(): Pod? = sendOrNull("/v1/pods/current", HttpMethod.Get)
+
+    /**
+     * Records whether the caller is carrying on after graduation.
+     *
+     * Answering does not restart or close the pod: the server settles that once the answer
+     * cannot change or the deadline arrives, so the last person to answer is never the one
+     * who appears to have ended it (ADR-023).
+     */
+    public suspend fun continueCycle(podId: String, continuing: Boolean): Pod =
+        send("/v1/pods/$podId/continue", HttpMethod.Post, ContinueRequest(continuing = continuing))
 
     // ---- The week --------------------------------------------------------------
 

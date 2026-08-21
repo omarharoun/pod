@@ -31,6 +31,19 @@ public class Copywriter private constructor(
 
     public fun contains(key: String): Boolean = strings.containsKey(key)
 
+    /**
+     * The catalogue string with its `{placeholders}` intact, or null if absent.
+     *
+     * For tests that assert on the *shape* of a string — that it interpolates a value
+     * rather than spelling it out, that a deadline is a date and not a countdown. A
+     * resolved string cannot answer either question.
+     */
+    public fun raw(key: String): String? = when (val entry = strings[key]) {
+        is Entry.Single -> entry.text
+        is Entry.Plural -> entry.forms["other"] ?: entry.forms.values.firstOrNull()
+        null -> null
+    }
+
     private fun resolve(key: String, count: Int, params: Map<String, String>): String {
         val entry = strings[key] ?: run {
             // The generated constants and the catalogue come from one file, so a miss is
