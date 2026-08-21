@@ -1,0 +1,62 @@
+name: apk
+
+# Run this by hand: Actions → apk → Run workflow.
+#
+# It exists because `actions/upload-artifact` is capped by an account-wide storage quota,
+# and when that quota is full the APK has nowhere to go — the build succeeds and the file
+# is thrown away. A release asset on this (private) repository is not subject to it, and
+# gives a link that stays put instead of expiring with the run.
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "Where the app should look for the backend, e.g. http://192.168.1.5:8080. Must be reachable from the phone — not localhost. Leave blank for the emulator default."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+
+      - name: Assemble
+        env:
+          POD_API_BASE_URL: ${{ inputs.api_base_url }}
+        run: cd android && ./gradlew :app:assembleDebug
+
+      # One rolling prerelease rather than a tag per build: the point is a link that
+      # always has the current APK behind it, not a history of them.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          test -f "$apk" || { echo "no APK at $apk"; exit 1; }
+          cp "$apk" pod-debug.apk
+
+          target="${{ inputs.api_base_url }}"
+          [ -n "$target" ] || target="http://10.0.2.2:8080 (the emulator's alias for the host machine — not reachable from a phone)"
+
+          notes=$(printf '%s\n' \
+            "Debug build of ${{ github.sha }}, signed with the standard Android debug key." \
+            "" \
+            "**Points at:** \`$target\`" \
+            "" \
+            "Install with \"install unknown apps\" allowed for your browser or file manager." \
+            "To point it somewhere else, run this workflow again with a different address.")
+
+          gh release view apk-latest >/dev/null 2>&1 \
+            && gh release edit apk-latest --notes "$notes" --target "${{ github.sha }}" \
+            || gh release create apk-latest --prerelease --title "Pod debug APK" --notes "$notes" --target "${{ github.sha }}"
+
+          gh release upload apk-latest pod-debug.apk --clobber
+          echo "APK: $(gh release view apk-latest --json url --jq .url)" >> "$GITHUB_STEP_SUMMARY"

@@ -134,11 +134,13 @@ jobs:
       - name: Assemble and test
         run: cd android && ./gradlew :app:assembleDebug test
 
-      # The debug APK, downloadable from the run page. It is signed with the standard
-      # debug key, so it installs on a phone with "install unknown apps" allowed — and it
-      # points at whatever POD_API_BASE_URL said at build time, defaulting to the
-      # emulator's alias for the host machine.
+      # The debug APK, downloadable from the run page for as long as artifact storage
+      # allows. `continue-on-error` because the account-wide artifact quota is not this
+      # repository's to manage, and a full quota failing this job would report a green
+      # Android build as a red one. The `apk` workflow publishes to a release instead,
+      # which the quota does not apply to.
       - name: Keep the APK
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: pod-debug-apk-${{ github.sha }}

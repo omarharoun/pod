@@ -84,8 +84,13 @@ cd android
 
 **Installing it on a phone.** `:app:assembleDebug` produces
 `android/app/build/outputs/apk/debug/app-debug.apk`, signed with the standard debug key, so
-it installs on a device with "install unknown apps" allowed. Every CI run keeps one as an
-artefact, downloadable from the run page.
+it installs on a device with "install unknown apps" allowed.
+
+Without a machine to build on: **Actions → apk → Run workflow**, optionally giving it the
+address of your backend. It publishes to the `apk-latest` prerelease, so the download link
+stays in one place. (`verify` also keeps the APK as a run artefact, but artefact storage is
+an account-wide quota and quietly stops accepting uploads when it is full — which is why
+the release exists.)
 
 By default a debug build points at `http://10.0.2.2:8080`, which is the *emulator's* alias
 for your host machine and means nothing on a real phone. Tell it where the backend is:
