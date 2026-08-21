@@ -182,6 +182,15 @@ type journey struct {
 	codes    *capturingMailer
 }
 
+// matchingOptions turns the "pairs only" flag into a third-member threshold nothing can
+// clear, so a pool of four produces two pairs rather than a trio and a leftover.
+func matchingOptions(pairsOnly []bool) matching.Options {
+	if len(pairsOnly) > 0 && pairsOnly[0] {
+		return matching.Options{ThirdThreshold: 2}
+	}
+	return matching.Options{}
+}
+
 type capturingMailer struct{ code string }
 
 func (m *capturingMailer) SendLoginCode(_ context.Context, _, code string, _ int) error {
@@ -189,7 +198,9 @@ func (m *capturingMailer) SendLoginCode(_ context.Context, _, code string, _ int
 	return nil
 }
 
-func newJourney(t *testing.T) *journey {
+// newJourney wires the real server to Postgres. `pairsOnly` stops the matcher adding a
+// third member, which makes which-pod-gets-whom deterministic for the tests that care.
+func newJourney(t *testing.T, pairsOnly ...bool) *journey {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
@@ -249,7 +260,7 @@ func newJourney(t *testing.T) *journey {
 		store:    db,
 		blobs:    blobs,
 		clock:    fixed,
-		matcher:  matching.NewJob(db, fixed, log, matching.Options{}, notifier, weekService),
+		matcher:  matching.NewJob(db, fixed, log, matchingOptions(pairsOnly), notifier, weekService),
 		weekly:   week.NewJob(weekService, db, blobs, fixed, log, notifier, push.Logger{Log: log}),
 		codes:    mailer,
 	}
@@ -438,5 +449,109 @@ func (j *journey) quietWeek(t *testing.T, podID string, s session) {
 	j.clock.Advance(current.ClosesAt.Sub(j.clock.Now()) + time.Hour)
 	if _, err := j.weekly.Tick(context.Background()); err != nil {
 		t.Fatalf("tick: %v", err)
+	}
+}
+
+// Two lanes, two goals, two pods, against a real database.
+//
+// This is what migration 0007 is for: the one-active-pod index narrowed to per-lane
+// (ADR-026). If it were still per-user, the second pod's creation would lose the race with
+// the first and this test would find a person stuck with one pod they paid to have two of.
+func TestTwoLanesGetTwoPodsAgainstPostgres(t *testing.T) {
+	j := newJourney(t, true)
+
+	sam := j.signIn("sam@example.com")
+
+	// The free lane, and three other people so both lanes can be matched.
+	j.do(t, http.MethodPut, "/v1/onboarding/intent", sam, api.IntentRequest{
+		GoalText: "finally sort out the spare room", GoalCategory: api.GoalCategoryHome,
+		Intensity: 3, Timezone: "Europe/Lisbon", SelfReportReliability: api.SelfReportReliabilitySometimes,
+	}, http.StatusOK, nil)
+	j.do(t, http.MethodPost, "/v1/pool", sam, nil, http.StatusAccepted, nil)
+
+	// A paid lane, with a different thing in it.
+	var lane api.Slot
+	j.do(t, http.MethodPost, "/v1/slots", sam, api.ClaimSlotRequest{
+		Source: api.PurchaseSourceAppStore, Receipt: "dev:order-1",
+	}, http.StatusOK, &lane)
+	if lane.Slot != 1 || !lane.Entitled {
+		t.Fatalf("claimed lane: %+v", lane)
+	}
+	j.do(t, http.MethodPut, "/v1/onboarding/intent?slot=1", sam, api.IntentRequest{
+		GoalText: "learn to make bread properly", GoalCategory: api.GoalCategoryHome,
+		Intensity: 3, Timezone: "Europe/Lisbon", SelfReportReliability: api.SelfReportReliabilitySometimes,
+	}, http.StatusOK, nil)
+	j.do(t, http.MethodPost, "/v1/pool?slot=1", sam, nil, http.StatusAccepted, nil)
+
+	for _, email := range []string{"alex@example.com", "remi@example.com"} {
+		other := j.signIn(email)
+		j.do(t, http.MethodPut, "/v1/onboarding/intent", other, api.IntentRequest{
+			GoalText: "finally sort out the spare room", GoalCategory: api.GoalCategoryHome,
+			Intensity: 3, Timezone: "Europe/Lisbon", SelfReportReliability: api.SelfReportReliabilitySometimes,
+		}, http.StatusOK, nil)
+		j.do(t, http.MethodPost, "/v1/pool", other, nil, http.StatusAccepted, nil)
+	}
+
+	if _, err := j.matcher.RunWindow(context.Background()); err != nil {
+		t.Fatalf("matching window: %v", err)
+	}
+
+	// Both lanes have a pod, and they are different pods.
+	var free, paid api.Pod
+	j.do(t, http.MethodGet, "/v1/pods/current", sam, nil, http.StatusOK, &free)
+	j.do(t, http.MethodGet, "/v1/pods/current?slot=1", sam, nil, http.StatusOK, &paid)
+	if free.ID == paid.ID {
+		t.Fatal("both lanes point at the same pod")
+	}
+	// And Sam is not in a pod with themselves — a mirror is not accountability.
+	for _, member := range paid.Members {
+		if member.IsYou {
+			continue
+		}
+		for _, other := range free.Members {
+			if other.ID == member.ID && other.IsYou {
+				t.Error("sam is podded with their own other lane")
+			}
+		}
+	}
+
+	// Each lane holds its own goal, and writing one does not touch the other.
+	var goal, second api.Intent
+	j.do(t, http.MethodGet, "/v1/onboarding/intent", sam, nil, http.StatusOK, &goal)
+	j.do(t, http.MethodGet, "/v1/onboarding/intent?slot=1", sam, nil, http.StatusOK, &second)
+	if goal.GoalText == second.GoalText {
+		t.Errorf("both lanes hold %q", goal.GoalText)
+	}
+
+	// The lane list agrees with all of it.
+	var slots api.SlotList
+	j.do(t, http.MethodGet, "/v1/slots", sam, nil, http.StatusOK, &slots)
+	for _, slot := range slots.Slots[:2] {
+		if !slot.Entitled || !slot.HasIntent || !slot.HasPod {
+			t.Errorf("lane %d: %+v", slot.Slot, slot)
+		}
+	}
+	for _, slot := range slots.Slots[2:] {
+		if slot.Entitled {
+			t.Errorf("lane %d is entitled without a purchase", slot.Slot)
+		}
+	}
+
+	// One lane's week is not the other's.
+	var freeWeek, paidWeek api.Week
+	j.do(t, http.MethodGet, fmt.Sprintf("/v1/pods/%s/weeks/current", free.ID), sam, nil, http.StatusOK, &freeWeek)
+	j.do(t, http.MethodGet, fmt.Sprintf("/v1/pods/%s/weeks/current", paid.ID), sam, nil, http.StatusOK, &paidWeek)
+	if freeWeek.ID == paidWeek.ID {
+		t.Fatal("both pods share a week")
+	}
+	j.post(t, free.ID, freeWeek.ID, sam)
+
+	// Posting in one lane says nothing about the other.
+	var stillOpen api.Week
+	j.do(t, http.MethodGet, fmt.Sprintf("/v1/pods/%s/weeks/current", paid.ID), sam, nil, http.StatusOK, &stillOpen)
+	for _, member := range stillOpen.Members {
+		if member.MemberID == sam.userID && member.State == api.MemberWeekStatePosted {
+			t.Error("posting in the free lane marked the paid lane's week as posted")
+		}
 	}
 }
