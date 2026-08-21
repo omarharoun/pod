@@ -702,6 +702,111 @@ public struct Pod: Codable, Hashable, Sendable {
     }
 }
 
+/// One lane: its own goal, its own queue ticket, its own pod (ADR-026).
+///
+/// Nothing here says anything about money beyond `entitled`. No price, no provider,
+/// no transaction id, no expiry date — the client renders prices from StoreKit or
+/// Play, and the server needs to know *that* a slot is available, not what it cost
+/// (`CLAUDE.md` §8, data minimisation).
+public struct Slot: Codable, Hashable, Sendable {
+    /// `0` is the free one, and is entitled for everybody, forever.
+    public let slot: Int
+
+    /// Whether this lane may be used. Always true for slot 0, whatever else is or
+    /// is not true about the account.
+    public let entitled: Bool
+    public let hasIntent: Bool
+    public let inPool: Bool
+    public let hasPod: Bool
+
+    /// The lane's goal, so a slot list reads as things rather than numbers.
+    public let goalText: String?
+
+    public init(
+        slot: Int,
+        entitled: Bool,
+        hasIntent: Bool,
+        inPool: Bool,
+        hasPod: Bool,
+        goalText: String? = nil
+    ) {
+        self.slot = slot
+        self.entitled = entitled
+        self.hasIntent = hasIntent
+        self.inPool = inPool
+        self.hasPod = hasPod
+        self.goalText = goalText
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case slot
+        case entitled
+        case hasIntent = "has_intent"
+        case inPool = "in_pool"
+        case hasPod = "has_pod"
+        case goalText = "goal_text"
+    }
+}
+
+public struct SlotList: Codable, Hashable, Sendable {
+    public let slots: [Slot]
+
+    /// A structural ceiling above the paywall, unrelated to what anyone paid: someone
+    /// running this many small things a week is not doing the product in §1
+    /// (ADR-026).
+    public let maxSlots: Int
+
+    public init(
+        slots: [Slot],
+        maxSlots: Int
+    ) {
+        self.slots = slots
+        self.maxSlots = maxSlots
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case slots
+        case maxSlots = "max_slots"
+    }
+}
+
+/// A purchase receipt, verified server-side. What is stored afterwards is the source
+/// and an opaque transaction id, and nothing else.
+public struct ClaimSlotRequest: Codable, Hashable, Sendable {
+    public let source: PurchaseSource
+
+    /// The platform's signed receipt, verbatim. Never parsed by the client and never
+    /// logged by the server.
+    public let receipt: String
+
+    public init(
+        source: PurchaseSource,
+        receipt: String
+    ) {
+        self.source = source
+        self.receipt = receipt
+    }
+}
+
+/// Which store the receipt came from.
+///
+/// Open enum: an unrecognised value from a newer server decodes rather than throwing.
+public struct PurchaseSource: RawRepresentable, Codable, Hashable, Sendable {
+    public let rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public static let appStore = PurchaseSource(rawValue: "app_store")
+    public static let playStore = PurchaseSource(rawValue: "play_store")
+
+    /// Every value this build knows about, in contract order.
+    public static let knownCases: [PurchaseSource] = [.appStore, .playStore]
+
+    public var isKnown: Bool { Self.knownCases.contains(self) }
+}
+
 public struct ContinueRequest: Codable, Hashable, Sendable {
     /// Whether the caller wants another cycle with this pod. `false` is an ordinary
     /// answer, not a withdrawal — it is recorded and counted, and it is never

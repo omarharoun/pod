@@ -62,6 +62,8 @@ answers `501` with `code: not_implemented_yet` until its milestone lands.
 | M3 | `POST` | `/v1/pods/{podId}/weeks/{weekId}/proof` | `createProofUpload` | bearer |
 | M3 | `POST` | `/v1/pods/{podId}/weeks/{weekId}/proof/{proofId}/commit` | `commitProof` | bearer |
 | M3 | `GET` | `/v1/pods/{podId}/weeks/{weekId}/proof/{proofId}` | `getProof` | bearer |
+| M7 | `GET` | `/v1/slots` | `listSlots` | bearer |
+| M7 | `POST` | `/v1/slots` | `claimSlot` | bearer |
 
 Operations beyond **M1** are specified but answer `501 not_implemented_yet` until their milestone lands.
 
@@ -203,6 +205,10 @@ The one thing you've been putting off, and how much you can give.
 **Where the caller is in onboarding, and what's next**  
 Milestone M2 · Requires a bearer access token.
 
+| Parameter | In | Required | Type |
+|---|---|---|---|
+| `slot` | query | no | integer |
+
 | Status | Body | |
 |---|---|---|
 | `200` | [`OnboardingState`](#onboardingstate) | The caller's onboarding position. |
@@ -218,6 +224,10 @@ A client has to be able to read what it can write. Without this, offering to low
 somebody's intensity months after they set it would mean asking them to fill the
 whole thing in again.
 
+| Parameter | In | Required | Type |
+|---|---|---|---|
+| `slot` | query | no | integer |
+
 | Status | Body | |
 |---|---|---|
 | `200` | [`Intent`](#intent) | The stored intent. |
@@ -229,6 +239,10 @@ whole thing in again.
 
 **The one thing they've been putting off, and how much they can give**  
 Milestone M2 · Requires a bearer access token.
+
+| Parameter | In | Required | Type |
+|---|---|---|---|
+| `slot` | query | no | integer |
 
 Request body: [`IntentRequest`](#intentrequest)
 
@@ -247,6 +261,10 @@ Milestone M2 · Requires a bearer access token.
 Matching runs as a scheduled job, not on request (`CLAUDE.md` §5). The response
 carries the next matching window so the client can say when, rather than spinning.
 
+| Parameter | In | Required | Type |
+|---|---|---|---|
+| `slot` | query | no | integer |
+
 | Status | Body | |
 |---|---|---|
 | `202` | [`PoolTicket`](#poolticket) | In the pool, waiting for the next matching window. |
@@ -258,6 +276,10 @@ carries the next matching window so the client can say when, rather than spinnin
 
 **Leave the matching pool**  
 Milestone M2 · Requires a bearer access token.
+
+| Parameter | In | Required | Type |
+|---|---|---|---|
+| `slot` | query | no | integer |
 
 | Status | Body | |
 |---|---|---|
@@ -273,6 +295,10 @@ The two or three people you're in it with.
 
 **The caller's active pod, if they have one**  
 Milestone M2 · Requires a bearer access token.
+
+| Parameter | In | Required | Type |
+|---|---|---|---|
+| `slot` | query | no | integer |
 
 | Status | Body | |
 |---|---|---|
@@ -459,6 +485,46 @@ Milestone M3 · Requires a bearer access token.
 | `404` | — | No such proof, or it has already been deleted at cycle end. |
 | `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
 
+## Slots
+
+### `GET /v1/slots` — listSlots
+
+**The caller's lanes, and whether each may be used**  
+Milestone M7 · Requires a bearer access token.
+
+Slot 0 is always present and always entitled. `CLAUDE.md` §2 rule 6 gives everyone
+one free pod forever, and no path in this API may make that conditional on
+anything (ADR-026).
+
+| Status | Body | |
+|---|---|---|
+| `200` | [`SlotList`](#slotlist) | Every lane the caller has, entitled or not. |
+| `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
+| `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
+
+### `POST /v1/slots` — claimSlot
+
+**Open an additional lane with a purchase receipt**  
+Milestone M7 · Requires a bearer access token.
+
+Verifies the receipt with the store and records an entitlement. Idempotent by
+transaction id: replaying a receipt returns the slot it already opened rather than
+opening another.
+
+An additional lane is a second *thing*, with its own goal — not a second pod for
+the goal you already named (ADR-026).
+
+Request body: [`ClaimSlotRequest`](#claimslotrequest)
+
+| Status | Body | |
+|---|---|---|
+| `200` | [`Slot`](#slot) | The lane, ready for its goal. |
+| `400` | [`ApiError`](#apierror) | The request was malformed. |
+| `401` | [`ApiError`](#apierror) | Missing, expired, or invalid access token. |
+| `402` | [`ApiError`](#apierror) | The receipt did not verify. |
+| `409` | [`ApiError`](#apierror) | Already at the ceiling. |
+| `501` | [`ApiError`](#apierror) | Specified, but its milestone hasn't landed. |
+
 ## Schemas
 
 ### ApiError
@@ -527,6 +593,16 @@ A recurring window in the user's own timezone.
 | `day_of_week` | `integer` | yes | 0 = Monday. |
 | `start_minute` | `integer` | yes |  |
 | `end_minute` | `integer` | yes |  |
+
+### ClaimSlotRequest
+
+A purchase receipt, verified server-side. What is stored afterwards is the source
+and an opaque transaction id, and nothing else.
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `source` | [`PurchaseSource`](#purchasesource) | yes |  |
+| `receipt` | `string` | yes | The platform's signed receipt, verbatim. Never parsed by the client and never logged by the server. |
 
 ### Continuation
 
@@ -756,6 +832,12 @@ One of: `photo`, `voice`
 | `byte_size` | `integer` | yes |  |
 | `duration_ms` | `integer` |  | Voice proofs only. Ten seconds, with a little slack. |
 
+### PurchaseSource
+
+Which store the receipt came from.
+
+One of: `app_store`, `play_store`
+
 ### Recovery
 
 What someone is offered after a pod ends. Both fields describe an **offer**, and
@@ -778,6 +860,31 @@ Cold-start only — the answer to "how often do you keep commitments to yourself
 Adjusts the starting reliability by ±0.1 and is never shown back to the user.
 
 One of: `rarely`, `sometimes`, `usually`
+
+### Slot
+
+One lane: its own goal, its own queue ticket, its own pod (ADR-026).
+
+Nothing here says anything about money beyond `entitled`. No price, no provider,
+no transaction id, no expiry date — the client renders prices from StoreKit or
+Play, and the server needs to know *that* a slot is available, not what it cost
+(`CLAUDE.md` §8, data minimisation).
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `slot` | `integer` | yes | `0` is the free one, and is entitled for everybody, forever. |
+| `entitled` | `boolean` | yes | Whether this lane may be used. Always true for slot 0, whatever else is or is not true about the account. |
+| `has_intent` | `boolean` | yes |  |
+| `in_pool` | `boolean` | yes |  |
+| `has_pod` | `boolean` | yes |  |
+| `goal_text` | `string` |  | The lane's goal, so a slot list reads as things rather than numbers. |
+
+### SlotList
+
+| Field | Type | Required | |
+|---|---|---|---|
+| `slots` | [`Slot`](#slot)[] | yes |  |
+| `max_slots` | `integer` | yes | A structural ceiling above the paywall, unrelated to what anyone paid: someone running this many small things a week is not doing the product in §1 (ADR-026). |
 
 ### User
 

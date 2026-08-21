@@ -235,6 +235,8 @@ paths:
       operationId: getOnboardingState
       summary: Where the caller is in onboarding, and what's next.
       tags: [onboarding]
+      parameters:
+        - $ref: '#/components/parameters/Slot'
       x-milestone: M2
       responses:
         '200':
@@ -254,6 +256,8 @@ paths:
         somebody's intensity months after they set it would mean asking them to fill the
         whole thing in again.
       tags: [onboarding]
+      parameters:
+        - $ref: '#/components/parameters/Slot'
       x-milestone: M5
       responses:
         '200':
@@ -272,6 +276,8 @@ paths:
       operationId: putIntent
       summary: The one thing they've been putting off, and how much they can give.
       tags: [onboarding]
+      parameters:
+        - $ref: '#/components/parameters/Slot'
       x-milestone: M2
       requestBody:
         required: true
@@ -296,6 +302,8 @@ paths:
         Matching runs as a scheduled job, not on request (`CLAUDE.md` §5). The response
         carries the next matching window so the client can say when, rather than spinning.
       tags: [onboarding]
+      parameters:
+        - $ref: '#/components/parameters/Slot'
       x-milestone: M2
       responses:
         '202':
@@ -314,10 +322,67 @@ paths:
       operationId: leavePool
       summary: Leave the matching pool.
       tags: [onboarding]
+      parameters:
+        - $ref: '#/components/parameters/Slot'
       x-milestone: M2
       responses:
         '204': { description: No longer queued. }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+
+  /v1/slots:
+    get:
+      operationId: listSlots
+      summary: The caller's lanes, and whether each may be used.
+      description: |
+        Slot 0 is always present and always entitled. `CLAUDE.md` §2 rule 6 gives everyone
+        one free pod forever, and no path in this API may make that conditional on
+        anything (ADR-026).
+      tags: [slots]
+      x-milestone: M7
+      responses:
+        '200':
+          description: Every lane the caller has, entitled or not.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SlotList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { $ref: '#/components/responses/NotImplementedYet' }
+    post:
+      operationId: claimSlot
+      summary: Open an additional lane with a purchase receipt.
+      description: |
+        Verifies the receipt with the store and records an entitlement. Idempotent by
+        transaction id: replaying a receipt returns the slot it already opened rather than
+        opening another.
+
+        An additional lane is a second *thing*, with its own goal — not a second pod for
+        the goal you already named (ADR-026).
+      tags: [slots]
+      x-milestone: M7
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimSlotRequest' }
+      responses:
+        '200':
+          description: The lane, ready for its goal.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Slot' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402':
+          description: The receipt did not verify.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '409':
+          description: Already at the ceiling.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
         '501': { $ref: '#/components/responses/NotImplementedYet' }
 
   /v1/pods/current:
@@ -325,6 +390,8 @@ paths:
       operationId: getCurrentPod
       summary: The caller's active pod, if they have one.
       tags: [pod]
+      parameters:
+        - $ref: '#/components/parameters/Slot'
       x-milestone: M2
       responses:
         '200':
@@ -557,6 +624,15 @@ components:
       description: Short-lived access token from `/v1/auth/verify` or `/v1/auth/refresh`.
 
   parameters:
+    Slot:
+      name: slot
+      in: query
+      required: false
+      description: |
+        Which lane. `0` is the free one and is the default, so a client that has never
+        heard of slots behaves exactly as it did before M7 — the core loop is never
+        gated (`CLAUDE.md` §2 rule 6, ADR-026).
+      schema: { type: integer, minimum: 0, maximum: 4, default: 0 }
     PodId:
       name: podId
       in: path
@@ -990,6 +1066,69 @@ components:
           format: date-time
           description: When the cycle finished. Graduation, not an ending.
         dissolved_at: { type: string, format: date-time }
+
+    Slot:
+      type: object
+      description: |
+        One lane: its own goal, its own queue ticket, its own pod (ADR-026).
+
+        Nothing here says anything about money beyond `entitled`. No price, no provider,
+        no transaction id, no expiry date — the client renders prices from StoreKit or
+        Play, and the server needs to know *that* a slot is available, not what it cost
+        (`CLAUDE.md` §8, data minimisation).
+      required: [slot, entitled, has_intent, in_pool, has_pod]
+      properties:
+        slot:
+          type: integer
+          minimum: 0
+          description: '`0` is the free one, and is entitled for everybody, forever.'
+        entitled:
+          type: boolean
+          description: |
+            Whether this lane may be used. Always true for slot 0, whatever else is or
+            is not true about the account.
+        has_intent: { type: boolean }
+        in_pool: { type: boolean }
+        has_pod: { type: boolean }
+        goal_text:
+          type: string
+          description: The lane's goal, so a slot list reads as things rather than numbers.
+
+    SlotList:
+      type: object
+      required: [slots, max_slots]
+      properties:
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/Slot' }
+        max_slots:
+          type: integer
+          description: |
+            A structural ceiling above the paywall, unrelated to what anyone paid: someone
+            running this many small things a week is not doing the product in §1
+            (ADR-026).
+
+    ClaimSlotRequest:
+      type: object
+      description: |
+        A purchase receipt, verified server-side. What is stored afterwards is the source
+        and an opaque transaction id, and nothing else.
+      required: [source, receipt]
+      properties:
+        source:
+          $ref: '#/components/schemas/PurchaseSource'
+        receipt:
+          type: string
+          minLength: 1
+          maxLength: 16384
+          description: |
+            The platform's signed receipt, verbatim. Never parsed by the client and never
+            logged by the server.
+
+    PurchaseSource:
+      type: string
+      description: Which store the receipt came from.
+      enum: [app_store, play_store]
 
     ContinueRequest:
       type: object

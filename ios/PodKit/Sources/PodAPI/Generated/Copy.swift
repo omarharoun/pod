@@ -491,6 +491,18 @@ public extension CopyKey {
     /// "Your pod's moved on from that choice. Have a look at where it's at."
     static let errorCycleChoiceClosedBody = CopyKey(rawValue: "error.cycleChoiceClosed.body")
 
+    /// "That purchase didn't go through"
+    static let errorReceiptRejectedTitle = CopyKey(rawValue: "error.receiptRejected.title")
+
+    /// "Nothing was charged. If your store says otherwise, try again in a moment."
+    static let errorReceiptRejectedBody = CopyKey(rawValue: "error.receiptRejected.body")
+
+    /// "That's plenty"
+    static let errorSlotCeilingTitle = CopyKey(rawValue: "error.slotCeiling.title")
+
+    /// "You've got as many going as Pod supports. Finish one and you can start another."
+    static let errorSlotCeilingBody = CopyKey(rawValue: "error.slotCeiling.body")
+
     /// "A few more words"
     static let errorGoalTooShortTitle = CopyKey(rawValue: "error.goalTooShort.title")
 
@@ -766,6 +778,10 @@ public extension CopyKey {
         .errorAlreadyInPodBody,
         .errorCycleChoiceClosedTitle,
         .errorCycleChoiceClosedBody,
+        .errorReceiptRejectedTitle,
+        .errorReceiptRejectedBody,
+        .errorSlotCeilingTitle,
+        .errorSlotCeilingBody,
         .errorGoalTooShortTitle,
         .errorGoalTooShortBody,
         .a11yIntensityOption,

@@ -371,6 +371,69 @@ type Pod struct {
 	DissolvedAt *time.Time `json:"dissolved_at,omitempty"`
 }
 
+// One lane: its own goal, its own queue ticket, its own pod (ADR-026).
+//
+// Nothing here says anything about money beyond `entitled`. No price, no provider,
+// no transaction id, no expiry date — the client renders prices from StoreKit or
+// Play, and the server needs to know *that* a slot is available, not what it cost
+// (`CLAUDE.md` §8, data minimisation).
+type Slot struct {
+	// `0` is the free one, and is entitled for everybody, forever.
+	Slot int `json:"slot"`
+
+	// Whether this lane may be used. Always true for slot 0, whatever else is or
+	// is not true about the account.
+	Entitled  bool `json:"entitled"`
+	HasIntent bool `json:"has_intent"`
+	InPool    bool `json:"in_pool"`
+	HasPod    bool `json:"has_pod"`
+
+	// The lane's goal, so a slot list reads as things rather than numbers.
+	GoalText *string `json:"goal_text,omitempty"`
+}
+
+type SlotList struct {
+	Slots []Slot `json:"slots"`
+
+	// A structural ceiling above the paywall, unrelated to what anyone paid: someone
+	// running this many small things a week is not doing the product in §1
+	// (ADR-026).
+	MaxSlots int `json:"max_slots"`
+}
+
+// A purchase receipt, verified server-side. What is stored afterwards is the source
+// and an opaque transaction id, and nothing else.
+type ClaimSlotRequest struct {
+	Source PurchaseSource `json:"source"`
+
+	// The platform's signed receipt, verbatim. Never parsed by the client and never
+	// logged by the server.
+	Receipt string `json:"receipt"`
+}
+
+// Which store the receipt came from.
+type PurchaseSource string
+
+const (
+	PurchaseSourceAppStore  PurchaseSource = "app_store"
+	PurchaseSourcePlayStore PurchaseSource = "play_store"
+)
+
+// KnownPurchaseSources lists every value this build understands. A peer may send others.
+func KnownPurchaseSources() []PurchaseSource {
+	return []PurchaseSource{PurchaseSourceAppStore, PurchaseSourcePlayStore}
+}
+
+// IsKnown reports whether v is a value this build understands.
+func (v PurchaseSource) IsKnown() bool {
+	for _, known := range KnownPurchaseSources() {
+		if v == known {
+			return true
+		}
+	}
+	return false
+}
+
 type ContinueRequest struct {
 	// Whether the caller wants another cycle with this pod. `false` is an ordinary
 	// answer, not a withdrawal — it is recorded and counted, and it is never

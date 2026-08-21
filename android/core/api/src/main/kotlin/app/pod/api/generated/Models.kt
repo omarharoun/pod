@@ -528,6 +528,92 @@ public data class Pod(
     val dissolvedAt: Instant? = null,
 )
 
+/**
+ * One lane: its own goal, its own queue ticket, its own pod (ADR-026).
+ *
+ * Nothing here says anything about money beyond `entitled`. No price, no provider,
+ * no transaction id, no expiry date — the client renders prices from StoreKit or
+ * Play, and the server needs to know *that* a slot is available, not what it cost
+ * (`CLAUDE.md` §8, data minimisation).
+ */
+@Serializable
+public data class Slot(
+    /**
+     * `0` is the free one, and is entitled for everybody, forever.
+     */
+    val slot: Int,
+
+    /**
+     * Whether this lane may be used. Always true for slot 0, whatever else is or
+     * is not true about the account.
+     */
+    val entitled: Boolean,
+    @SerialName("has_intent")
+    val hasIntent: Boolean,
+    @SerialName("in_pool")
+    val inPool: Boolean,
+    @SerialName("has_pod")
+    val hasPod: Boolean,
+
+    /**
+     * The lane's goal, so a slot list reads as things rather than numbers.
+     */
+    @SerialName("goal_text")
+    val goalText: String? = null,
+)
+
+@Serializable
+public data class SlotList(
+    val slots: List<Slot>,
+
+    /**
+     * A structural ceiling above the paywall, unrelated to what anyone paid: someone
+     * running this many small things a week is not doing the product in §1
+     * (ADR-026).
+     */
+    @SerialName("max_slots")
+    val maxSlots: Int,
+)
+
+/**
+ * A purchase receipt, verified server-side. What is stored afterwards is the source
+ * and an opaque transaction id, and nothing else.
+ */
+@Serializable
+public data class ClaimSlotRequest(
+    val source: PurchaseSource,
+
+    /**
+     * The platform's signed receipt, verbatim. Never parsed by the client and never
+     * logged by the server.
+     */
+    val receipt: String,
+)
+
+/**
+ * Which store the receipt came from.
+ *
+ * An unrecognised value from a newer server decodes as [UNKNOWN] rather than throwing.
+ */
+@Serializable(with = PurchaseSourceSerializer::class)
+public enum class PurchaseSource(override val wire: String) : WireEnum {
+    APP_STORE("app_store"),
+    PLAY_STORE("play_store"),
+
+    /** A value this build does not know about. */
+    UNKNOWN(""),
+    ;
+
+    public companion object {
+        public fun fromWire(value: String): PurchaseSource = entries.firstOrNull { it.wire == value } ?: UNKNOWN
+    }
+}
+
+internal object PurchaseSourceSerializer : WireEnumSerializer<PurchaseSource>(
+    "app.pod.api.generated.PurchaseSource",
+    { value -> PurchaseSource.fromWire(value) },
+)
+
 @Serializable
 public data class ContinueRequest(
     /**

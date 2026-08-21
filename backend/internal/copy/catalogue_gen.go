@@ -486,6 +486,18 @@ const (
 	// "Your pod's moved on from that choice. Have a look at where it's at."
 	KeyErrorCycleChoiceClosedBody Key = "error.cycleChoiceClosed.body"
 
+	// "That purchase didn't go through"
+	KeyErrorReceiptRejectedTitle Key = "error.receiptRejected.title"
+
+	// "Nothing was charged. If your store says otherwise, try again in a moment."
+	KeyErrorReceiptRejectedBody Key = "error.receiptRejected.body"
+
+	// "That's plenty"
+	KeyErrorSlotCeilingTitle Key = "error.slotCeiling.title"
+
+	// "You've got as many going as Pod supports. Finish one and you can start another."
+	KeyErrorSlotCeilingBody Key = "error.slotCeiling.body"
+
 	// "A few more words"
 	KeyErrorGoalTooShortTitle Key = "error.goalTooShort.title"
 
@@ -762,6 +774,10 @@ var AllKeys = []Key{
 	KeyErrorAlreadyInPodBody,
 	KeyErrorCycleChoiceClosedTitle,
 	KeyErrorCycleChoiceClosedBody,
+	KeyErrorReceiptRejectedTitle,
+	KeyErrorReceiptRejectedBody,
+	KeyErrorSlotCeilingTitle,
+	KeyErrorSlotCeilingBody,
 	KeyErrorGoalTooShortTitle,
 	KeyErrorGoalTooShortBody,
 	KeyA11yIntensityOption,
@@ -955,6 +971,10 @@ var catalogue = map[Key]map[string]string{
 	KeyErrorAlreadyInPodBody:          {"other": "One pod at a time, and yours is waiting for you."},
 	KeyErrorCycleChoiceClosedTitle:    {"other": "That's already settled"},
 	KeyErrorCycleChoiceClosedBody:     {"other": "Your pod's moved on from that choice. Have a look at where it's at."},
+	KeyErrorReceiptRejectedTitle:      {"other": "That purchase didn't go through"},
+	KeyErrorReceiptRejectedBody:       {"other": "Nothing was charged. If your store says otherwise, try again in a moment."},
+	KeyErrorSlotCeilingTitle:          {"other": "That's plenty"},
+	KeyErrorSlotCeilingBody:           {"other": "You've got as many going as Pod supports. Finish one and you can start another."},
 	KeyErrorGoalTooShortTitle:         {"other": "A few more words"},
 	KeyErrorGoalTooShortBody:          {"other": "Tell us a little more so we can match you well."},
 	KeyA11yIntensityOption:            {"other": "{label}, option {index} of 5"},

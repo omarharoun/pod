@@ -790,6 +790,26 @@ public object CopyKey {
     public const val ERROR_CYCLE_CHOICE_CLOSED_BODY: String = "error.cycleChoiceClosed.body"
 
     /**
+     * "That purchase didn't go through"
+     */
+    public const val ERROR_RECEIPT_REJECTED_TITLE: String = "error.receiptRejected.title"
+
+    /**
+     * "Nothing was charged. If your store says otherwise, try again in a moment."
+     */
+    public const val ERROR_RECEIPT_REJECTED_BODY: String = "error.receiptRejected.body"
+
+    /**
+     * "That's plenty"
+     */
+    public const val ERROR_SLOT_CEILING_TITLE: String = "error.slotCeiling.title"
+
+    /**
+     * "You've got as many going as Pod supports. Finish one and you can start another."
+     */
+    public const val ERROR_SLOT_CEILING_BODY: String = "error.slotCeiling.body"
+
+    /**
      * "A few more words"
      */
     public const val ERROR_GOAL_TOO_SHORT_TITLE: String = "error.goalTooShort.title"
@@ -1136,6 +1156,10 @@ public object CopyKey {
         ERROR_ALREADY_IN_POD_BODY,
         ERROR_CYCLE_CHOICE_CLOSED_TITLE,
         ERROR_CYCLE_CHOICE_CLOSED_BODY,
+        ERROR_RECEIPT_REJECTED_TITLE,
+        ERROR_RECEIPT_REJECTED_BODY,
+        ERROR_SLOT_CEILING_TITLE,
+        ERROR_SLOT_CEILING_BODY,
         ERROR_GOAL_TOO_SHORT_TITLE,
         ERROR_GOAL_TOO_SHORT_BODY,
         A11Y_INTENSITY_OPTION,
