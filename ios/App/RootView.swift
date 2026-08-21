@@ -67,11 +67,18 @@ private struct SignedInView: View {
         case .waiting(let ticket):
             WaitingView(controller: environment.onboarding, ticket: ticket)
         case .matched(let pod):
-            WeekView(
-                controller: environment.weekController(podID: pod.id),
-                pod: pod,
-                session: environment.session
-            )
+            // A graduated pod has no week. Showing the week screen would show a proof
+            // grid whose proof was deleted and an action nobody can post against, and
+            // would leave the choice somewhere the person has to go looking for it.
+            if pod.state == .completed {
+                GraduationView(pod: pod, controller: environment.graduationController(for: pod))
+            } else {
+                WeekView(
+                    controller: environment.weekController(podID: pod.id),
+                    pod: pod,
+                    session: environment.session
+                )
+            }
         }
     }
 }

@@ -20,7 +20,22 @@ public final class PodEnvironment {
         return controller
     }
 
+    /// Created per pod, once.
+    ///
+    /// Deliberately not re-seeded from the argument on every call. `RootView` re-renders
+    /// with the pod the onboarding phase is holding, which is older than the one the
+    /// answer just came back with — re-seeding would flip the screen back to an
+    /// unanswered choice the moment somebody answered it. The controller owns its pod
+    /// after creation and refreshes it itself.
+    public func graduationController(for pod: Pod) -> GraduationController {
+        if let existing = graduationControllers[pod.id] { return existing }
+        let controller = GraduationController(client: client, pod: pod)
+        graduationControllers[pod.id] = controller
+        return controller
+    }
+
     private var weekControllers: [UUID: WeekController] = [:]
+    private var graduationControllers: [UUID: GraduationController] = [:]
 
     public init(client: APIClient, copy: Copywriter = .bundled, deviceName: String? = nil) {
         self.client = client

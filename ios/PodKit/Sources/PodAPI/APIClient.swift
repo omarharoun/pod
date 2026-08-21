@@ -239,6 +239,19 @@ public actor APIClient {
         return response.pod
     }
 
+    /// Records whether the caller is carrying on after graduation.
+    ///
+    /// Answering does not restart or close the pod: the server settles that once the
+    /// answer cannot change or the deadline arrives, so the last person to answer is
+    /// never the one who appears to have ended it (ADR-023).
+    public func continueCycle(podID: UUID, continuing: Bool) async throws -> Pod {
+        try await send(Request(
+            method: "POST",
+            path: "/v1/pods/\(podID.uuidString.lowercased())/continue",
+            body: try encoder.encode(ContinueRequest(continuing: continuing))
+        ))
+    }
+
     /// Ends this device's session. The local tokens are cleared even if the call fails —
     /// someone who asked to sign out is signed out.
     public func signOut() async {

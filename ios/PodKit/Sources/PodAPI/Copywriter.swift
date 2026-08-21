@@ -66,6 +66,19 @@ public struct Copywriter: Sendable {
         strings[key.rawValue] != nil
     }
 
+    /// The catalogue string with its `{placeholders}` intact, or `nil` if absent.
+    ///
+    /// For tests that assert on the *shape* of a string — that it interpolates a value
+    /// rather than spelling it out, that a deadline is a date and not a countdown. A
+    /// resolved string cannot answer either question.
+    public func raw(_ key: CopyKey) -> String? {
+        switch strings[key.rawValue] {
+        case .single(let text): return text
+        case .plural(let forms): return forms["other"] ?? forms.values.first
+        case nil: return nil
+        }
+    }
+
     private func resolve(_ key: CopyKey, count: Int, params: [String: String]) -> String {
         guard let entry = strings[key.rawValue] else {
             // A missing key means the catalogue and the generated constants disagree,

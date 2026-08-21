@@ -284,6 +284,85 @@ message is "here is another way", never "the group thing is not for you".
 
 ---
 
+## M6 — Graduation, and the choice
+
+The pod reached the end of its six weeks. This is the only moment in the product where
+celebration is the right register, and it is still not a ranking.
+
+**Variant A — a modal over the week screen.** The pod's ring, filled, with the choice as
+two buttons underneath. Dismissible; the week screen stays behind it.
+
+**Variant B — the screen replaces the week.** There is no week any more, so the week screen
+is showing something that no longer exists.
+
+**Picked: B.** A is tempting because it keeps the ring, and the ring is the best thing on
+the week screen. But a modal is something you dismiss, and what is behind this one is a
+week that has ended — a proof grid whose proof was deleted, an action nobody can post
+against. Dismissing the modal would land someone on a dead screen and leave the choice
+somewhere they have to go looking for it.
+
+**The ring does not come with it, and that is deliberate.** `PodRing` means *who is in this
+week*, and at graduation there is no week. Drawing it closed would say everyone posted,
+which is false for a pod that completed one week of six; drawing it open would end six
+weeks on a picture of a gap. Either is a statement the screen is not entitled to make. The
+count line below carries the pod-level truth instead, in words, where it can be phrased
+honestly for both cases.
+
+### What it says
+
+> **Six weeks, done**
+> That's the cycle. Your pod got to the end of it together.
+
+Then one line about the streak, and this is the fork that matters:
+
+> *{count} weeks where everyone was in.*
+> — or, when that number is zero —
+> *Some weeks landed, some didn't. You still got here.*
+
+The second is the harder one to write and the more important. A pod that completed one week
+out of six still finished the cycle, and the screen may not imply otherwise. "You still got
+here" is doing the work: it refuses to make the count the point. What it may **not** do is
+show a per-member figure, or a best week, or who posted most. The cycle belongs to the pod
+(`CLAUDE.md` §2 rule 3).
+
+### The choice
+
+> **Another six?**
+> Same pod, same goal, a fresh cycle. Everyone decides for themselves.
+> [ I'm in for another ]  [ I'll stop here ]
+
+"Everyone decides for themselves" is there to pre-empt the thought the product most wants
+to avoid — *if I say no, am I letting them down*. Both buttons are equal weight, as on the
+M5 recovery screen and for the same reason.
+
+Once answered, the screen becomes a waiting state:
+
+> **You're in**
+> Waiting to hear from the others. We'll let you know.
+> *2 of you are carrying on so far.*
+
+A **count**, never a list. "Alex is not continuing" is the sentence this entire design
+exists to make impossible, and a member id beside a `false` is one join away from it at all
+times — which is why the API carries counts and the store has no method that returns who
+declined (ADR-023).
+
+The person who said no gets a different, equally final line:
+
+> **That's the cycle, then**
+> Nothing more to do. If you want another pod later, it's here.
+
+Both states offer **Change my mind** while the deadline is open, and the deadline is stated
+rather than counted down: *You can decide any time before {date}*. A countdown on this
+screen would be pressure, and pressure is the thing the product is built not to apply.
+
+### Divergence
+
+None intended. iOS gets two `PodPrimaryButton`/`PodSecondaryButton` peers; Android gets
+the `Button` + `FilledTonalButton` pair, which is Material 3's way of saying "equal weight,
+different emphasis". Same information, same order, native idiom each.
+
+---
+
 ## Errors
 
 Failures render as a calm block under the content: a title, a line of explanation, and a
